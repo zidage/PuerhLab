@@ -61,7 +61,24 @@ class ImageController final : public QObject {
                                             InteractionPolicyController*  policy,
                                             BackgroundTaskController*     background_tasks);
 
-  Q_INVOKABLE QVariantMap DeleteImages(const QVariantList& targetEntries);
+  /**
+   * @brief Deletes the images of @p targetEntries (from the project in the root folder, from the
+   *        album otherwise) without blocking the UI thread.
+   *
+   * @details The database delete, the pipeline, export and image pool cleanup, the project save
+   * and the package write run on a worker thread as an ImageDelete background task. The task
+   * holds the DeleteImages lock, which refuses a second delete until this one is complete, and
+   * per-image locks for the rating, description and analysis of the targets. When the worker is
+   * done, the UI thread removes the deleted images from the thumbnails and the selection, reloads
+   * the view and emits DeleteImagesFinished with the result `{success, deletedCount,
+   * failedCount, deletedElementIds, failedElementIds, message}`.
+   *
+   * Returns `{started, taskId, message}`. When the delete does not start, `message` gives the
+   * reason and no DeleteImagesFinished follows.
+   */
+  Q_INVOKABLE QVariantMap StartDeleteImages(const QVariantList& targetEntries);
+  /// True while a delete started by StartDeleteImages runs.
+  [[nodiscard]] auto      delete_running() const -> bool { return delete_running_; }
   /// User action: refused with the reason in `message` while an automation agent holds control.
   Q_INVOKABLE QVariantMap AddImagesToFolder(const QVariantList& targetEntries, uint targetFolderId);
   Q_INVOKABLE QVariantMap GetImageDetails(uint elementId, uint imageId);
@@ -84,7 +101,11 @@ class ImageController final : public QObject {
   Q_INVOKABLE QVariantMap GetImageDescription(uint elementId);
   Q_INVOKABLE bool        OpenDirectoryInFileManager(const QString& dirUrlOrPath);
 
+  /// Deletes @p targets on the calling thread (same steps and result as StartDeleteImages).
+  /// Only for flows that must continue after the delete in the same call (Nikon HE recovery).
   auto DeleteTargets(const std::vector<DeleteTarget>& targets) -> DeleteExecutionResult;
+  /// The QVariantMap form of @p result (see StartDeleteImages).
+  [[nodiscard]] static auto DeleteResultMap(const DeleteExecutionResult& result) -> QVariantMap;
 
   // Phase 7a: light star-rating path for AI batch scoring (no full save/package).
   void ApplyStarRatingLight(uint elementId, uint imageId, int rating);
@@ -92,6 +113,11 @@ class ImageController final : public QObject {
 
  signals:
   void ImageRatingsFinished(const QVariantMap& result);
+  /// StartDeleteImages accepted the delete of @p elementIds. Emitted on the UI thread before the
+  /// worker starts, so a receiver can close what must not be open while the images are deleted.
+  void DeleteImagesStarting(const QVariantList& elementIds);
+  /// A delete started by StartDeleteImages is complete (see there for @p result).
+  void DeleteImagesFinished(const QVariantMap& result);
 
  private:
   struct RatingTarget {
@@ -126,8 +152,31 @@ class ImageController final : public QObject {
   auto SetViewRatings(const std::vector<RatingTarget>& targets, const std::vector<int>& ratings)
       -> std::vector<int>;
 
+  // A validated delete: the targets with the ids that the library rows supply, and the scope.
+  struct DeleteBatch {
+    sl_element_id_t           folder_id_           = 0;
+    bool                      delete_from_library_ = false;
+    std::vector<DeleteTarget> targets_{};
+  };
+
+  // What the delete job wrote. Produced on the thread that runs the job.
+  struct DeleteBatchOutcome {
+    std::vector<sl_element_id_t> deleted_element_ids_{};
+    bool                         save_ok_ = true;
+  };
+
   [[nodiscard]] auto CollectDeleteTargets(const QVariantList& targetEntries) const
       -> std::vector<DeleteTarget>;
+  // Checks the project state and resolves @p targets on the UI thread. Without a batch,
+  // @p refusal holds the message.
+  [[nodiscard]] auto PrepareDeleteBatch(const std::vector<DeleteTarget>& targets, QString* refusal)
+      -> std::optional<DeleteBatch>;
+  // The job that writes @p batch: database delete, cleanup, save and package. It takes the
+  // services of the open project now and may run on any thread.
+  [[nodiscard]] auto MakeDeleteJob(DeleteBatch batch) const -> std::function<DeleteBatchOutcome()>;
+  // UI-thread part after the job: thumbnails, selection, view reload, status message.
+  auto FinishDeleteBatch(const DeleteBatch& batch, const DeleteBatchOutcome& outcome)
+      -> DeleteExecutionResult;
   [[nodiscard]] auto   ResolveRatingTarget(uint elementId, uint imageId) const -> RatingTarget;
   [[nodiscard]] auto   SaveProjectSnapshot() -> bool;
 
@@ -142,6 +191,8 @@ class ImageController final : public QObject {
   BackgroundTaskController*     background_tasks_ = nullptr;
   QString                       rating_task_id_{};
   bool                          rating_batch_running_ = false;
+  QString                       delete_task_id_{};
+  bool                          delete_running_ = false;
 };
 
 }  // namespace alcedo::ui

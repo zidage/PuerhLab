@@ -14,12 +14,21 @@ LibraryMutationOperations::LibraryMutationOperations(
       selection_(selection),
       folders_(folders),
       editor_session_(editor_session),
-      workspace_router_(workspace_router) {}
+      workspace_router_(workspace_router) {
+  if (images_ != nullptr) {
+    // DeleteImagesStarting is emitted on this thread before the worker starts, so the editor
+    // image closes before the worker deletes its pipeline.
+    connect(images_, &ImageController::DeleteImagesStarting, this,
+            &LibraryMutationOperations::CloseDeletedEditorImage);
+    connect(images_, &ImageController::DeleteImagesFinished, this,
+            &LibraryMutationOperations::OnDeleteImagesFinished);
+  }
+}
 
 auto LibraryMutationOperations::ResolveTargets(const QVariantMap& clickedItem,
                                                bool includeSelection) const -> QVariantList {
   if (includeSelection && selection_ != nullptr && selection_->SelectedCount() > 0) {
-    return selection_->SelectedImagesById().values();
+    return selection_->SelectedItems();
   }
   const uint element_id = clickedItem.value(QStringLiteral("elementId")).toUInt();
   if (element_id == 0) {
@@ -48,11 +57,14 @@ void LibraryMutationOperations::SetInteractionPolicy(
   interaction_policy_ = interaction_policy;
 }
 
-auto LibraryMutationOperations::DeleteTargetsAsUser(const QVariantList& targets) -> QVariantMap {
+auto LibraryMutationOperations::StartDeleteTargetsAsUser(const QVariantList& targets)
+    -> QVariantMap {
   if (const QString refusal = UserStateChangeRefusal(interaction_policy_); !refusal.isEmpty()) {
-    return QVariantMap{{QStringLiteral("success"), false}, {QStringLiteral("message"), refusal}};
+    return QVariantMap{{QStringLiteral("started"), false},
+                       {QStringLiteral("success"), false},
+                       {QStringLiteral("message"), refusal}};
   }
-  return DeleteTargets(targets);
+  return StartDeleteTargets(targets);
 }
 
 auto LibraryMutationOperations::RateTargetsAsUser(const QVariantList& targets, int rating)
@@ -68,22 +80,20 @@ auto LibraryMutationOperations::DeleteScope() const -> QString {
                                                                  : QStringLiteral("album");
 }
 
-auto LibraryMutationOperations::DeleteTargets(const QVariantList& targets) -> QVariantMap {
+auto LibraryMutationOperations::StartDeleteTargets(const QVariantList& targets) -> QVariantMap {
   if (images_ == nullptr) {
-    return QVariantMap{{QStringLiteral("success"), false},
-                       {QStringLiteral("deletedElementIds"), QVariantList{}},
-                       {QStringLiteral("failedElementIds"), QVariantList{}}};
+    return QVariantMap{{QStringLiteral("started"), false},
+                       {QStringLiteral("message"), tr("No valid image was selected.")}};
   }
-  const QVariantMap  result  = images_->DeleteImages(targets);
+  return images_->StartDeleteImages(targets);
+}
+
+void LibraryMutationOperations::OnDeleteImagesFinished(const QVariantMap& result) {
   const QVariantList deleted = result.value(QStringLiteral("deletedElementIds")).toList();
   if (!deleted.isEmpty()) {
-    if (selection_ != nullptr) {
-      selection_->PruneElements(deleted);
-    }
-    CloseDeletedEditorImage(deleted);
     emit ElementsDeleted(deleted);
   }
-  return result;
+  emit DeleteTargetsFinished(result);
 }
 
 void LibraryMutationOperations::CloseDeletedEditorImage(const QVariantList& deleted_element_ids) {

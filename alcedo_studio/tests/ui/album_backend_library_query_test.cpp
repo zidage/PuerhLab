@@ -14,6 +14,7 @@
 #include <QTimeZone>
 #include <QVariantList>
 #include <QVariantMap>
+#include <algorithm>
 #include <chrono>
 #include <condition_variable>
 #include <ctime>
@@ -618,27 +619,74 @@ TEST_F(LibraryQueryTests, OrderedFileIdsAreUniqueAndFollowTheAcceptedOrder) {
   module->SetInspectorGrouping(QStringLiteral("camera"), true);
   ASSERT_TRUE(Settle(backend));
 
+  // Select All takes every unique file once.
+  module->SelectAllInCurrentView();
+  ASSERT_TRUE(WaitUntil([&]() { return module->selection()->SelectedCount() == 6; }));
+  auto shown = ModelIds(*module);
+  std::sort(shown.begin(), shown.end());
+  EXPECT_EQ(module->selection()->SelectedElementIds(), shown);
+
   QSignalSpy ids(module, &LibraryModule::OrderedFileIdsReady);
-  const auto request = module->RequestAllFileIds();
+  // Shift selection over a collapsed group skips its photos.
+  module->section_model().SetGroupCollapsed(1, true);  // Nikon Z8
+  const auto request =
+      module->RequestOrderedFileIds(module->section_model().VisibleOccurrenceRanges(0, 5));
   ASSERT_TRUE(WaitUntil([&]() { return ids.count() == 1; }));
   const auto args = ids.takeFirst();
   EXPECT_EQ(args.at(0).toULongLong(), request);
-  std::vector<sl_element_id_t> all;
-  for (const auto& value : args.at(1).toList()) {
-    all.push_back(value.toMap().value("elementId").toUInt());
-  }
-  EXPECT_EQ(all, ModelIds(*module));
-
-  // Shift selection over a collapsed group skips its photos.
-  module->section_model().SetGroupCollapsed(1, true);  // Nikon Z8
-  module->RequestOrderedFileIds(module->section_model().VisibleOccurrenceRanges(0, 5));
-  ASSERT_TRUE(WaitUntil([&]() { return ids.count() == 1; }));
   std::vector<sl_element_id_t> visible;
-  for (const auto& value : ids.takeFirst().at(1).toList()) {
+  for (const auto& value : args.at(1).toList()) {
     visible.push_back(value.toMap().value("elementId").toUInt());
   }
   const auto& id = library.ids();
   EXPECT_EQ(visible, (std::vector<sl_element_id_t>{id[1], id[0], id[4], id[5]}));
+}
+
+TEST_F(LibraryQueryTests, SelectAllSelectsEveryPhotoOfTheQueryBeyondTheLoadedPages) {
+  // More photos than one library page (1,000 rows).
+  constexpr int         kPhotoCount = 1050;
+  ApplicationModuleHost backend;
+  LoadedLibrary         library;
+  ASSERT_TRUE(library.Load(temp_dir_, backend, {}, kPhotoCount));
+  auto* module = backend.library();
+  ASSERT_EQ(module->TotalCount(), kPhotoCount);
+  auto all_ids = library.ids();
+  std::sort(all_ids.begin(), all_ids.end());
+
+  // Library shortcut (Ctrl+A) in the flat grid: only the first page is loaded.
+  ASSERT_LT(module->ShownCount(), kPhotoCount);
+  module->SelectAllInCurrentView();
+  ASSERT_TRUE(WaitUntil([&]() { return module->selection()->SelectedCount() == kPhotoCount; }));
+  EXPECT_EQ(module->selection()->SelectedElementIds(), all_ids);
+  EXPECT_LT(module->ShownCount(), kPhotoCount);
+  EXPECT_EQ(module->selection()->SelectedItems().size(), kPhotoCount);
+
+  // Section view (Ctrl+A in the grouped view) uses the same backend operation: it selects every
+  // photo, also while the view keeps only the pages near its viewport.
+  module->selection()->Clear();
+  module->SetInspectorGrouping(QStringLiteral("camera"), true);
+  ASSERT_TRUE(Settle(backend));
+  ASSERT_LT(module->ShownCount(), kPhotoCount);
+  module->SelectAllInCurrentView();
+  ASSERT_TRUE(WaitUntil([&]() { return module->selection()->SelectedCount() == kPhotoCount; }));
+  EXPECT_EQ(module->selection()->SelectedElementIds(), all_ids);
+}
+
+TEST_F(LibraryQueryTests, SelectAllDuringRefreshSelectsTheRefreshedResult) {
+  ApplicationModuleHost backend;
+  LoadedLibrary         library;
+  ASSERT_TRUE(library.Load(temp_dir_, backend, SixPhotoSpecs()));
+  auto* module = backend.library();
+
+  // A camera filter is pending when Ctrl+A arrives: the selection takes the filtered result.
+  backend.stats()->ToggleStatsFilter(QStringLiteral("camera"), QStringLiteral("Sony A7"));
+  module->SelectAllInCurrentView();
+  ASSERT_TRUE(Settle(backend));
+  ASSERT_TRUE(WaitUntil([&]() { return module->selection()->SelectedCount() > 0; }));
+  ProcessEvents(100);
+  const auto& id = library.ids();
+  EXPECT_EQ(module->selection()->SelectedElementIds(),
+            (std::vector<sl_element_id_t>{std::min(id[4], id[5]), std::max(id[4], id[5])}));
 }
 
 TEST_F(LibraryQueryTests, LastVisibleOccurrenceReleasesThumbnailPin) {
@@ -730,9 +778,8 @@ TEST_F(LibraryQueryTests, AlbumQuerySqlRunsOnWorkerThread) {
   QSignalSpy positions(module, &LibraryModule::FocusPositionReady);
   module->RequestFocusPosition(static_cast<uint>(library.ids()[4]));
   ASSERT_TRUE(WaitUntil([&]() { return positions.count() == 1; }));
-  QSignalSpy ids(module, &LibraryModule::OrderedFileIdsReady);
-  module->RequestAllFileIds();
-  ASSERT_TRUE(WaitUntil([&]() { return ids.count() == 1; }));
+  module->SelectAllInCurrentView();
+  ASSERT_TRUE(WaitUntil([&]() { return module->selection()->SelectedCount() > 0; }));
 
   EXPECT_GE(observer.Operations().size(), 6u);
   EXPECT_TRUE(observer.UiThreadOperations().empty());

@@ -1530,6 +1530,30 @@ Alcedo 将改用 %1。</translation>
         <source>The agent gave control back to you.</source>
         <translation>智能体已将控制权交还给你。</translation>
     </message>
+    <message>
+        <source>Images are being deleted.</source>
+        <translation>正在删除图像。</translation>
+    </message>
+    <message>
+        <source>Deleting images</source>
+        <translation>正在删除图像</translation>
+    </message>
+    <message>
+        <source>Removing images from album</source>
+        <translation>正在从相册移除图像</translation>
+    </message>
+    <message>
+        <source>Deleting %1 image(s)...</source>
+        <translation>正在删除 %1 张图像...</translation>
+    </message>
+    <message>
+        <source>Removing %1 image(s) from album...</source>
+        <translation>正在从相册移除 %1 张图像...</translation>
+    </message>
+    <message>
+        <source>%1 images</source>
+        <translation>%1 张图像</translation>
+    </message>
 </context>
 <context>
     <name>AgentSessionCard</name>
@@ -1707,6 +1731,10 @@ Alcedo 将改用 %1。</translation>
         <source>Agent</source>
         <translation>智能体</translation>
     </message>
+    <message>
+        <source>Delete Images</source>
+        <translation>删除图像</translation>
+    </message>
 </context>
 <context>
     <name>BackgroundTasksDialog</name>
@@ -1822,6 +1850,10 @@ Alcedo 将改用 %1。</translation>
     <message>
         <source>Agent</source>
         <translation>智能体</translation>
+    </message>
+    <message>
+        <source>Delete Images</source>
+        <translation>删除图像</translation>
     </message>
 </context>
 <context>

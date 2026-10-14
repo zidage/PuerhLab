@@ -15,7 +15,8 @@ Item {
     objectName: "albumSectionView"
     clip: true
 
-    property var selectedImagesById: ({})
+    // The library selection (LibrarySelection). A delegate asks it for its own photo.
+    readonly property var selection: appModules.library.selection
     property var exportQueueById: ({})
     property int zoomLevel: 4
 
@@ -101,7 +102,8 @@ Item {
     }
 
     function isSelected(elementId) {
-        return Object.prototype.hasOwnProperty.call(selectedImagesById, String(Number(elementId)))
+        // Reading revision makes a binding that calls this read again after each change.
+        return selection.revision >= 0 && selection.IsSelected(Number(elementId))
     }
 
     function groupTitleText(title, unknown) {
@@ -301,8 +303,8 @@ Item {
     }
 
     function selectAll() {
-        pendingSelectAdditive = false
-        pendingSelectRequest = library.RequestAllFileIds()
+        pendingSelectRequest = 0
+        library.SelectAllInCurrentView()
     }
 
     Connections {
@@ -313,7 +315,7 @@ Item {
             }
             root.pendingSelectRequest = 0
             if (root.pendingSelectAdditive) {
-                root.replaceSelection(Object.values(root.selectedImagesById).concat(items))
+                root.selection.AddItems(items)
             } else {
                 root.replaceSelection(items)
             }

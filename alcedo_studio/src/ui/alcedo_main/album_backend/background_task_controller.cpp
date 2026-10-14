@@ -316,6 +316,8 @@ auto BackgroundTaskController::KindToString(BackgroundTaskKind kind) -> QString 
       return QStringLiteral("adjustmentPaste");
     case BackgroundTaskKind::RatingUpdate:
       return QStringLiteral("ratingUpdate");
+    case BackgroundTaskKind::ImageDelete:
+      return QStringLiteral("imageDelete");
     case BackgroundTaskKind::AgentControl:
       return QStringLiteral("agentControl");
   }

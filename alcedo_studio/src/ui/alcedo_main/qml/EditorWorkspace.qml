@@ -859,7 +859,6 @@ Item {
                     host: root.host
                     editorSession: root.editorSession
                     interactionPolicy: root.interactionPolicy
-                    selectedImagesById: root.host ? root.host.selectedImagesById : ({})
                     onImageSelectionChanged: function(elementId, imageId, fileName, isHdr, selected) {
                         if (root.host && root.host.selectionState) {
                             root.host.selectionState.setImageSelected(

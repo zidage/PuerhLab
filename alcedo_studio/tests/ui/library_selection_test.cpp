@@ -43,27 +43,70 @@ TEST(LibrarySelectionTest, SetSelectedIsNoOpWhenStateMatches) {
   EXPECT_EQ(changed.count(), 2);
 }
 
-TEST(LibrarySelectionTest, ReplaceAndPruneKeepTheSelectedImagesById) {
+TEST(LibrarySelectionTest, ReplaceAndPruneKeepTheSelectedImages) {
   LibrarySelection selection(nullptr);
   selection.Replace(QVariantList{Item(3, 30, QStringLiteral("c.arw")), Item(1, 10, QString()),
                                  Item(0, 99, QStringLiteral("ignored"))});
   ASSERT_EQ(selection.SelectedCount(), 2);
-  const QVariantMap by_id = selection.SelectedImagesById();
-  EXPECT_EQ(by_id.value(QStringLiteral("3")).toMap().value(QStringLiteral("imageId")).toUInt(),
-            30u);
-  // An empty file name gets the placeholder name, as in QML.
-  EXPECT_FALSE(by_id.value(QStringLiteral("1"))
-                   .toMap()
-                   .value(QStringLiteral("fileName"))
-                   .toString()
-                   .isEmpty());
+  EXPECT_TRUE(selection.IsSelected(3));
+  EXPECT_TRUE(selection.IsSelected(1));
+  EXPECT_FALSE(selection.IsSelected(0));
   EXPECT_EQ(selection.SelectedElementIds(), (std::vector<sl_element_id_t>{1, 3}));
+  const QVariantList before_prune = selection.SelectedItems();
+  ASSERT_EQ(before_prune.size(), 2);
+  EXPECT_EQ(before_prune.at(1).toMap().value(QStringLiteral("imageId")).toUInt(), 30u);
+  // An empty file name gets the placeholder name, as in QML.
+  EXPECT_FALSE(before_prune.at(0).toMap().value(QStringLiteral("fileName")).toString().isEmpty());
 
   selection.Prune({3});
+  EXPECT_FALSE(selection.IsSelected(3));
   EXPECT_EQ(selection.SelectedElementIds(), (std::vector<sl_element_id_t>{1}));
   const QVariantList items = selection.SelectedItems();
   ASSERT_EQ(items.size(), 1);
   EXPECT_EQ(items.front().toMap().value(QStringLiteral("fileId")).toUInt(), 1u);
+}
+
+TEST(LibrarySelectionTest, RevisionIncrementsOnEachChangeOnly) {
+  LibrarySelection selection(nullptr);
+  const int        start = selection.Revision();
+  selection.SetImageSelected(5, 50, QStringLiteral("a.arw"), false, true);
+  EXPECT_EQ(selection.Revision(), start + 1);
+  selection.SetImageSelected(5, 50, QStringLiteral("a.arw"), false, true);
+  EXPECT_EQ(selection.Revision(), start + 1);
+  selection.AddItems(QVariantList{Item(5, 50, QStringLiteral("a.arw"))});
+  EXPECT_EQ(selection.Revision(), start + 1);
+  selection.AddItems(QVariantList{Item(6, 60, QStringLiteral("b.arw"))});
+  EXPECT_EQ(selection.Revision(), start + 2);
+}
+
+TEST(LibrarySelectionTest, AddItemsKeepsTheSelection) {
+  LibrarySelection selection(nullptr);
+  selection.Replace(QVariantList{Item(1, 10, QStringLiteral("a.arw"))});
+  selection.AddItems(
+      QVariantList{Item(2, 20, QStringLiteral("b.arw")), Item(1, 10, QStringLiteral("a.arw"))});
+  EXPECT_EQ(selection.SelectedElementIds(), (std::vector<sl_element_id_t>{1, 2}));
+}
+
+TEST(LibrarySelectionTest, RangeItemsReplaceOnlyWhatTheOpenRangeAdded) {
+  LibrarySelection selection(nullptr);
+  selection.Replace(
+      QVariantList{Item(1, 10, QStringLiteral("a.arw")), Item(3, 30, QStringLiteral("c.arw"))});
+
+  // The band grows over 2, 3 and 4: 3 was selected before the range.
+  selection.SetRangeItems(QVariantList{Item(2, 20, QStringLiteral("b.arw")),
+                                       Item(3, 30, QStringLiteral("c.arw")),
+                                       Item(4, 40, QStringLiteral("d.arw"))});
+  EXPECT_EQ(selection.SelectedElementIds(), (std::vector<sl_element_id_t>{1, 2, 3, 4}));
+
+  // The band shrinks to 4 only: 2 leaves, 3 stays because the range did not add it.
+  selection.SetRangeItems(QVariantList{Item(4, 40, QStringLiteral("d.arw"))});
+  EXPECT_EQ(selection.SelectedElementIds(), (std::vector<sl_element_id_t>{1, 3, 4}));
+
+  // After EndRange, a new range keeps 4.
+  selection.EndRange();
+  selection.SetRangeItems(QVariantList{Item(5, 50, QStringLiteral("e.arw"))});
+  selection.SetRangeItems(QVariantList{});
+  EXPECT_EQ(selection.SelectedElementIds(), (std::vector<sl_element_id_t>{1, 3, 4}));
 }
 
 }  // namespace

@@ -7,7 +7,6 @@ QtObject {
     id: root
 
     readonly property var selection: appModules.library.selection
-    readonly property var selectedImagesById: root.selection.selectedImagesById
     readonly property int selectedCount: root.selection.selectedCount
 
     function setImageSelected(elementId, imageId, fileName, isHdr, selected) {
