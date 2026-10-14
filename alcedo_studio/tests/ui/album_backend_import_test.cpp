@@ -412,6 +412,39 @@ TEST_F(ImportTests, Import_CancelImmediate_NoCrash) {
   EXPECT_FALSE(backend.import_export()->ImportRunning());
 }
 
+TEST_F(ImportTests, CancelImportShowsStoppingStateUntilTheImportEnds) {
+  ApplicationModuleHost backend;
+  ASSERT_TRUE(CreateTestProject(backend));
+
+  auto images = CollectRawTestImages("batch_import", 40);
+  if (images.empty()) {
+    GTEST_SKIP() << "No DNG files for cancel test";
+  }
+
+  auto* import_export = backend.import_export();
+  import_export->StartImport(PathsToQStringList(images));
+  ASSERT_TRUE(import_export->ImportRunning());
+  EXPECT_FALSE(import_export->ImportCanceling());
+
+  // The job finishes through a queued call, so it is still running here: the stop shows at once.
+  QSignalSpy state_spy(import_export, &ImportExportHandler::ImportStateChanged);
+  import_export->CancelImport();
+  EXPECT_TRUE(import_export->ImportCanceling());
+  EXPECT_EQ(state_spy.count(), 1);
+
+  // A repeated click does not cancel again.
+  import_export->CancelImport();
+  EXPECT_TRUE(import_export->ImportCanceling());
+  EXPECT_EQ(state_spy.count(), 1);
+
+  WaitForImportFinished(backend, 60000);
+  EXPECT_FALSE(import_export->ImportRunning());
+  EXPECT_FALSE(import_export->ImportCanceling());
+  EXPECT_LE(import_export->ImportCanceled(), import_export->ImportFailed());
+  EXPECT_EQ(import_export->ImportCompleted() + import_export->ImportFailed(),
+            import_export->ImportTotal());
+}
+
 // ── Unsupported extension — silently ignored ───────────────────────────────
 
 TEST_F(ImportTests, Import_UnsupportedExtension_Ignored) {

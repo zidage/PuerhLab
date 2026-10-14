@@ -65,6 +65,10 @@ struct ImportProgress {
 
   /// Subset of failed_: supported files whose content category is not allowed.
   std::atomic<uint32_t> excluded_type_        = 0;
+
+  /// Subset of failed_: files left unread because the job was canceled, both files the
+  /// placeholder loop did not reach and queued metadata tasks that had not started.
+  std::atomic<uint32_t> canceled_             = 0;
 };
 
 struct ImportError {
@@ -81,6 +85,8 @@ struct ImportResult {
   uint32_t unsupported_   = 0;
   /// Subset of failed_: supported files whose content category is not allowed.
   uint32_t excluded_type_ = 0;
+  /// Subset of failed_: files left unread because the job was canceled.
+  uint32_t canceled_      = 0;
 };
 
 class ImportJob {
@@ -88,7 +94,9 @@ class ImportJob {
   using ProgressCallback = std::function<void(const ImportProgress&)>;
   using FinishedCallback = std::function<void(const ImportResult&)>;
 
-  // Cancellation toke observed by implementation
+  /// Set by the caller to cancel the job. The placeholder loop stops submitting files, and a
+  /// queued metadata task that has not started marks its file CANCELED without reading it.
+  /// Tasks already reading finish, and their roots are written.
   std::atomic<bool>          canceled_{false};
   std::atomic<bool>          cancelation_acked_{false};
   std::atomic<bool>          submission_closed_{false};

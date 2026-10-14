@@ -116,13 +116,15 @@ class ImportRootBatchWriter {
 }  // namespace
 
 static void SetImportResult(std::shared_ptr<ImportJob> job, uint32_t requested, uint32_t imported,
-                            uint32_t failed, uint32_t unsupported, uint32_t excluded_type) {
+                            uint32_t failed, uint32_t unsupported, uint32_t excluded_type,
+                            uint32_t canceled) {
   ImportResult result;
   result.requested_     = requested;
   result.imported_      = imported;
   result.failed_        = failed;
   result.unsupported_   = unsupported;
   result.excluded_type_ = excluded_type;
+  result.canceled_      = canceled;
   if (job && job->on_finished_ && !job->cancelation_acked_.exchange(true)) {
     job->on_finished_(result);
   }
@@ -137,7 +139,8 @@ static void TryFinishImportJob(const std::shared_ptr<ImportJob>&      job,
     return;
   }
   SetImportResult(job, progress->total_, progress->metadata_done_.load(), progress->failed_.load(),
-                  progress->unsupported_.load(), progress->excluded_type_.load());
+                  progress->unsupported_.load(), progress->excluded_type_.load(),
+                  progress->canceled_.load());
 }
 
 /// Commit one batch of encoded roots, then count each image as imported or failed.
@@ -207,7 +210,7 @@ auto ImportServiceImpl::ImportToFolder(const std::vector<image_path_t>& paths,
 
   if (paths.empty()) {
     // Immediately finish
-    SetImportResult(job, 0, 0, 0, 0, 0);
+    SetImportResult(job, 0, 0, 0, 0, 0, 0);
     return job;
   }
 
@@ -231,10 +234,13 @@ void ImportServiceImpl::CreatePlaceholdersAndSubmit(
     }
   };
 
+  // Files the loop took up: each is counted failed here or handed to a metadata task.
+  uint32_t files_reached = 0;
   for (const auto& image_path : paths) {
     if (job && job->IsCancelled()) {
       break;
     }
+    ++files_reached;
     // Validate that the path is a regular file. File-type detection is deferred
     // to metadata extraction, which classifies the content; rejected files are
     // marked failed and SyncImports removes their element and Image.
@@ -308,6 +314,8 @@ void ImportServiceImpl::CreatePlaceholdersAndSubmit(
     const auto pipeline_service = pipeline_service_;
 
     // Extract metadata and encode the history root on the pool; roots commit in batches.
+    // The placeholder loop queues files much faster than the pool reads them, so a cancel
+    // usually finds most tasks still queued: each one checks the job before reading its file.
     thread_pool_.Submit([image_handler_ptr, progress_ptr, job, import_log, element_id,
                          pipeline_service, root_writer, allowed_categories]() {
       auto image_ptr = image_handler_ptr ? image_handler_ptr->Get() : nullptr;
@@ -315,7 +323,15 @@ void ImportServiceImpl::CreatePlaceholdersAndSubmit(
       bool                                            encoded     = false;
       bool                                            unsupported = false;
       bool                                            excluded    = false;
-      if (image_ptr) {
+      bool                                            canceled    = false;
+      if (image_ptr && job && job->IsCancelled()) {
+        // Marked failed, so SyncImports removes the placeholder element and Image.
+        canceled = true;
+        if (import_log) {
+          import_log->MarkMetadataFailure(image_ptr->image_id_, ImportErrorCode::CANCELED,
+                                          "Import canceled before the file was read");
+        }
+      } else if (image_ptr) {
         try {
           MetadataExtractor::ExtractEXIF_ToImage(image_ptr->image_path_, *image_ptr,
                                                  allowed_categories);
@@ -343,14 +359,17 @@ void ImportServiceImpl::CreatePlaceholdersAndSubmit(
       }
 
       if (!encoded) {
-        // failed_ first: unsupported_ and excluded_type_ are subsets, so a reader that loads
-        // them before failed_ never sees more of them than failed files.
+        // failed_ first: unsupported_, excluded_type_ and canceled_ are subsets, so a reader
+        // that loads them before failed_ never sees more of them than failed files.
         progress_ptr->failed_.fetch_add(1);
         if (unsupported) {
           progress_ptr->unsupported_.fetch_add(1);
         }
         if (excluded) {
           progress_ptr->excluded_type_.fetch_add(1);
+        }
+        if (canceled) {
+          progress_ptr->canceled_.fetch_add(1);
         }
         if (job && job->on_progress_) {
           job->on_progress_(*progress_ptr);
@@ -374,14 +393,13 @@ void ImportServiceImpl::CreatePlaceholdersAndSubmit(
   report_progress();
 
   if (job) {
-    if (job->IsCancelled()) {
-      const auto accounted =
-          progress_ptr->metadata_done_.load() + progress_ptr->failed_.load() +
-          (job->metadata_tasks_submitted_.load() - job->metadata_tasks_finished_.load());
-      if (accounted < progress_ptr->total_) {
-        progress_ptr->failed_.fetch_add(progress_ptr->total_ - accounted);
-        report_progress();
-      }
+    // Count the files the loop never reached from its own position: canceled metadata tasks
+    // update the shared counters while this runs, so a sum of them can count a file twice.
+    if (files_reached < progress_ptr->total_) {
+      const auto unreached = progress_ptr->total_ - files_reached;
+      progress_ptr->failed_.fetch_add(unreached);
+      progress_ptr->canceled_.fetch_add(unreached);
+      report_progress();
     }
     job->submission_closed_.store(true);
   }

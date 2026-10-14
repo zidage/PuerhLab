@@ -55,6 +55,11 @@ class ImportExportHandler final : public QObject {
   Q_PROPERTY(int importUnsupported READ ImportUnsupported NOTIFY ImportStateChanged)
   /// Subset of importFailed: supported files whose type was not selected for the import.
   Q_PROPERTY(int importExcluded READ ImportExcluded NOTIFY ImportStateChanged)
+  /// True from CancelImport until the import ends: files already being read finish and the
+  /// photos imported so far are saved, while queued files are skipped.
+  Q_PROPERTY(bool importCanceling READ ImportCanceling NOTIFY ImportStateChanged)
+  /// Subset of importFailed: files left unread because the import was canceled.
+  Q_PROPERTY(int importCanceled READ ImportCanceled NOTIFY ImportStateChanged)
   Q_PROPERTY(QString importStatus READ ImportStatus NOTIFY ImportStateChanged)
   Q_PROPERTY(bool exportInFlight READ ExportInFlight NOTIFY ExportStateChanged)
   Q_PROPERTY(QString exportStatus READ ExportStatus NOTIFY ExportStateChanged)
@@ -161,6 +166,8 @@ class ImportExportHandler final : public QObject {
   [[nodiscard]] int  ImportPrepared() const { return import_prepared_; }
   [[nodiscard]] int  ImportUnsupported() const { return import_unsupported_; }
   [[nodiscard]] int  ImportExcluded() const { return import_excluded_; }
+  [[nodiscard]] bool ImportCanceling() const { return import_canceling_; }
+  [[nodiscard]] int  ImportCanceled() const { return import_canceled_; }
   [[nodiscard]] bool import_running() const { return import_running_; }
   [[nodiscard]] int  ImportTotal() const { return import_total_; }
   [[nodiscard]] int  import_total() const { return import_total_; }
@@ -272,6 +279,8 @@ class ImportExportHandler final : public QObject {
   int                           import_failed_      = 0;
   int                           import_unsupported_ = 0;
   int                           import_excluded_    = 0;
+  int                           import_canceled_    = 0;
+  bool                          import_canceling_   = false;
   i18n::LocalizedText           import_status_text_{};
   bool                          export_inflight_ = false;
   QString                       default_export_folder_{};
