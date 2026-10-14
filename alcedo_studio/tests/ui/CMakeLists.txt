@@ -2079,6 +2079,37 @@ alcedo_ui_gtest_discover_tests(ExportNamingEditorQmlTest
 )
 alcedo_register_test_target(ExportNamingEditorQmlTest ui)
 
+# Export presets: matching preset, applying a preset, and user presets in QML.
+add_executable(ExportPresetPickerQmlTest
+    ${ALCEDO_TEST_ROOT}/ui/export_preset_picker_qml_test.cpp
+    ${ALCEDO_TEST_ROOT}/ui/widget_test_main.cpp
+)
+target_include_directories(ExportPresetPickerQmlTest
+    PUBLIC ${ALCEDO_INCLUDE_DIR}
+    PRIVATE ${ALCEDO_TEST_DIR}
+)
+target_link_libraries(ExportPresetPickerQmlTest
+    PRIVATE
+        AlbumBackendLib
+        AppTheme
+        GTest::gtest
+        Qt6::Core
+        Qt6::Test
+        Qt6::Qml
+        Qt6::Quick
+        Qt6::QuickControls2
+        Qt6::Widgets
+)
+target_compile_definitions(ExportPresetPickerQmlTest
+    PRIVATE ALCEDO_TEST_SRC_DIR="${ALCEDO_SRC_DIR}"
+)
+set_target_properties(ExportPresetPickerQmlTest PROPERTIES AUTOMOC ON)
+alcedo_ui_gtest_discover_tests(ExportPresetPickerQmlTest
+    TEST_PREFIX "ExportPresetPickerQmlTest."
+    PROPERTIES LABELS "workspace_qml;export_panel"
+)
+alcedo_register_test_target(ExportPresetPickerQmlTest ui)
+
 # Phase 6D Look panel interaction reproduction (layout, drag, double-click, flick).
 add_executable(EditorLookPanelInteractionTest
     ${ALCEDO_TEST_ROOT}/ui/editor_look_panel_interaction_test.cpp

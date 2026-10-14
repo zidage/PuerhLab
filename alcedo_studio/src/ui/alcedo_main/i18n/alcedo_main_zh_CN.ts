@@ -4683,6 +4683,26 @@ Refresh the library afterwards; they are listed under the User category. Import 
         <source>Export Progress</source>
         <translation>导出进度</translation>
     </message>
+    <message>
+        <source>Preset</source>
+        <translation>预设</translation>
+    </message>
+    <message>
+        <source>EXIF metadata</source>
+        <translation>EXIF 元数据</translation>
+    </message>
+    <message>
+        <source>ICC profile</source>
+        <translation>ICC 配置文件</translation>
+    </message>
+    <message>
+        <source>GPS location in EXIF</source>
+        <translation>EXIF 中的 GPS 位置</translation>
+    </message>
+    <message>
+        <source>Max edge (px)</source>
+        <translation>最长边（像素）</translation>
+    </message>
 </context>
 <context>
     <name>ExportNamingEditor</name>
@@ -4827,6 +4847,61 @@ Refresh the library afterwards; they are listed under the User category. Import 
         <location line="+0"/>
         <source>Pattern error</source>
         <translation>命名模式错误</translation>
+    </message>
+</context>
+<context>
+    <name>ExportPresetPicker</name>
+    <message>
+        <source>Custom</source>
+        <translation>自定义</translation>
+    </message>
+    <message>
+        <source>Standard</source>
+        <translation>标准</translation>
+    </message>
+    <message>
+        <source>Web</source>
+        <translation>网页</translation>
+    </message>
+    <message>
+        <source>Social Media</source>
+        <translation>社交媒体</translation>
+    </message>
+    <message>
+        <source>Email</source>
+        <translation>电子邮件</translation>
+    </message>
+    <message>
+        <source>Maximum Quality JPEG</source>
+        <translation>最高质量 JPEG</translation>
+    </message>
+    <message>
+        <source>16-bit TIFF</source>
+        <translation>16 位 TIFF</translation>
+    </message>
+    <message>
+        <source>EXR Archive</source>
+        <translation>EXR 存档</translation>
+    </message>
+    <message>
+        <source>Preset name</source>
+        <translation>预设名称</translation>
+    </message>
+    <message>
+        <source>Enter a valid preset name.</source>
+        <translation>请输入有效的预设名称。</translation>
+    </message>
+    <message>
+        <source>Save export preset</source>
+        <translation>保存导出预设</translation>
+    </message>
+    <message>
+        <source>Save as preset</source>
+        <translation>存储为预设</translation>
+    </message>
+    <message>
+        <source>Delete export preset</source>
+        <translation>删除导出预设</translation>
     </message>
 </context>
 <context>

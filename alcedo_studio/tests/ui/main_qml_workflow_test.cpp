@@ -522,7 +522,28 @@ TEST_F(MainQmlWorkflowTests, ExportPanelUsesRecipeDefaultsChecksAndQueue) {
   EXPECT_TRUE(panel->property("includeMetadata").toBool());
   EXPECT_TRUE(panel->property("embedIccProfile").toBool());
   EXPECT_TRUE(panel->property("ultraHdrDitherEnabled").toBool());
+  EXPECT_TRUE(panel->property("includeGps").toBool());
+  EXPECT_EQ(panel->property("ultraHdrMaxSideText").toString(), QStringLiteral("8192"));
   EXPECT_TRUE(panel->property("settingsValid").toBool());
+
+  // The default options are the Standard preset; a preset sets the panel values.
+  auto* preset_picker = root->findChild<QObject*>(QStringLiteral("exportPresetPicker"));
+  ASSERT_NE(preset_picker, nullptr);
+  EXPECT_EQ(preset_picker->property("activePresetId").toString(),
+            QStringLiteral("builtin:standard"));
+  ASSERT_TRUE(QMetaObject::invokeMethod(preset_picker, "selectPreset",
+                                        Q_ARG(QVariant, QStringLiteral("builtin:web"))));
+  ProcessEvents(20);
+  EXPECT_EQ(panel->property("sdrResizeMode").toString(), QStringLiteral("long_edge"));
+  EXPECT_EQ(panel->property("sdrMaxSideText").toString(), QStringLiteral("2048"));
+  EXPECT_FALSE(panel->property("includeGps").toBool());
+  EXPECT_EQ(panel->property("ultraHdrMaxSideText").toString(), QStringLiteral("2048"));
+  EXPECT_EQ(preset_picker->property("activePresetId").toString(), QStringLiteral("builtin:web"));
+  ASSERT_TRUE(QMetaObject::invokeMethod(preset_picker, "selectPreset",
+                                        Q_ARG(QVariant, QStringLiteral("builtin:standard"))));
+  ProcessEvents(20);
+  EXPECT_EQ(panel->property("sdrResizeMode").toString(), QStringLiteral("original"));
+  EXPECT_TRUE(panel->property("includeGps").toBool());
 
   // The size check follows the selected resize mode.
   ASSERT_TRUE(panel->setProperty("sdrResizeMode", QStringLiteral("long_edge")));
@@ -567,6 +588,7 @@ TEST_F(MainQmlWorkflowTests, ExportPanelUsesRecipeDefaultsChecksAndQueue) {
     const QString text = warning.toString();
     EXPECT_FALSE(text.contains(QStringLiteral("ExportInspectorPanel")) ||
                  text.contains(QStringLiteral("ExportNamingEditor")) ||
+                 text.contains(QStringLiteral("ExportPresetPicker")) ||
                  text.contains(QStringLiteral("ShellSignals")) ||
                  text.contains(QStringLiteral("exportQueue")))
         << text.toStdString();

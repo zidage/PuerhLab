@@ -39,14 +39,7 @@ using namespace album_util;
 namespace {
 
 constexpr auto kFolderAllowedCategoriesKey = "import/folderAllowedCategories";
-constexpr auto kExportSdrQualityKey      = "export/sdrQuality";
-constexpr auto kExportUltraHdrQualityKey = "export/ultraHdrQuality";
-constexpr auto kExportFileNamePresetsKey = "export/fileNamePresets";
 constexpr auto kExportLastFolderKey      = "export/lastFolder";
-constexpr int  kDefaultExportQuality     = 95;
-constexpr int  kMaxExportPresetCount     = 64;
-constexpr int  kMaxExportPresetNameSize  = 80;
-constexpr int  kMaxExportPatternSize     = 2048;
 
 /// Export folders use '/' separators and no trailing separator, like the Pictures default from
 /// QStandardPaths.
@@ -582,26 +575,6 @@ void ImportExportHandler::ResetExportState() {
   ResetExportProgressState(PL_TEXT("Ready to export."));
 }
 
-auto ImportExportHandler::LoadExportSdrQuality() const -> int {
-  return std::clamp(
-      QSettings{}.value(QLatin1String(kExportSdrQualityKey), kDefaultExportQuality).toInt(), 1,
-      100);
-}
-
-void ImportExportHandler::SaveExportSdrQuality(int quality) {
-  QSettings{}.setValue(QLatin1String(kExportSdrQualityKey), std::clamp(quality, 1, 100));
-}
-
-auto ImportExportHandler::LoadExportUltraHdrQuality() const -> int {
-  return std::clamp(
-      QSettings{}.value(QLatin1String(kExportUltraHdrQualityKey), kDefaultExportQuality).toInt(), 1,
-      100);
-}
-
-void ImportExportHandler::SaveExportUltraHdrQuality(int quality) {
-  QSettings{}.setValue(QLatin1String(kExportUltraHdrQualityKey), std::clamp(quality, 1, 100));
-}
-
 auto ImportExportHandler::LoadExportFolder() const -> QString {
   const QString stored = QSettings{}.value(QLatin1String(kExportLastFolderKey)).toString();
   const auto    path   = InputToPath(stored);
@@ -630,98 +603,6 @@ auto ImportExportHandler::ExportFolderUrl(const QString& folderUrlOrPath) const 
   }
   const QString fallback = LoadExportFolder();
   return fallback.isEmpty() ? QUrl{} : QUrl::fromLocalFile(fallback);
-}
-
-auto ImportExportHandler::LoadExportFileNamePresets() const -> QVariantList {
-  QVariantList valid_presets;
-  const auto stored_presets = QSettings{}.value(QLatin1String(kExportFileNamePresetsKey)).toList();
-  valid_presets.reserve(std::min(stored_presets.size(), qsizetype{kMaxExportPresetCount}));
-  for (const QVariant& entry : stored_presets) {
-    const QVariantMap map     = entry.toMap();
-    const QString     name    = map.value(QStringLiteral("name")).toString().trimmed();
-    const QString     pattern = map.value(QStringLiteral("pattern")).toString();
-    if (name.isEmpty() || name.size() > kMaxExportPresetNameSize || pattern.isEmpty() ||
-        pattern.size() > kMaxExportPatternSize ||
-        !ParseExportFileNamePattern(pattern.toStdWString()).success_) {
-      continue;
-    }
-    valid_presets.push_back(
-        QVariantMap{{QStringLiteral("name"), name}, {QStringLiteral("pattern"), pattern}});
-    if (valid_presets.size() >= kMaxExportPresetCount) {
-      break;
-    }
-  }
-  return valid_presets;
-}
-
-auto ImportExportHandler::SaveExportFileNamePreset(const QString& name, const QString& pattern,
-                                                   const QString& replacedName) -> bool {
-  const QString normalized_name = name.trimmed();
-  if (normalized_name.isEmpty() || normalized_name.size() > kMaxExportPresetNameSize ||
-      pattern.isEmpty() || pattern.size() > kMaxExportPatternSize ||
-      !ParseExportFileNamePattern(pattern.toStdWString()).success_) {
-    return false;
-  }
-
-  QVariantList presets = LoadExportFileNamePresets();
-  QVariantMap  saved{{QStringLiteral("name"), normalized_name},
-                     {QStringLiteral("pattern"), pattern}};
-
-  const auto   index_of_name = [&presets](const QString& candidate) {
-    for (qsizetype index = 0; index < presets.size(); ++index) {
-      if (presets[index]
-              .toMap()
-              .value(QStringLiteral("name"))
-              .toString()
-              .compare(candidate, Qt::CaseInsensitive) == 0) {
-        return index;
-      }
-    }
-    return qsizetype{-1};
-  };
-
-  qsizetype replace_index =
-      replacedName.trimmed().isEmpty() ? qsizetype{-1} : index_of_name(replacedName.trimmed());
-  qsizetype same_name_index = index_of_name(normalized_name);
-  if (replace_index >= 0 && same_name_index >= 0 && replace_index != same_name_index) {
-    presets.removeAt(same_name_index);
-    if (same_name_index < replace_index) {
-      --replace_index;
-    }
-  } else if (replace_index < 0) {
-    replace_index = same_name_index;
-  }
-
-  if (replace_index >= 0) {
-    presets[replace_index] = saved;
-  } else {
-    if (presets.size() >= kMaxExportPresetCount) {
-      return false;
-    }
-    presets.push_back(std::move(saved));
-  }
-  QSettings{}.setValue(QLatin1String(kExportFileNamePresetsKey), presets);
-  return true;
-}
-
-auto ImportExportHandler::DeleteExportFileNamePreset(const QString& name) -> bool {
-  const QString normalized_name = name.trimmed();
-  if (normalized_name.isEmpty()) {
-    return false;
-  }
-  QVariantList presets = LoadExportFileNamePresets();
-  for (qsizetype index = 0; index < presets.size(); ++index) {
-    if (presets[index]
-            .toMap()
-            .value(QStringLiteral("name"))
-            .toString()
-            .compare(normalized_name, Qt::CaseInsensitive) == 0) {
-      presets.removeAt(index);
-      QSettings{}.setValue(QLatin1String(kExportFileNamePresetsKey), presets);
-      return true;
-    }
-  }
-  return false;
 }
 
 void ImportExportHandler::FinishImport(const ImportResult& result) {
@@ -971,7 +852,6 @@ auto ImportExportHandler::BuildExportQueue(
     int sdrPngCompressionLevel, ExportFormatOptions::TIFF_COMPRESS sdrTiffCompression,
     int ultraHdrQuality, bool ultraHdrDitherEnabled, const QVariantMap& recipeOptions)
     -> ExportQueueBuildResult {
-  (void)ultraHdrMaxLengthSide;
   ExportQueueBuildResult summary;
   auto                   proj = project_->handler().project();
   const auto&            esvc = project_->handler().export_service();
@@ -984,6 +864,7 @@ auto ImportExportHandler::BuildExportQueue(
       recipeOptions.value(QStringLiteral("includeMetadata"), true).toBool();
   const bool embed_icc_profile =
       recipeOptions.value(QStringLiteral("embedIccProfile"), true).toBool();
+  const bool include_gps = recipeOptions.value(QStringLiteral("includeGps"), true).toBool();
   const QString file_name_pattern =
       recipeOptions.value(QStringLiteral("fileNamePattern"), QStringLiteral("{source}")).toString();
   const QString resize_mode =
@@ -1139,6 +1020,7 @@ auto ImportExportHandler::BuildExportQueue(
       task.recipe_                            = ExportRecipe::FromLegacyOptions(task.options_);
       task.recipe_->metadata_.mode_ =
           include_metadata ? ExportMetadataMode::STANDARD : ExportMetadataMode::NONE;
+      task.recipe_->metadata_.include_location_ = include_gps;
       task.recipe_->icc_ =
           embed_icc_profile ? ExportIccPolicy::EMBED_OUTPUT_PROFILE : ExportIccPolicy::OMIT;
       task.recipe_->file_name_ = parsed_name.name_template_;
@@ -1163,7 +1045,7 @@ auto ImportExportHandler::BuildExportQueue(
       } else {
         task.recipe_->resize_.mode_ = ExportResizeMode::ORIGINAL_PIXELS;
       }
-      if (is_hdr_export) task.recipe_->resize_.maximum_edge_pixels_ = 8192;
+      if (is_hdr_export) task.recipe_->resize_.maximum_edge_pixels_ = ultraHdrMaxLengthSide;
 
       // Captures the committed snapshot of the image and reads the output color from its DRT.
       esvc->EnqueueExportTask(task);

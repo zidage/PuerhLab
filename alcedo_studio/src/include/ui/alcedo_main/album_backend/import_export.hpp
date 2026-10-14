@@ -122,11 +122,6 @@ class ImportExportHandler final : public QObject {
       const QVariantList& targetEntries);
   Q_INVOKABLE void         ResetExportState();
   Q_INVOKABLE bool         CanUseHdrExportForTargets(const QVariantList& targetEntries) const;
-  /// Remembered JPEG quality (1–100). Defaults to 95 when unset.
-  Q_INVOKABLE int          LoadExportSdrQuality() const;
-  Q_INVOKABLE void         SaveExportSdrQuality(int quality);
-  Q_INVOKABLE int          LoadExportUltraHdrQuality() const;
-  Q_INVOKABLE void         SaveExportUltraHdrQuality(int quality);
   /// Remembered export folder as a local path. Falls back to defaultExportFolder when nothing is
   /// stored or the stored folder no longer exists.
   Q_INVOKABLE QString      LoadExportFolder() const;
@@ -136,10 +131,6 @@ class ImportExportHandler final : public QObject {
   /// File URL of the folder for the folder dialog. Uses the remembered folder when the input is
   /// empty or does not exist.
   Q_INVOKABLE QUrl         ExportFolderUrl(const QString& folderUrlOrPath) const;
-  Q_INVOKABLE QVariantList LoadExportFileNamePresets() const;
-  Q_INVOKABLE bool         SaveExportFileNamePreset(const QString& name, const QString& pattern,
-                                                    const QString& replacedName);
-  Q_INVOKABLE bool         DeleteExportFileNamePreset(const QString& name);
 
   /// `*.ext` patterns of every import category: the RAW extensions (kRawExtensions), then the
   /// raster extensions (kRasterImportExtensions). A file dialog filter ignores case on Windows

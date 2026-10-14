@@ -7,7 +7,7 @@ import QtQuick.Dialogs
 import QtQuick.Layouts
 import Alcedo.Main 1.0
 
-// Inspector Export page: destination, SDR/HDR options, scrollable queue, and
+// Inspector Export page: export presets, destination, SDR/HDR options, scrollable queue, and
 // themed progress — replaces the former AlbumExportDialog modal.
 Item {
     id: root
@@ -23,7 +23,6 @@ Item {
     readonly property var recipeDefaults: exportRecipe.DefaultOptions()
     readonly property int exportQueueCount: exportQueue.count
     readonly property var exportPreviewRows: exportQueue.previewRows
-    readonly property bool hdrExportAvailable: exportQueue.hasHdrItems
     readonly property bool exportBusy: appModules.importExport.exportInFlight
     readonly property bool controlsEnabled: !exportBusy
 
@@ -34,6 +33,8 @@ Item {
     property bool ultraHdrDitherEnabled: recipeDefaults.ultra_hdr_dither
     property bool includeMetadata: recipeDefaults.include_metadata
     property bool embedIccProfile: recipeDefaults.embed_icc_profile
+    property bool includeGps: recipeDefaults.include_gps
+    property string ultraHdrMaxSideText: String(recipeDefaults.ultra_hdr_long_edge)
     property string outDirText: ""
     property string subfolderText: qsTr("Processed")
     property string sdrResizeMode: recipeDefaults.resize_mode
@@ -44,7 +45,6 @@ Item {
     property string physicalHeightText: String(recipeDefaults.print_height)
     property string physicalUnit: recipeDefaults.print_unit
     property string dpiText: String(recipeDefaults.dpi)
-    property var exportFileNamePresets: []
 
     readonly property int queuePreviewLimit: 36
     readonly property int queueListMaxHeight: 180
@@ -154,8 +154,10 @@ Item {
             tiff_compression: root.tiffCompression,
             include_metadata: root.includeMetadata,
             embed_icc_profile: root.embedIccProfile,
+            include_gps: root.includeGps,
             ultra_hdr_quality: Math.round(ultraHdrQualityModel.value),
             ultra_hdr_dither: root.ultraHdrDitherEnabled,
+            ultra_hdr_long_edge: root.ultraHdrMaxSideText,
             out_dir: root.outDirText,
             subfolder_enabled: root.subfolderEnabled,
             subfolder: root.subfolderText,
@@ -213,50 +215,57 @@ Item {
         if (outDirText.length === 0)
             outDirText = appModules.importExport.LoadExportFolder()
         ensureValidBitDepthSelection()
-        applyRememberedQuality()
-        loadExportFileNamePresets()
         appModules.importExport.ResetExportState()
         sdrQualityModel.enabled = root.controlsEnabled && root.sdrFormat === "JPEG"
-        ultraHdrQualityModel.enabled = root.controlsEnabled && root.hdrExportAvailable
+        ultraHdrQualityModel.enabled = root.controlsEnabled
         pngLevelModel.enabled = root.controlsEnabled && root.sdrFormat === "PNG"
     }
 
-    function loadExportFileNamePresets() {
-        root.exportFileNamePresets = appModules.importExport.LoadExportFileNamePresets()
+    function setPercentValue(model, value) {
+        // Set the range first: EditorAdjustmentValueModel clamps to its maximum, which defaults
+        // to 1.0.
+        model.minimum = 1
+        model.maximum = 100
+        model.value = Number(value)
     }
 
-    function saveExportFileNamePreset(name, pattern, replacedName) {
-        const saved = appModules.importExport.SaveExportFileNamePreset(
-                    name, pattern, replacedName)
-        if (saved)
-            root.loadExportFileNamePresets()
-        return saved
+    // The print size fields are read in the default locale (ExportRecipeBuilder::FromVariantMap).
+    function localeNumberText(value) {
+        const number = Number(value)
+        return Number.isInteger(number) ? String(number)
+                                        : number.toLocaleString(Qt.locale(), "f", 2)
     }
 
-    function deleteExportFileNamePreset(name) {
-        const deleted = appModules.importExport.DeleteExportFileNamePreset(name)
-        if (deleted)
-            root.loadExportFileNamePresets()
-        return deleted
+    // Sets the panel values from options in the option form of ExportRecipeBuilder, for example
+    // the options of an export preset or of the last export.
+    function applyOptions(options) {
+        if (!options)
+            return
+        root.sdrFormat = String(options.format)
+        root.sdrBitDepth = Number(options.bit_depth)
+        root.tiffCompression = String(options.tiff_compression)
+        root.includeMetadata = options.include_metadata === true
+        root.embedIccProfile = options.embed_icc_profile === true
+        root.includeGps = options.include_gps === true
+        root.ultraHdrDitherEnabled = options.ultra_hdr_dither === true
+        root.ultraHdrMaxSideText = String(options.ultra_hdr_long_edge)
+        root.sdrResizeMode = String(options.resize_mode)
+        root.sdrMaxSideText = String(options.long_edge)
+        root.sdrWidthText = String(options.width)
+        root.sdrHeightText = String(options.height)
+        root.physicalWidthText = root.localeNumberText(options.print_width)
+        root.physicalHeightText = root.localeNumberText(options.print_height)
+        root.physicalUnit = String(options.print_unit)
+        root.dpiText = String(options.dpi)
+        root.setPercentValue(sdrQualityModel, options.quality)
+        root.setPercentValue(ultraHdrQualityModel, options.ultra_hdr_quality)
+        pngLevelModel.value = Number(options.png_level)
+        namingEditor.pattern = String(options.file_name_pattern)
+        root.ensureValidBitDepthSelection()
     }
 
-    function applyRememberedQuality() {
-        // Set ranges first, then value. EditorAdjustmentValueModel defaults
-        // maximum to 1.0, so assigning 95 before maximum:100 clamps to 1%.
-        sdrQualityModel.minimum = 1
-        sdrQualityModel.maximum = 100
-        sdrQualityModel.defaultValue = 95
-        sdrQualityModel.value = appModules.importExport.LoadExportSdrQuality()
-
-        ultraHdrQualityModel.minimum = 1
-        ultraHdrQualityModel.maximum = 100
-        ultraHdrQualityModel.defaultValue = 95
-        ultraHdrQualityModel.value = appModules.importExport.LoadExportUltraHdrQuality()
-    }
-
-    function persistExportQuality() {
-        appModules.importExport.SaveExportSdrQuality(Math.round(sdrQualityModel.value))
-        appModules.importExport.SaveExportUltraHdrQuality(Math.round(ultraHdrQualityModel.value))
+    function persistLastUsedOptions() {
+        exportRecipe.SaveLastUsedOptionsMap(root.recipeOptions())
     }
 
     function addSelectedToQueue() {
@@ -273,7 +282,7 @@ Item {
     function startExport() {
         if (root.exportQueueCount <= 0 || root.exportBusy || !root.settingsValid)
             return
-        persistExportQuality()
+        persistLastUsedOptions()
         appModules.importExport.SaveExportFolder(outDirText)
         exportRecipe.StartExport(root.recipeOptions(), exportQueue.Targets())
     }
@@ -284,14 +293,9 @@ Item {
         pngLevelModel.enabled = root.controlsEnabled && root.sdrFormat === "PNG"
     }
 
-    onHdrExportAvailableChanged: {
-        ensureValidBitDepthSelection()
-        ultraHdrQualityModel.enabled = root.controlsEnabled && root.hdrExportAvailable
-    }
-
     onControlsEnabledChanged: {
         sdrQualityModel.enabled = root.controlsEnabled && root.sdrFormat === "JPEG"
-        ultraHdrQualityModel.enabled = root.controlsEnabled && root.hdrExportAvailable
+        ultraHdrQualityModel.enabled = root.controlsEnabled
         pngLevelModel.enabled = root.controlsEnabled && root.sdrFormat === "PNG"
     }
 
@@ -299,13 +303,10 @@ Item {
         if (pageActive)
             preparePage()
         else
-            persistExportQuality()
+            persistLastUsedOptions()
     }
 
-    Component.onCompleted: {
-        applyRememberedQuality()
-        loadExportFileNamePresets()
-    }
+    Component.onCompleted: applyOptions(exportRecipe.LastUsedOptionsMap())
 
     EditorAdjustmentValueModel {
         id: sdrQualityModel
@@ -332,7 +333,7 @@ Item {
         step: 1
         precision: 0
         suffix: "%"
-        enabled: root.controlsEnabled && root.hdrExportAvailable
+        enabled: root.controlsEnabled
     }
 
     EditorAdjustmentValueModel {
@@ -390,13 +391,38 @@ Item {
                 width: settingsScroll.width
                 spacing: appTheme.spaceMd
 
+                // ── Preset ───────────────────────────────────────────
+                CollapsibleSection {
+                    id: presetSection
+                    Layout.fillWidth: true
+                    Layout.leftMargin: appTheme.spaceSm
+                    Layout.rightMargin: appTheme.spaceSm
+                    Layout.topMargin: appTheme.spaceSm
+                    title: qsTr("Preset")
+                    expanded: true
+                    controlsEnabled: root.controlsEnabled
+                    bodyContentHeight: presetPicker.implicitHeight + appTheme.spaceSm
+
+                    ExportPresetPicker {
+                        id: presetPicker
+                        objectName: "exportPresetPicker"
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        recipe: root.exportRecipe
+                        currentOptions: root.recipeOptions()
+                        optionsValid: root.settingsValid
+                        controlsEnabled: root.controlsEnabled
+                        onPresetSelected: function(options) { root.applyOptions(options) }
+                    }
+                }
+
                 // ── Destination ──────────────────────────────────────
                 CollapsibleSection {
                     id: destinationSection
                     Layout.fillWidth: true
                     Layout.leftMargin: appTheme.spaceSm
                     Layout.rightMargin: appTheme.spaceSm
-                    Layout.topMargin: appTheme.spaceSm
                     title: qsTr("Destination")
                     expanded: true
                     controlsEnabled: root.controlsEnabled
@@ -529,15 +555,7 @@ Item {
                         controlsEnabled: root.controlsEnabled
                         sampleSourceName: root.namingSampleSource
                         outputExtension: root.outputExtension
-                        savedPresets: root.exportFileNamePresets
                         patternRules: root.exportRecipe
-                        savePreset: function(name, pattern, replacedName) {
-                            return root.saveExportFileNamePreset(
-                                        name, pattern, replacedName)
-                        }
-                        deletePreset: function(name) {
-                            return root.deleteExportFileNamePreset(name)
-                        }
                     }
                 }
 
@@ -562,39 +580,31 @@ Item {
                         ThemeCheckBox {
                             objectName: "exportMetadataCheck"
                             Layout.fillWidth: true
-                            text: qsTr("Include photo metadata")
+                            text: qsTr("EXIF metadata")
                             checked: root.includeMetadata
                             enabled: root.controlsEnabled
                             alwaysPrimaryText: true
                             onToggled: function(next) { root.includeMetadata = next }
                         }
 
-                        Label {
-                            Layout.fillWidth: true
-                            text: qsTr("Writes EXIF, XMP, and IPTC. Location, device serials, and edit history stay excluded.")
-                            wrapMode: Text.WordWrap
-                            color: appTheme.textMutedColor
-                            font.family: appTheme.uiFontFamily
-                            font.pixelSize: appTheme.fontSizeCaption
-                        }
-
                         ThemeCheckBox {
                             objectName: "exportIccCheck"
                             Layout.fillWidth: true
-                            text: qsTr("Embed output ICC profile")
+                            text: qsTr("ICC profile")
                             checked: root.embedIccProfile
                             enabled: root.controlsEnabled
                             alwaysPrimaryText: true
                             onToggled: function(next) { root.embedIccProfile = next }
                         }
 
-                        Label {
+                        ThemeCheckBox {
+                            objectName: "exportGpsCheck"
                             Layout.fillWidth: true
-                            text: qsTr("Keeps the exported color space identifiable in color-managed applications.")
-                            wrapMode: Text.WordWrap
-                            color: appTheme.textMutedColor
-                            font.family: appTheme.uiFontFamily
-                            font.pixelSize: appTheme.fontSizeCaption
+                            text: qsTr("GPS location in EXIF")
+                            checked: root.includeGps
+                            enabled: root.controlsEnabled && root.includeMetadata
+                            alwaysPrimaryText: true
+                            onToggled: function(next) { root.includeGps = next }
                         }
                     }
                 }
@@ -985,8 +995,8 @@ Item {
                     Layout.leftMargin: appTheme.spaceSm
                     Layout.rightMargin: appTheme.spaceSm
                     title: qsTr("HDR Export")
-                    expanded: root.hdrExportAvailable
-                    controlsEnabled: root.controlsEnabled && root.hdrExportAvailable
+                    expanded: true
+                    controlsEnabled: root.controlsEnabled
                     bodyContentHeight: hdrBody.implicitHeight + appTheme.spaceSm
 
                     ColumnLayout {
@@ -996,31 +1006,53 @@ Item {
                         anchors.top: parent.top
                         spacing: appTheme.spaceMd
 
-                        Label {
-                            Layout.fillWidth: true
-                            visible: !root.hdrExportAvailable
-                            text: qsTr("Add Ultra HDR items to the queue to enable HDR export.")
-                            wrapMode: Text.WordWrap
-                            color: appTheme.textMutedColor
-                            font.family: appTheme.uiFontFamily
-                            font.pixelSize: appTheme.fontSizeCaption
-                        }
-
                         AdjustmentSlider {
                             objectName: "exportUltraHdrQualitySlider"
                             Layout.fillWidth: true
-                            visible: root.hdrExportAvailable
                             model: ultraHdrQualityModel
                             flickable: settingsScroll
+                        }
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: appTheme.spaceXs
+
+                            Label {
+                                text: qsTr("Max edge (px)")
+                                color: appTheme.textMutedColor
+                                font.family: appTheme.uiFontFamily
+                                font.pixelSize: appTheme.fontSizeCaption
+                                font.weight: appTheme.fontWeightStrong
+                            }
+
+                            TextField {
+                                objectName: "exportUltraHdrMaxEdgeField"
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: appTheme.iconButtonHitSizeCompact
+                                text: root.ultraHdrMaxSideText
+                                validator: IntValidator { bottom: 256; top: 8192 }
+                                inputMethodHints: Qt.ImhDigitsOnly
+                                font.family: appTheme.dataFontFamily
+                                font.pixelSize: appTheme.fontSizeCaption
+                                color: appTheme.textColor
+                                enabled: root.controlsEnabled
+                                selectByMouse: true
+                                onTextChanged: root.ultraHdrMaxSideText = text
+                                background: Rectangle {
+                                    radius: appTheme.controlRadiusSmall
+                                    color: appTheme.bgBaseColor
+                                    border.width: 1
+                                    border.color: appTheme.cardBorderColor
+                                }
+                            }
                         }
 
                         ThemeCheckBox {
                             objectName: "exportUltraHdrDitherCheck"
                             Layout.fillWidth: true
-                            visible: root.hdrExportAvailable
                             text: qsTr("Dithering")
                             checked: root.ultraHdrDitherEnabled
-                            enabled: root.controlsEnabled && root.hdrExportAvailable
+                            enabled: root.controlsEnabled
                             alwaysPrimaryText: true
                             onToggled: function(next) { root.ultraHdrDitherEnabled = next }
                         }
