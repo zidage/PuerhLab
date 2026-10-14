@@ -12,6 +12,7 @@
 #include <QVariantList>
 #include <QVariantMap>
 #include <optional>
+#include <variant>
 
 #include "ui/alcedo_main/album_backend/import_export.hpp"
 #include "ui/alcedo_main/album_backend/interaction_policy_controller.hpp"
@@ -31,11 +32,16 @@ struct ExportRecipeOptions {
   int     png_level         = 5;
   /// NONE, LZW, or ZIP.
   QString tiff_compression  = QStringLiteral("NONE");
+  /// Writes the EXIF, XMP, and IPTC metadata of the photo.
   bool    include_metadata  = true;
   bool    embed_icc_profile = true;
+  /// Copies the GPS IFD of the source file. Applies only when include_metadata is true.
+  bool    include_gps       = true;
   /// UltraHDR JPEG quality of HDR images, 1..100.
   int     ultra_hdr_quality = 95;
   bool    ultra_hdr_dither  = true;
+  /// The longest edge of HDR images, in pixels, 256..8192. HDR images also follow resize_mode.
+  double  ultra_hdr_long_edge = 8192;
   QString out_dir;
   /// When true, the files go to `out_dir/subfolder`.
   bool    subfolder_enabled = false;
@@ -55,6 +61,17 @@ struct ExportRecipeOptions {
   QString file_name_pattern = QStringLiteral("{source}");
 };
 
+/// A named set of export options. A preset sets every option except the destination (out_dir,
+/// subfolder_enabled, and subfolder), which stays as the user chose it.
+struct ExportRecipePreset {
+  /// `builtin:<key>` for a built-in preset, `user:<name>` for a preset the user saved.
+  QString             id;
+  /// The English name of a built-in preset (the panel shows its translation), or the user name.
+  QString             name;
+  bool                built_in = false;
+  ExportRecipeOptions options;
+};
+
 /// The first option that Validate rejects.
 struct ExportRecipeError {
   /// The option name, for example `long_edge`.
@@ -68,6 +85,8 @@ struct ExportRecipeError {
 /// the `export.*` commands use the same rules. Owned by ApplicationModuleHost. GUI thread only.
 class ExportRecipeBuilder final : public QObject {
   Q_OBJECT
+  /// Every preset as `{id, name, builtIn}`: the built-in presets, then the user presets.
+  Q_PROPERTY(QVariantList presets READ PresetList NOTIFY PresetsChanged)
 
  public:
   static constexpr int    kMinLongEdge         = 256;
@@ -83,6 +102,8 @@ class ExportRecipeBuilder final : public QObject {
   static constexpr int    kMaxPngLevel         = 9;
   /// The long edge limit of an UltraHDR export.
   static constexpr int    kUltraHdrMaxLongEdge = 8192;
+  static constexpr int    kMaxUserPresetCount  = 64;
+  static constexpr int    kMaxPresetNameSize   = 80;
 
   explicit ExportRecipeBuilder(ImportExportHandler* import_export, QObject* parent = nullptr);
 
@@ -110,6 +131,35 @@ class ExportRecipeBuilder final : public QObject {
   [[nodiscard]] static auto FromVariantMap(const QVariantMap& values) -> ExportRecipeOptions;
   [[nodiscard]] static auto ToVariantMap(const ExportRecipeOptions& options) -> QVariantMap;
 
+  /// The built-in presets: Standard, Web, Social Media, Email, Maximum Quality JPEG, 16-bit TIFF,
+  /// and EXR Archive.
+  [[nodiscard]] static auto BuiltInPresets() -> QList<ExportRecipePreset>;
+  /// The presets that the user saved, read from QSettings `export/recipePresets`. Entries that
+  /// fail Validate or have an invalid name are skipped.
+  [[nodiscard]] static auto UserPresets() -> QList<ExportRecipePreset>;
+  /// BuiltInPresets, then UserPresets.
+  [[nodiscard]] static auto Presets() -> QList<ExportRecipePreset>;
+  /// True when @p a and @p b export the same files: equal options that a preset sets, comparing
+  /// only the codec values of the selected format and the size values of the selected resize mode.
+  [[nodiscard]] static auto HasSamePresetOptions(const ExportRecipeOptions& a,
+                                                 const ExportRecipeOptions& b) -> bool;
+  /// The id of the first preset whose options HasSamePresetOptions with @p options, or empty.
+  [[nodiscard]] static auto MatchingPresetId(const ExportRecipeOptions& options) -> QString;
+  /// @p current with every option of @p preset except the destination.
+  [[nodiscard]] static auto ApplyPreset(const ExportRecipeOptions& current,
+                                        const ExportRecipePreset&  preset) -> ExportRecipeOptions;
+  /// Stores @p options as the user preset @p name and returns its id. A preset with the same
+  /// name (ignoring case) or with the id @p replaced_id is replaced. Rejects an empty or too long
+  /// name, invalid options, and a new preset beyond kMaxUserPresetCount.
+  auto SaveUserPreset(const QString& name, const ExportRecipeOptions& options,
+                      const QString& replaced_id) -> std::variant<QString, ExportRecipeError>;
+  /// Removes the user preset @p id. Returns false for a built-in or unknown id.
+  auto DeleteUserPreset(const QString& id) -> bool;
+  /// The options of the last export of the panel (QSettings `export/lastOptions`) over the
+  /// defaults; the defaults when nothing valid is stored. The destination is not stored.
+  [[nodiscard]] static auto LastUsedOptions() -> ExportRecipeOptions;
+  static void               SaveLastUsedOptions(const ExportRecipeOptions& options);
+
   /// Validates @p options and starts the export of @p targets (maps with elementId and
   /// imageId) through ImportExportHandler::StartExportWithRecipeOptionsForTargets. Returns the
   /// rejected option, or the handler status (field `export`) when the handler did not start
@@ -125,12 +175,28 @@ class ExportRecipeBuilder final : public QObject {
   /// `{valid, field, message}` of Validate for the map form of the options.
   Q_INVOKABLE QVariantMap  ValidateOptions(const QVariantMap& options) const;
   Q_INVOKABLE QString      OutputFolderFor(const QVariantMap& options) const;
+  [[nodiscard]] auto       PresetList() const -> QVariantList;
+  /// MatchingPresetId for the map form of the options.
+  Q_INVOKABLE QString      MatchingPresetIdFor(const QVariantMap& options) const;
+  /// The map form of ApplyPreset; @p options unchanged when @p preset_id is unknown.
+  Q_INVOKABLE QVariantMap  OptionsWithPreset(const QVariantMap& options,
+                                             const QString&     preset_id) const;
+  /// `{saved, id, field, message}` of SaveUserPreset for the map form of the options.
+  Q_INVOKABLE QVariantMap  SavePreset(const QString& name, const QVariantMap& options,
+                                      const QString& replaced_id);
+  Q_INVOKABLE bool         DeletePreset(const QString& id);
+  /// The map form of LastUsedOptions.
+  Q_INVOKABLE QVariantMap  LastUsedOptionsMap() const;
+  Q_INVOKABLE void         SaveLastUsedOptionsMap(const QVariantMap& options);
   /// The policy whose agent control refuses StartExport. Null refuses nothing.
   void                     SetInteractionPolicy(InteractionPolicyController* interaction_policy);
   /// The user export of the export panel: `{started, field, message}` of Start for the map form
   /// of the options. Refused with `started: false` and the reason in `message` while an
   /// automation agent holds control. The automation command calls Start.
   Q_INVOKABLE QVariantMap  StartExport(const QVariantMap& options, const QVariantList& targets);
+
+ signals:
+  void PresetsChanged();
 
  private:
   QPointer<ImportExportHandler> import_export_;

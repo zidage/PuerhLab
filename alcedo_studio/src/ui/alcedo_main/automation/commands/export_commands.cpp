@@ -68,8 +68,10 @@ auto ExportOptionProperties() -> QJsonObject {
       {"tiff_compression", one_of(ExportRecipeBuilder::TiffCompressions(), "TIFF compression.")},
       {"include_metadata", boolean("Write the photo metadata.")},
       {"embed_icc_profile", boolean("Embed the output ICC profile.")},
+      {"include_gps", boolean("Write the GPS location of the photo (with include_metadata).")},
       {"ultra_hdr_quality", integer("UltraHDR JPEG quality of HDR photos, 1 to 100.")},
       {"ultra_hdr_dither", boolean("Dither the UltraHDR gain map.")},
+      {"ultra_hdr_long_edge", integer("Longest edge of HDR photos in pixels, 256 to 8192.")},
       {"subfolder",
        QJsonObject{{"type", "string"}, {"description", "Write into this subfolder of out_dir."}}},
       {"resize_mode",
@@ -211,6 +213,7 @@ auto RegisterAutomationExportCommands(AutomationCommandRegistry& registry,
                      {"dpi", Range(B::kMinDpi, B::kMaxDpi)},
                      {"quality", Range(B::kMinQuality, B::kMaxQuality)},
                      {"ultra_hdr_quality", Range(B::kMinQuality, B::kMaxQuality)},
+                     {"ultra_hdr_long_edge", Range(B::kMinLongEdge, B::kUltraHdrMaxLongEdge)},
                      {"png_level", Range(B::kMinPngLevel, B::kMaxPngLevel)}}}});
   };
   RegisterOrFail(registry, std::move(options), &ok, error);

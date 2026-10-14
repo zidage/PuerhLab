@@ -31,11 +31,18 @@ target_compile_definitions(AlcedoVersion INTERFACE
     ALCEDO_APP_VERSION="${PROJECT_VERSION}"
 )
 
+def_library(ExifIfdTags
+    SOURCES
+        "${ALCEDO_INCLUDE_ROOT}/io/image/exif_ifd_tags.hpp"
+        "${ALCEDO_SRC_ROOT}/io/image/exif_ifd_tags.cpp"
+    PRIVATE_DEPS Exiv2
+)
+
 def_library(JpegExifApp1
     SOURCES
         "${ALCEDO_INCLUDE_ROOT}/io/image/jpeg_exif_app1.hpp"
         "${ALCEDO_SRC_ROOT}/io/image/jpeg_exif_app1.cpp"
-    PUBLIC_DEPS AlcedoVersion JSON
+    PUBLIC_DEPS AlcedoVersion JSON ExifIfdTags ExportIccProfileResolver
 )
 
 if(PUERHLAB_ULTRAHDR_AVAILABLE)
