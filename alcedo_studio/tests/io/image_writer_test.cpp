@@ -768,27 +768,28 @@ auto MakeAsciiTag(uint16_t tag, const std::string& text) -> ExifIfdTag {
   return result;
 }
 
-/// The GPS IFD of the camera file of issue 363 (22 deg 47' 30.55" N, 108 deg 23' 35.44" E, 235 m).
-auto MakeCameraGpsTags() -> std::vector<ExifIfdTag> {
+/// A GPS IFD with the tags and types that cameras write, at a fictitious position in the Pacific
+/// Ocean (10 deg 20' 30.40" N, 150 deg 10' 20.30" E, 120 m).
+auto MakeTestGpsTags() -> std::vector<ExifIfdTag> {
   return {
       ExifIfdTag{.tag_ = 0x0000, .type_ = 1, .count_ = 4, .value_ = {2, 3, 0, 0}},
       MakeAsciiTag(0x0001, "N"),
-      MakeRationalTag(0x0002, {{22, 1}, {47, 1}, {3055, 100}}),
+      MakeRationalTag(0x0002, {{10, 1}, {20, 1}, {3040, 100}}),
       MakeAsciiTag(0x0003, "E"),
-      MakeRationalTag(0x0004, {{108, 1}, {23, 1}, {3544, 100}}),
+      MakeRationalTag(0x0004, {{150, 1}, {10, 1}, {2030, 100}}),
       ExifIfdTag{.tag_ = 0x0005, .type_ = 1, .count_ = 1, .value_ = {0}},
-      MakeRationalTag(0x0006, {{235, 1}}),
+      MakeRationalTag(0x0006, {{120, 1}}),
       MakeAsciiTag(0x0012, "WGS-84"),
   };
 }
 
-/// A JPEG source whose APP1 segment holds the GPS IFD of MakeCameraGpsTags.
+/// A JPEG source whose APP1 segment holds the GPS IFD of MakeTestGpsTags.
 void WriteJpegWithGps(const std::filesystem::path& path) {
   WriteTestJpeg(path, {32, 64, 96, 96, 64, 32}, 2, 1);
   ASSERT_TRUE(ApplyJpegExifApp1Metadata(
-      path, ExportExifOptions{
-                .include_software_ = false,
-                .source_entries_   = {.ifd0_ = {}, .exif_ = {}, .gps_ = MakeCameraGpsTags()}}));
+      path,
+      ExportExifOptions{.include_software_ = false,
+                        .source_entries_ = {.ifd0_ = {}, .exif_ = {}, .gps_ = MakeTestGpsTags()}}));
 }
 
 auto ReadOiioFloats(const std::filesystem::path& path, const char* key) -> std::vector<float> {
@@ -811,17 +812,17 @@ auto DecimalDegrees(const std::vector<float>& values) -> double {
   return values.size() == 3 ? values[0] + values[1] / 60.0 + values[2] / 3600.0 : -1.0;
 }
 
-/// The position of MakeCameraGpsTags: 22 deg 47' 30.55" N, 108 deg 23' 35.44" E, 235 m.
-void ExpectCameraGpsInOiioAttributes(const std::filesystem::path& path) {
+/// The position of MakeTestGpsTags: 10 deg 20' 30.40" N, 150 deg 10' 20.30" E, 120 m.
+void ExpectTestGpsInOiioAttributes(const std::filesystem::path& path) {
   EXPECT_EQ(ReadOiioStringAttr(path, "GPS:LatitudeRef"), "N") << DumpOiioAttrSummary(path);
   EXPECT_EQ(ReadOiioStringAttr(path, "GPS:LongitudeRef"), "E") << DumpOiioAttrSummary(path);
   EXPECT_NEAR(DecimalDegrees(ReadOiioFloats(path, "GPS:Latitude")),
-              22.0 + 47.0 / 60.0 + 30.55 / 3600.0, 1e-5)
+              10.0 + 20.0 / 60.0 + 30.40 / 3600.0, 1e-5)
       << DumpOiioAttrSummary(path);
   EXPECT_NEAR(DecimalDegrees(ReadOiioFloats(path, "GPS:Longitude")),
-              108.0 + 23.0 / 60.0 + 35.44 / 3600.0, 1e-5)
+              150.0 + 10.0 / 60.0 + 20.30 / 3600.0, 1e-5)
       << DumpOiioAttrSummary(path);
-  EXPECT_NEAR(ReadOiioFloatAttr(path, "GPS:Altitude"), 235.0f, 0.5f) << DumpOiioAttrSummary(path);
+  EXPECT_NEAR(ReadOiioFloatAttr(path, "GPS:Altitude"), 120.0f, 0.5f) << DumpOiioAttrSummary(path);
 }
 
 auto MakeRecipe(ImageFormatType format, const std::filesystem::path& export_path,
@@ -848,7 +849,7 @@ TEST_F(ImageWriterTests, ReadExifGpsTagsReturnsTheSourceGpsIfdEntries) {
   WriteJpegWithGps(src_path);
 
   const auto tags     = ReadExifGpsTags(src_path);
-  const auto expected = MakeCameraGpsTags();
+  const auto expected = MakeTestGpsTags();
   ASSERT_EQ(tags.size(), expected.size());
   for (size_t i = 0; i < tags.size(); ++i) {
     SCOPED_TRACE(tags[i].tag_);
@@ -877,7 +878,7 @@ TEST_F(ImageWriterTests, JpegExportCopiesSourceGpsWhenLocationIsIncluded) {
                                                 MakeRecipe(ImageFormatType::JPEG, dst_path, true),
                                                 std::nullopt, metadata));
 
-  ExpectCameraGpsInOiioAttributes(dst_path);
+  ExpectTestGpsInOiioAttributes(dst_path);
   EXPECT_EQ(ReadOiioStringAttr(dst_path, "GPS:MapDatum"), "WGS-84")
       << DumpOiioAttrSummary(dst_path);
   EXPECT_EQ(ReadOiioStringAttr(dst_path, "Make"), metadata.make_)
@@ -896,7 +897,7 @@ TEST_F(ImageWriterTests, PngAndExrExportsCopySourceGpsWhenLocationIsIncluded) {
     ASSERT_NO_THROW(ImageWriter::WriteImageToPath(src_path, MakeFlatImage(1, 2),
                                                   MakeRecipe(format, dst_path, true),
                                                   std::nullopt, std::nullopt));
-    ExpectCameraGpsInOiioAttributes(dst_path);
+    ExpectTestGpsInOiioAttributes(dst_path);
   }
 }
 
@@ -914,7 +915,7 @@ TEST_F(ImageWriterTests, TiffExportWritesSourceGpsIfd) {
                                                 std::nullopt, metadata));
 
   const auto tags     = ReadExifGpsTags(dst_path);
-  const auto expected = MakeCameraGpsTags();
+  const auto expected = MakeTestGpsTags();
   ASSERT_EQ(tags.size(), expected.size());
   for (size_t i = 0; i < tags.size(); ++i) {
     SCOPED_TRACE(tags[i].tag_);
@@ -973,7 +974,7 @@ TEST_F(ImageWriterTests, UltraHdrExportCopiesSourceGpsWhenLocationIsIncluded) {
   const std::vector<uint8_t> bytes = ReadFileBytes(dst_path);
   ASSERT_FALSE(bytes.empty());
   EXPECT_EQ(is_uhdr_image(const_cast<uint8_t*>(bytes.data()), static_cast<int>(bytes.size())), 1);
-  ExpectCameraGpsInOiioAttributes(dst_path);
+  ExpectTestGpsInOiioAttributes(dst_path);
 #endif
 }
 
@@ -983,15 +984,23 @@ TEST_F(ImageWriterTests, NikonNefGpsReachesJpegExport) {
   if (!std::filesystem::exists(src_path)) {
     GTEST_SKIP() << "Local sample is missing: " << src_path.string();
   }
-  ASSERT_FALSE(ReadExifGpsTags(src_path).empty());
+  const auto source_tags = ReadExifGpsTags(src_path);
+  ASSERT_FALSE(source_tags.empty());
 
   const auto dst_path = temp_dir_ / "nef_gps_exported.jpg";
   ASSERT_NO_THROW(ImageWriter::WriteImageToPath(src_path, MakeFlatImage(4, 6),
                                                 MakeRecipe(ImageFormatType::JPEG, dst_path, true),
                                                 std::nullopt, std::nullopt));
-  ExpectCameraGpsInOiioAttributes(dst_path);
-  EXPECT_EQ(ReadOiioStringAttr(dst_path, "GPS:MapDatum"), "WGS-84")
-      << DumpOiioAttrSummary(dst_path);
+  const auto tags = ReadExifGpsTags(dst_path);
+  ASSERT_EQ(tags.size(), source_tags.size());
+  for (size_t i = 0; i < tags.size(); ++i) {
+    SCOPED_TRACE(tags[i].tag_);
+    EXPECT_EQ(tags[i].tag_, source_tags[i].tag_);
+    EXPECT_EQ(tags[i].type_, source_tags[i].type_);
+    EXPECT_EQ(tags[i].count_, source_tags[i].count_);
+    EXPECT_EQ(tags[i].value_, source_tags[i].value_);
+  }
+  EXPECT_TRUE(HasOiioAttr(dst_path, "GPS:Latitude")) << DumpOiioAttrSummary(dst_path);
 }
 
 namespace {
@@ -1017,7 +1026,8 @@ auto MakeUndefinedTag(uint16_t tag, std::vector<uint8_t> bytes) -> ExifIfdTag {
   return ExifIfdTag{.tag_ = tag, .type_ = 7, .count_ = count, .value_ = std::move(bytes)};
 }
 
-/// IFD0 entries of the Nikon Z 7II camera file of issue 363 (DSC_2815.NEF), with a rating.
+/// IFD0 entries in the layout of the Nikon Z 7II camera file of issue 363, with fictitious
+/// Artist and Copyright values and a rating.
 auto MakeCameraIfd0Tags() -> std::vector<ExifIfdTag> {
   return {
       MakeAsciiTag(0x010F, "NIKON CORPORATION"),
@@ -1025,14 +1035,14 @@ auto MakeCameraIfd0Tags() -> std::vector<ExifIfdTag> {
       MakeShortTag(0x0112, 6),  // Orientation: rotated
       MakeAsciiTag(0x0131, "Ver.01.70"),
       MakeAsciiTag(0x0132, "2026:10:05 16:34:14"),
-      MakeAsciiTag(0x013B, "AL"),
+      MakeAsciiTag(0x013B, "Test Artist"),
       MakeShortTag(0x4746, 2),  // Rating
-      MakeAsciiTag(0x8298, "AL"),
+      MakeAsciiTag(0x8298, "Test Copyright"),
   };
 }
 
-/// EXIF IFD entries of the Nikon Z 7II camera file of issue 363, with the fields that the camera
-/// JPEG adds (MaxApertureValue, ColorSpace, versions) and a MakerNote.
+/// EXIF IFD entries of the Nikon Z 7II camera file of issue 363, with fictitious serial numbers and
+/// the fields that the camera JPEG adds (MaxApertureValue, ColorSpace, versions) and a MakerNote.
 auto MakeCameraExifTags() -> std::vector<ExifIfdTag> {
   return {
       MakeRationalTag(0x829A, {{1, 3200}}),
@@ -1066,11 +1076,11 @@ auto MakeCameraExifTags() -> std::vector<ExifIfdTag> {
       MakeShortTag(0xA408, 0),  // Contrast
       MakeShortTag(0xA409, 0),  // Saturation
       MakeShortTag(0xA40A, 0),  // Sharpness
-      MakeAsciiTag(0xA431, "8003869"),
+      MakeAsciiTag(0xA431, "1234567"),
       MakeRationalTag(0xA432, {{24, 1}, {120, 1}, {4, 1}, {4, 1}}),  // LensSpecification
       MakeAsciiTag(0xA433, "NIKON"),
       MakeAsciiTag(0xA434, "NIKKOR Z 24-120mm f/4 S"),
-      MakeAsciiTag(0xA435, "20127473"),
+      MakeAsciiTag(0xA435, "7654321"),
   };
 }
 
@@ -1078,7 +1088,7 @@ auto MakeCameraExifTags() -> std::vector<ExifIfdTag> {
 void WriteJpegWithCameraExif(const std::filesystem::path& path) {
   WriteTestJpeg(path, {32, 64, 96, 96, 64, 32}, 2, 1);
   const auto tiff_block = BuildExifTiffBlock(
-      {.ifd0_ = MakeCameraIfd0Tags(), .exif_ = MakeCameraExifTags(), .gps_ = MakeCameraGpsTags()});
+      {.ifd0_ = MakeCameraIfd0Tags(), .exif_ = MakeCameraExifTags(), .gps_ = MakeTestGpsTags()});
   std::vector<uint8_t> payload = {'E', 'x', 'i', 'f', 0, 0};
   payload.insert(payload.end(), tiff_block.begin(), tiff_block.end());
   ASSERT_TRUE(ReplaceJpegExifApp1Segment(path, payload));
@@ -1161,8 +1171,8 @@ void ExpectCameraExifInExport(const ExifIfdEntries& exported, int width, int hei
                          {0x9000, 0x927C, 0xA002, 0xA003, 0xA431, 0xA435});
   EXPECT_EQ(ExifAsciiValue(exported.ifd0_, 0x010F), "NIKON CORPORATION");
   EXPECT_EQ(ExifAsciiValue(exported.ifd0_, 0x0110), "NIKON Z 7_2");
-  EXPECT_EQ(ExifAsciiValue(exported.ifd0_, 0x013B), "AL");
-  EXPECT_EQ(ExifAsciiValue(exported.ifd0_, 0x8298), "AL");
+  EXPECT_EQ(ExifAsciiValue(exported.ifd0_, 0x013B), "Test Artist");
+  EXPECT_EQ(ExifAsciiValue(exported.ifd0_, 0x8298), "Test Copyright");
   EXPECT_EQ(ExifAsciiValue(exported.exif_, 0x9011), "+08:00");
 
   // The export writes its own values.
@@ -1193,15 +1203,15 @@ TEST_F(ImageWriterTests, SelectExportExifIfdEntriesDropsEntriesOfTheSourceFile) 
       MakeShortTag(0x0112, 6),                      // Orientation
       MakeRationalTag(0x011A, {{300, 1}}),          // XResolution
       MakeAsciiTag(0x0131, "Ver.01.70"),            // Software
-      MakeAsciiTag(0x013B, "AL"),                   // Artist
+      MakeAsciiTag(0x013B, "Test Artist"),          // Artist
       MakeShortTag(0x4746, 2),                      // Rating
-      MakeAsciiTag(0x8298, "AL"),                   // Copyright
+      MakeAsciiTag(0x8298, "Test Copyright"),       // Copyright
       MakeAsciiTag(0x9003, "2026:10:05 16:34:14"),  // TIFF/EP DateTimeOriginal
       ExifIfdTag{.tag_ = 0x9216, .type_ = 1, .count_ = 4, .value_ = {1, 0, 0, 0}},
       ExifIfdTag{.tag_ = 0xC612, .type_ = 1, .count_ = 4, .value_ = {1, 4, 0, 0}},
   };
   source.exif_                   = MakeCameraExifTags();
-  source.gps_                    = MakeCameraGpsTags();
+  source.gps_                    = MakeTestGpsTags();
 
   const ExifIfdEntries  selected = SelectExportExifIfdEntries(source, false, false);
   std::vector<uint16_t> ifd0_tags;
@@ -1215,7 +1225,7 @@ TEST_F(ImageWriterTests, SelectExportExifIfdEntriesDropsEntriesOfTheSourceFile) 
   EXPECT_TRUE(selected.gps_.empty());
 
   const ExifIfdEntries with_private = SelectExportExifIfdEntries(source, true, true);
-  EXPECT_EQ(with_private.gps_.size(), MakeCameraGpsTags().size());
+  EXPECT_EQ(with_private.gps_.size(), MakeTestGpsTags().size());
   EXPECT_TRUE(HasExifTag(with_private.exif_, 0xA431));
   EXPECT_TRUE(HasExifTag(with_private.exif_, 0xA435));
 }
@@ -1240,7 +1250,7 @@ TEST_F(ImageWriterTests, JpegExportCopiesSourceIfd0AndExifEntries) {
   ExpectExifTag(exported.ifd0_, MakeRationalTag(0x011A, {{7200, 100}}));
   ExpectExifTag(exported.exif_, MakeUndefinedTag(0x9101, {1, 2, 3, 0}));
   EXPECT_TRUE(exported.gps_.empty());
-  EXPECT_EQ(ReadOiioStringAttr(dst_path, "Artist"), "AL") << DumpOiioAttrSummary(dst_path);
+  EXPECT_EQ(ReadOiioStringAttr(dst_path, "Artist"), "Test Artist") << DumpOiioAttrSummary(dst_path);
 }
 
 TEST_F(ImageWriterTests, ExportCopiesDeviceSerialsOnlyWhenIncluded) {
@@ -1257,10 +1267,10 @@ TEST_F(ImageWriterTests, ExportCopiesDeviceSerialsOnlyWhenIncluded) {
                                                   std::nullopt, std::nullopt));
 
     const ExifIfdEntries exported = ReadExifIfdEntries(dst_path);
-    EXPECT_EQ(ExifAsciiValue(exported.exif_, 0xA431), "8003869");
-    EXPECT_EQ(ExifAsciiValue(exported.exif_, 0xA435), "20127473");
+    EXPECT_EQ(ExifAsciiValue(exported.exif_, 0xA431), "1234567");
+    EXPECT_EQ(ExifAsciiValue(exported.exif_, 0xA435), "7654321");
     EXPECT_FALSE(HasExifTag(exported.exif_, 0x927C));
-    EXPECT_EQ(exported.gps_.size(), MakeCameraGpsTags().size());
+    EXPECT_EQ(exported.gps_.size(), MakeTestGpsTags().size());
   }
 }
 
@@ -1302,7 +1312,7 @@ TEST_F(ImageWriterTests, TiffExportWritesSourceIfd0AndExifEntries) {
 
   const ExifIfdEntries exported = ReadExifIfdEntries(dst_path);
   ExpectCameraExifInExport(exported, 7, 5);
-  EXPECT_EQ(exported.gps_.size(), MakeCameraGpsTags().size());
+  EXPECT_EQ(exported.gps_.size(), MakeTestGpsTags().size());
   // The TIFF image structure of OIIO stays: the pixels and the source orientation do not change.
   const auto shape = ReadOiioShape(dst_path);
   EXPECT_EQ(shape[0], 7);
@@ -1310,7 +1320,7 @@ TEST_F(ImageWriterTests, TiffExportWritesSourceIfd0AndExifEntries) {
   EXPECT_EQ(ReadOiioIntAttr(dst_path, "Orientation"), 1);
   EXPECT_EQ(ReadOiioStringAttr(dst_path, "Make"), "NIKON CORPORATION")
       << DumpOiioAttrSummary(dst_path);
-  EXPECT_EQ(ReadOiioStringAttr(dst_path, "Artist"), "AL") << DumpOiioAttrSummary(dst_path);
+  EXPECT_EQ(ReadOiioStringAttr(dst_path, "Artist"), "Test Artist") << DumpOiioAttrSummary(dst_path);
 }
 
 TEST_F(ImageWriterTests, PngAndExrExportsCopySourceIfd0AndExifEntries) {
@@ -1329,8 +1339,8 @@ TEST_F(ImageWriterTests, PngAndExrExportsCopySourceIfd0AndExifEntries) {
     EXPECT_EQ(ReadOiioStringAttr(dst_path, "Make"), "NIKON CORPORATION") << attributes;
     EXPECT_EQ(ReadOiioStringAttr(dst_path, "Model"), "NIKON Z 7_2") << attributes;
     EXPECT_FALSE(HasOiioAttr(dst_path, "Exif:Make")) << attributes;
-    EXPECT_EQ(ReadOiioStringAttr(dst_path, "Artist"), "AL") << attributes;
-    EXPECT_EQ(ReadOiioStringAttr(dst_path, "Copyright"), "AL") << attributes;
+    EXPECT_EQ(ReadOiioStringAttr(dst_path, "Artist"), "Test Artist") << attributes;
+    EXPECT_EQ(ReadOiioStringAttr(dst_path, "Copyright"), "Test Copyright") << attributes;
     EXPECT_EQ(ReadOiioStringAttr(dst_path, "Software"), AlcedoSoftwareExifString()) << attributes;
     EXPECT_EQ(ReadOiioIntAttr(dst_path, "Orientation"), 1) << attributes;
     EXPECT_EQ(ReadOiioStringAttr(dst_path, "Exif:OffsetTimeOriginal"), "+08:00") << attributes;
@@ -1347,7 +1357,7 @@ TEST_F(ImageWriterTests, PngAndExrExportsCopySourceIfd0AndExifEntries) {
     EXPECT_EQ(ReadOiioIntAttr(dst_path, "Exif:PixelXDimension"), 2) << attributes;
     EXPECT_FALSE(HasOiioAttr(dst_path, "Exif:BodySerialNumber")) << attributes;
     EXPECT_FALSE(HasOiioAttr(dst_path, "Exif:LensSerialNumber")) << attributes;
-    ExpectCameraGpsInOiioAttributes(dst_path);
+    ExpectTestGpsInOiioAttributes(dst_path);
   }
 }
 
@@ -1390,9 +1400,9 @@ TEST_F(ImageWriterTests, JpegApp1PayloadLeavesOutLargestSourceEntriesWhenTooLarg
       .width_            = 2,
       .height_           = 1,
       .include_software_ = true,
-      .source_entries_   = {.ifd0_ = {MakeAsciiTag(0x013B, "AL"), maker_text},
+      .source_entries_   = {.ifd0_ = {MakeAsciiTag(0x013B, "Test Artist"), maker_text},
                             .exif_ = {user_comment, MakeAsciiTag(0x9011, "+08:00")},
-                            .gps_  = MakeCameraGpsTags()},
+                            .gps_  = MakeTestGpsTags()},
       .color_space_      = std::nullopt,
       .resolution_dpi_   = 0.0,
   };
@@ -1405,11 +1415,11 @@ TEST_F(ImageWriterTests, JpegApp1PayloadLeavesOutLargestSourceEntriesWhenTooLarg
   ASSERT_TRUE(ReplaceJpegExifApp1Segment(path, payload));
   const ExifIfdEntries written = ReadExifIfdEntries(path);
   EXPECT_FALSE(HasExifTag(written.exif_, 0x9286));
-  EXPECT_EQ(ExifAsciiValue(written.ifd0_, 0x013B), "AL");
+  EXPECT_EQ(ExifAsciiValue(written.ifd0_, 0x013B), "Test Artist");
   ExpectExifTag(written.ifd0_, maker_text);
   EXPECT_EQ(ExifAsciiValue(written.exif_, 0x9011), "+08:00");
   EXPECT_EQ(ExifShortValue(written.ifd0_, 0x4746), 4);
-  EXPECT_EQ(written.gps_.size(), MakeCameraGpsTags().size());
+  EXPECT_EQ(written.gps_.size(), MakeTestGpsTags().size());
 }
 
 // The camera file of issue 363: the IFD0 and EXIF entries of a Nikon Z 7II NEF reach the export.
@@ -1435,7 +1445,7 @@ TEST_F(ImageWriterTests, NikonNefExifReachesJpegAndTiffExports) {
     ExpectSourceTagsCopied(source.exif_, exported.exif_, {});
     ExpectSourceTagsCopied(source.gps_, exported.gps_, {});
     EXPECT_EQ(ExifAsciiValue(exported.ifd0_, 0x010F), "NIKON CORPORATION");
-    EXPECT_EQ(ExifAsciiValue(exported.ifd0_, 0x013B), "AL");
+    EXPECT_TRUE(HasExifTag(exported.ifd0_, 0x013B));  // Artist
     EXPECT_EQ(ExifAsciiValue(exported.exif_, 0x9010), "+08:00");
     EXPECT_EQ(ExifShortValue(exported.exif_, 0x8822), 3);  // ExposureProgram: aperture priority
     EXPECT_EQ(ExifShortValue(exported.ifd0_, 0x0112), 1);
