@@ -1483,6 +1483,14 @@ Alcedo 将改用 %1。</translation>
         <translation>导入完成：已导入 %1 张，未选择类型 %2 个，不受支持 %3 个，失败 %4 个</translation>
     </message>
     <message>
+        <source>Import canceled: %1 imported, %2 not read, %3 not selected, %4 unsupported, %5 failed</source>
+        <translation>导入已取消：已导入 %1 张，未读取 %2 个，未选择类型 %3 个，不受支持 %4 个，失败 %5 个</translation>
+    </message>
+    <message>
+        <source>Cancelling import...</source>
+        <translation>正在取消导入…</translation>
+    </message>
+    <message>
         <source>Close the editor image before you close the project.</source>
         <translation>关闭项目前，请先关闭编辑器中的图像。</translation>
     </message>
@@ -5211,6 +5219,26 @@ Refresh the library afterwards; they are listed under the User category. Import 
     <message>
         <source>%1 file(s) skipped because their type is not selected</source>
         <translation>已跳过 %1 个未选择类型的文件</translation>
+    </message>
+    <message>
+        <source>Cancel import</source>
+        <translation>取消导入</translation>
+    </message>
+    <message>
+        <source>Canceling Import</source>
+        <translation>正在取消导入</translation>
+    </message>
+    <message>
+        <source>Saving Photos</source>
+        <translation>正在保存照片</translation>
+    </message>
+    <message>
+        <source>RAW photos: %1 of %2 imported</source>
+        <translation>RAW 照片：已导入 %1 / %2</translation>
+    </message>
+    <message>
+        <source>Other photos: %1 of %2 imported</source>
+        <translation>其他照片：已导入 %1 / %2</translation>
     </message>
 </context>
 <context>

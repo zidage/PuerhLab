@@ -5,8 +5,10 @@
 // Import throughput benchmark and equivalence checks over real photo folders.
 //
 // Input: ALCEDO_IMPORT_BENCH_DIRS holds one or more folders separated by ';'. Every regular file
-// below each folder is used, as the folder import dialog does. Each test is skipped when the
-// variable is not set. ALCEDO_IMPORT_BENCH_SAMPLE limits the per-step test (default 40 files).
+// below each folder whose extension names an importable category is used, as the folder import
+// dialog does: it never hands "Other" files (sidecars, catalogs, previews) to the import. Each test
+// is skipped when the variable is not set. ALCEDO_IMPORT_BENCH_SAMPLE limits the per-step test
+// (default 40 files).
 //
 // Run a Release build: Debug timings say nothing about import speed.
 
@@ -50,9 +52,10 @@
 #include "image/image.hpp"
 #include "image/metadata_extractor.hpp"
 #include "sleeve/sleeve_filesystem.hpp"
+#include "type/supported_file_type.hpp"
 #include "type/type.hpp"
-#include "utils/string/convert.hpp"
 #include "utils/clock/time_provider.hpp"
+#include "utils/string/convert.hpp"
 
 namespace alcedo {
 namespace {
@@ -116,7 +119,8 @@ auto CollectFolderFiles(const std::filesystem::path& folder) -> std::vector<imag
       continue;
     }
     std::error_code file_ec;
-    if (it->is_regular_file(file_ec) && !file_ec) {
+    if (it->is_regular_file(file_ec) && !file_ec &&
+        CategoryForPath(it->path()) != ImportFileCategory::Other) {
       files.push_back(it->path());
     }
   }

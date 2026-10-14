@@ -1316,6 +1316,14 @@ Alcedo will use %1 instead.</translation>
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>Import canceled: %1 imported, %2 not read, %3 not selected, %4 unsupported, %5 failed</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Cancelling import...</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Close the editor image before you close the project.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -4683,6 +4691,26 @@ Original source files on disk will be kept.</source>
     </message>
     <message>
         <source>%1 file(s) skipped because they are not supported images</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Cancel import</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Canceling Import</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Saving Photos</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>RAW photos: %1 of %2 imported</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Other photos: %1 of %2 imported</source>
         <translation type="unfinished"></translation>
     </message>
 </context>

@@ -247,6 +247,11 @@ void ImportExportHandler::StartImportResolvedPaths(std::vector<image_path_t> pat
   import_failed_      = 0;
   import_unsupported_ = 0;
   import_excluded_    = 0;
+  import_canceled_    = 0;
+  import_canceling_   = false;
+  import_raw_total_     = 0;
+  import_raw_completed_ = 0;
+  import_raw_failed_    = 0;
   import_status_text_ = PL_TEXT("Preparing %1 file(s)...", import_total_);
   import_progress_queued_->store(false);
   emit ImportStateChanged();
@@ -286,6 +291,12 @@ void ImportExportHandler::StartImportResolvedPaths(std::vector<image_path_t> pat
     ImportOptions options;
     options.allowed_categories_ = allowedCategories;
     current_import_job_ = isvc->ImportToFolder(paths, import_target_folder_path_, options, job);
+    // ImportToFolder sets the RAW file count before it returns; the dialog sizes its rings now.
+    if (current_import_job_ && current_import_job_->progress_) {
+      import_raw_total_ = static_cast<int>(current_import_job_->progress_->raw_total_);
+      emit ImportStateChanged();
+      emit importStateChanged();
+    }
   } catch (const std::exception& e) {
     current_import_job_.reset();
     import_running_     = false;
@@ -303,10 +314,14 @@ void ImportExportHandler::ApplyImportProgress() {
     return;
   }
   const ImportProgress& progress = *job->progress_;
-  // unsupported_ and excluded_type_ are subsets of failed_ and are incremented after it, so
-  // they are read first.
+  // unsupported_, excluded_type_, canceled_ and raw_failed_ are subsets of failed_, and
+  // raw_imported_ of metadata_done_. Each subset is incremented after its total, so it is read
+  // first.
   const uint32_t        unsupported = progress.unsupported_.load();
   const uint32_t        excluded    = progress.excluded_type_.load();
+  const uint32_t        canceled    = progress.canceled_.load();
+  const uint32_t        raw_failed  = progress.raw_failed_.load();
+  const uint32_t        raw_done    = progress.raw_imported_.load();
   const uint32_t        failed      = progress.failed_.load();
   const uint32_t        imported    = progress.metadata_done_.load();
   const uint32_t        prepared    = progress.placeholders_created_.load();
@@ -317,6 +332,10 @@ void ImportExportHandler::ApplyImportProgress() {
   import_failed_      = static_cast<int>(failed);
   import_unsupported_ = static_cast<int>(unsupported);
   import_excluded_                  = static_cast<int>(excluded);
+  import_canceled_                  = static_cast<int>(canceled);
+  import_raw_total_                 = static_cast<int>(progress.raw_total_);
+  import_raw_completed_             = static_cast<int>(raw_done);
+  import_raw_failed_                = static_cast<int>(raw_failed);
   import_phase_       = job->submission_closed_.load() ? ImportPhaseState::Reading
                                                        : ImportPhaseState::Preparing;
   if (!job->IsCancelled()) {
@@ -347,8 +366,11 @@ auto ImportExportHandler::ImportPhase() const -> QString {
 }
 
 void ImportExportHandler::CancelImport() {
-  if (!current_import_job_ || import_phase_ == ImportPhaseState::Finalizing) return;
+  if (!current_import_job_ || import_canceling_ || import_phase_ == ImportPhaseState::Finalizing) {
+    return;
+  }
   current_import_job_->canceled_.store(true);
+  import_canceling_   = true;
   import_status_text_ = PL_TEXT("Cancelling import...");
   emit ImportStateChanged();
   emit importStateChanged();
@@ -708,6 +730,7 @@ void ImportExportHandler::FinishImport(const ImportResult& result) {
 
   if (!importJob || !importJob->import_log_) {
     import_running_     = false;
+    import_canceling_   = false;
     import_phase_       = ImportPhaseState::Idle;
     import_status_text_ = PL_TEXT("Import finished but no log snapshot is available.");
     emit ImportStateChanged();
@@ -723,6 +746,10 @@ void ImportExportHandler::FinishImport(const ImportResult& result) {
   import_failed_      = static_cast<int>(result.failed_);
   import_unsupported_ = static_cast<int>(result.unsupported_);
   import_excluded_    = static_cast<int>(result.excluded_type_);
+  import_canceled_    = static_cast<int>(result.canceled_);
+  import_raw_total_     = static_cast<int>(result.raw_requested_);
+  import_raw_completed_ = static_cast<int>(result.raw_imported_);
+  import_raw_failed_    = static_cast<int>(result.raw_failed_);
   import_status_text_ = PL_TEXT("Saving %1 imported photo(s) to the library...", result.imported_);
   emit ImportStateChanged();
   emit importStateChanged();
@@ -784,11 +811,16 @@ void ImportExportHandler::CompleteImport(const ImportResult&                    
   import_target_folder_id_   = folders_->CurrentFolderElementId().value_or(0);
   import_target_folder_path_ = folders_->CurrentFolderFsPath();
 
-  const uint32_t skipped     = result.unsupported_ + result.excluded_type_;
+  const uint32_t skipped     = result.unsupported_ + result.excluded_type_ + result.canceled_;
   const uint32_t errors      = result.failed_ - std::min(result.failed_, skipped);
   auto           task_text =
       PL_TEXT("Import complete: %1 imported, %2 not selected, %3 unsupported, %4 failed",
               result.imported_, result.excluded_type_, result.unsupported_, errors);
+  if (result.canceled_ > 0) {
+    task_text = PL_TEXT(
+        "Import canceled: %1 imported, %2 not read, %3 not selected, %4 unsupported, %5 failed",
+        result.imported_, result.canceled_, result.excluded_type_, result.unsupported_, errors);
+  }
   if (!outcome.state_saved_) {
     status_->SetServiceMessage(PL_TEXT("Import finished, but saving project state failed."));
   } else if (!outcome.package_saved_) {
@@ -797,11 +829,16 @@ void ImportExportHandler::CompleteImport(const ImportResult&                    
                                    : PL_TEXT("%1", outcome.package_error_));
   }
   import_running_     = false;
+  import_canceling_   = false;
   import_phase_       = ImportPhaseState::Idle;
   import_completed_   = static_cast<int>(result.imported_);
   import_failed_      = static_cast<int>(result.failed_);
   import_unsupported_ = static_cast<int>(result.unsupported_);
   import_excluded_    = static_cast<int>(result.excluded_type_);
+  import_canceled_    = static_cast<int>(result.canceled_);
+  import_raw_total_     = static_cast<int>(result.raw_requested_);
+  import_raw_completed_ = static_cast<int>(result.raw_imported_);
+  import_raw_failed_    = static_cast<int>(result.raw_failed_);
   import_status_text_ = task_text;
   emit ImportStateChanged();
   emit importStateChanged();
