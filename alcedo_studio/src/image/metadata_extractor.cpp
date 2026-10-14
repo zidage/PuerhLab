@@ -1585,22 +1585,6 @@ auto ReadFileHead(const image_path_t& image_path, std::size_t byte_count)
   return bytes;
 }
 
-auto ReadWholeFile(const image_path_t& image_path) -> std::vector<std::byte> {
-  std::ifstream ifs(image_path, std::ios::binary | std::ios::ate);
-  if (!ifs.is_open()) {
-    throw MetadataExtractionError(ImportErrorCode::READ_FAILED, image_path,
-                                  "the file cannot be opened");
-  }
-  const auto size = static_cast<std::size_t>(ifs.tellg());
-  ifs.seekg(0);
-  std::vector<std::byte> bytes(size);
-  if (!ifs.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(size))) {
-    throw MetadataExtractionError(ImportErrorCode::READ_FAILED, image_path,
-                                  "the file cannot be read");
-  }
-  return bytes;
-}
-
 auto ImageTypeFor(RasterFileKind kind) -> ImageType {
   switch (kind) {
     case RasterFileKind::Jpeg:
@@ -1690,21 +1674,37 @@ void PopulateRasterDimensionsFromHeader(const image_path_t&        image_path,
 
 auto MetadataExtractor::ClassifyRasterFile(const image_path_t& image_path)
     -> std::optional<RasterFileKind> {
-  // The magic numbers need 8 bytes. A TIFF container needs the whole file, because its DNG
-  // version tag and the LibRaw camera check decide RAW or raster.
+  // The magic numbers need 8 bytes. A TIFF container is classified from the whole file, because
+  // its DNG version tag and the LibRaw check decide RAW or raster. Those read the first directory
+  // and the RAW headers only, so the file is mapped: the OS reads just those pages. Every RAW
+  // format with TIFF magic (ARW, NEF, CR2, RW2, DNG) takes this branch, and a copy of the file read
+  // the whole 25-100 MB of each one and held it per import worker.
   const auto head = ReadFileHead(image_path, 8);
   const bool tiff_magic =
       head.size() >= 2 && ((head[0] == std::byte{'I'} && head[1] == std::byte{'I'}) ||
                            (head[0] == std::byte{'M'} && head[1] == std::byte{'M'}));
   if (tiff_magic) {
-    return RasterFileKindFor(ClassifyImageContent(ReadWholeFile(image_path)));
+    const ReadOnlyFileMapping mapping(image_path);
+    if (mapping.Bytes().empty()) {
+      throw MetadataExtractionError(ImportErrorCode::READ_FAILED, image_path,
+                                    "the file cannot be mapped for reading");
+    }
+    return RasterFileKindFor(ClassifyImageContent(std::as_bytes(mapping.Bytes())));
   }
   return RasterFileKindFor(ClassifyImageContent(head));
 }
 
 void MetadataExtractor::ExtractRasterMetadata_ToImage(const image_path_t& image_path,
                                                       RasterFileKind kind, Image& image) {
-  const auto             bytes = ReadWholeFile(image_path);
+  // The color description, EXIF and header sit in segments and directories that the parsers
+  // locate; mapping the file lets the OS read only those pages instead of every byte of a large
+  // JPEG or TIFF.
+  const ReadOnlyFileMapping mapping(image_path);
+  const auto                bytes = std::as_bytes(mapping.Bytes());
+  if (bytes.empty()) {
+    throw MetadataExtractionError(ImportErrorCode::READ_FAILED, image_path,
+                                  "the file cannot be mapped for reading");
+  }
   RasterColorDescription description;
   try {
     description = ResolveRasterColorDescription(bytes, kind);
