@@ -16,6 +16,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -82,6 +83,125 @@ void SetDisplayDimensionsFromLibRaw(const LibRaw& raw_processor, ExifDisplayMeta
   }
   if (width > 0) display.width_ = width;
   if (height > 0) display.height_ = height;
+}
+
+/// EXIF date text of a RAW file, read while LibRaw parses the TIFF and EXIF IFDs of the file.
+///
+/// The text is the camera clock time and has no time zone. LibRaw also converts it to
+/// `imgdata.other.timestamp` with `mktime()`, in the time zone of this machine. That conversion
+/// cannot be reversed in all cases: a camera clock time in the hour skipped when daylight saving
+/// time starts has no `time_t`, and `mktime()` moves it by one hour (issue #381). Reading the text
+/// gives the camera clock time in any time zone.
+struct LibRawCaptureTimeText {
+  std::string date_time_original_;   ///< EXIF 0x9003 DateTimeOriginal, `YYYY-MM-DD HH:MM:SS`.
+  std::string date_time_digitized_;  ///< EXIF 0x9004 DateTimeDigitized, `YYYY-MM-DD HH:MM:SS`.
+  std::string date_time_;            ///< TIFF 0x0132 DateTime, `YYYY-MM-DD HH:MM:SS`.
+};
+
+/// `YYYY:MM:DD HH:MM:SS` EXIF date text as `YYYY-MM-DD HH:MM:SS`.
+/// @return Empty when the text is not a complete date and time, or is the zero date that EXIF
+/// uses for an unknown date.
+auto NormalizeExifDateTimeText(std::string_view text) -> std::string {
+  constexpr std::string_view kLayout = "dddd:dd:dd dd:dd:dd";
+  if (text.size() < kLayout.size()) {
+    return {};
+  }
+  for (std::size_t i = 0; i < kLayout.size(); ++i) {
+    const bool is_valid =
+        kLayout[i] == 'd' ? (text[i] >= '0' && text[i] <= '9') : text[i] == kLayout[i];
+    if (!is_valid) {
+      return {};
+    }
+  }
+  const auto two_digits = [text](std::size_t pos) {
+    return (text[pos] - '0') * 10 + (text[pos + 1] - '0');
+  };
+  const int month = two_digits(5);
+  const int day   = two_digits(8);
+  if (text.substr(0, 4) == "0000" || month < 1 || month > 12 || day < 1 || day > 31 ||
+      two_digits(11) > 23 || two_digits(14) > 59 || two_digits(17) > 59) {
+    return {};
+  }
+  std::string normalized(text.substr(0, kLayout.size()));
+  normalized[4] = '-';
+  normalized[7] = '-';
+  return normalized;
+}
+
+/// LibRaw `exif_cb` handler: stores the date tags of the file in a `LibRawCaptureTimeText`.
+/// LibRaw calls it for each tag with `ifp` at the tag data and restores the read position after.
+void CollectLibRawCaptureTimeText(void* context, int tag, int type, int len, unsigned int /*ord*/,
+                                  void* ifp, INT64 /*base*/) {
+  constexpr int kExifAsciiType      = 2;
+  constexpr int kExifDateTimeLength = 19;
+  if (type != kExifAsciiType || len < kExifDateTimeLength) {
+    return;
+  }
+  // LibRaw passes EXIF IFD tags unchanged, TIFF IFD tags with the IFD number above bit 20, and
+  // Panasonic RW2 IFD tags with 0x30000. Other values in bits 16-19 mark GPS, interoperability and
+  // maker note IFDs, which have no capture date.
+  const int ifd_kind = tag & 0xF0000;
+  if (ifd_kind != 0 && ifd_kind != 0x30000) {
+    return;
+  }
+  auto&        text   = *static_cast<LibRawCaptureTimeText*>(context);
+  std::string* target = nullptr;
+  switch (tag & 0xFFFF) {
+    case 0x9003:
+      target = &text.date_time_original_;
+      break;
+    case 0x9004:
+      target = &text.date_time_digitized_;
+      break;
+    case 0x0132:
+      target = &text.date_time_;
+      break;
+    default:
+      return;
+  }
+  if (!target->empty()) {
+    return;
+  }
+  char buf[kExifDateTimeLength] = {};
+  if (static_cast<LibRaw_abstract_datastream*>(ifp)->read(buf, 1, kExifDateTimeLength) !=
+      kExifDateTimeLength) {
+    return;
+  }
+  *target = NormalizeExifDateTimeText(std::string_view(buf, kExifDateTimeLength));
+}
+
+/// Capture time of an opened RAW file as `YYYY-MM-DD HH:MM:SS`, the camera clock time.
+///
+/// Uses the EXIF date text: DateTimeOriginal, then DateTimeDigitized, then TIFF DateTime. A file
+/// without EXIF or TIFF date tags (Canon CRW, Sigma X3F) has only the LibRaw timestamp. For these
+/// formats LibRaw stores the camera clock time as seconds since 1970 without a time zone
+/// conversion, so the UTC conversion `gmtime` returns the camera clock fields.
+/// @return Empty when the file has no capture time.
+auto FormatLibRawCaptureTime(const LibRaw& raw_processor, const LibRawCaptureTimeText& text)
+    -> std::string {
+  for (const std::string* exif_text :
+       {&text.date_time_original_, &text.date_time_digitized_, &text.date_time_}) {
+    if (!exif_text->empty()) {
+      return *exif_text;
+    }
+  }
+  const time_t timestamp = raw_processor.imgdata.other.timestamp;
+  if (timestamp <= 0) {
+    return {};
+  }
+  std::tm camera_clock{};
+#if defined(_WIN32)
+  if (gmtime_s(&camera_clock, &timestamp) != 0) {
+    return {};
+  }
+#else
+  if (gmtime_r(&timestamp, &camera_clock) == nullptr) {
+    return {};
+  }
+#endif
+  char buf[64] = {};
+  std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &camera_clock);
+  return buf;
 }
 
 auto TrimTrailingZeroPadded(const char* s, size_t max_len = 256) -> std::string {
@@ -1345,20 +1465,8 @@ void PopulateDngMetadataHintFromOpenLibRaw(LibRaw& raw_processor, ExifDisplayMet
     }
   }
 
+  // The capture time stays the EXIF date text that Exiv2 read (EXIFToDisplayMetaData).
   SetDisplayDimensionsFromLibRaw(raw_processor, display);
-
-  const time_t ts = raw_processor.imgdata.other.timestamp;
-  if (ts > 0) {
-    struct tm t{};
-#if defined(_WIN32)
-    gmtime_s(&t, &ts);
-#else
-    gmtime_r(&ts, &t);
-#endif
-    char buf[64] = {};
-    std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &t);
-    display.date_time_str_ = buf;
-  }
 }
 
 auto ExtractDngMetadataToImageFast(const image_path_t& image_path, Image& image) -> bool {
@@ -1535,7 +1643,8 @@ void PopulateMetadataRuntimeContext(LibRaw& raw_processor, RawRuntimeColorContex
 
 /// Populate ExifDisplayMetaData from a RawRuntimeColorContext + libraw other/sizes data.
 void PopulateDisplayMetadataFromLibRaw(LibRaw& raw_processor, const RawRuntimeColorContext& ctx,
-                                       ExifDisplayMetaData& display) {
+                                       const LibRawCaptureTimeText& capture_time_text,
+                                       ExifDisplayMetaData&         display) {
   display.make_             = ctx.camera_make_;
   display.model_            = ctx.camera_model_;
   display.lens_             = ctx.lens_model_;
@@ -1558,18 +1667,9 @@ void PopulateDisplayMetadataFromLibRaw(LibRaw& raw_processor, const RawRuntimeCo
 
   SetDisplayDimensionsFromLibRaw(raw_processor, display);
 
-  // Timestamp
-  const time_t ts = raw_processor.imgdata.other.timestamp;
-  if (ts > 0) {
-    struct tm t{};
-#if defined(_WIN32)
-    gmtime_s(&t, &ts);
-#else
-    gmtime_r(&ts, &t);
-#endif
-    char buf[64] = {};
-    std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &t);
-    display.date_time_str_ = buf;
+  if (auto capture_time = FormatLibRawCaptureTime(raw_processor, capture_time_text);
+      !capture_time.empty()) {
+    display.date_time_str_ = std::move(capture_time);
   }
 }
 
@@ -1993,7 +2093,9 @@ auto MetadataExtractor::ExtractRawMetadata_ToImage(const image_path_t& image_pat
   }
 
   // LibRaw is large enough to blow worker-thread stacks under ASan if allocated locally.
-  auto raw_processor = std::make_unique<LibRaw>();
+  auto                  raw_processor = std::make_unique<LibRaw>();
+  LibRawCaptureTimeText capture_time_text;
+  raw_processor->set_exifparser_handler(&CollectLibRawCaptureTimeText, &capture_time_text);
 
 #if defined(_WIN32)
   int ret = raw_processor->open_file(image_path.wstring().c_str());
@@ -2024,7 +2126,7 @@ auto MetadataExtractor::ExtractRawMetadata_ToImage(const image_path_t& image_pat
   }
 
   ExifDisplayMetaData display{};
-  PopulateDisplayMetadataFromLibRaw(*raw_processor, ctx, display);
+  PopulateDisplayMetadataFromLibRaw(*raw_processor, ctx, capture_time_text, display);
   // RAW import reads no HDR marker: is_hdr_ stays false until an HDR edit output sets it
   // (PersistImageHdrFlag).
 
