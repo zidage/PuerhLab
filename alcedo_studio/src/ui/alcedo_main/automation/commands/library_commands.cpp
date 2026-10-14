@@ -183,6 +183,25 @@ struct ThumbnailBatch {
   QPointer<AutomationCommandWait> wait_;
 };
 
+/// Answers a library.delete command with the DeleteTargetsFinished @p result: the deleted and
+/// failed ids, or an error when nothing was deleted.
+void AnswerDelete(AutomationCommandWait* wait, const QVariantMap& result) {
+  if (wait == nullptr || wait->IsAnswered()) {
+    return;
+  }
+  const QString    message = result.value(QStringLiteral("message")).toString();
+  const QJsonArray deleted =
+      QJsonArray::fromVariantList(result.value(QStringLiteral("deletedElementIds")).toList());
+  if (deleted.isEmpty()) {
+    wait->SendOwnerError(AutomationErrorCode::Failed, message);
+    return;
+  }
+  const QJsonArray failed =
+      QJsonArray::fromVariantList(result.value(QStringLiteral("failedElementIds")).toList());
+  wait->SendResult(
+      QJsonObject{{"deleted_ids", deleted}, {"failed_ids", failed}, {"message", message}});
+}
+
 /// Requests the next thumbnails of @p batch until kThumbnailsInFlight renders run. Answers the
 /// request when the last thumbnail is written or has failed. Stops requesting when the request
 /// was answered by its time limit.
@@ -941,19 +960,21 @@ auto RegisterAutomationLibraryCommands(AutomationCommandRegistry& registry,
               .arg(mutations->DeleteScope(), scope));
       return;
     }
-    const QVariantMap result = mutations->DeleteTargets(TargetEntries(*rows));
-    const QJsonArray  deleted =
-        QJsonArray::fromVariantList(result.value(QStringLiteral("deletedElementIds")).toList());
-    if (deleted.isEmpty()) {
-      SendAutomationOwnerError(reply, AutomationErrorCode::Failed,
-                               result.value(QStringLiteral("message")).toString());
-      return;
+    // The delete runs on a worker. Only one delete runs at a time, so the next
+    // DeleteTargetsFinished after a started delete is the result of this command.
+    QPointer<AutomationCommandWait> wait     = new AutomationCommandWait(std::move(reply), host);
+    auto                            finished = std::make_shared<QMetaObject::Connection>();
+    *finished = QObject::connect(mutations, &ui::LibraryMutationOperations::DeleteTargetsFinished,
+                                 wait, [wait, finished](const QVariantMap& result) {
+                                   QObject::disconnect(*finished);
+                                   AnswerDelete(wait, result);
+                                 });
+    const QVariantMap started = mutations->StartDeleteTargets(TargetEntries(*rows));
+    if (!started.value(QStringLiteral("started")).toBool()) {
+      QObject::disconnect(*finished);
+      wait->SendOwnerError(AutomationErrorCode::Failed,
+                           started.value(QStringLiteral("message")).toString());
     }
-    reply.SendResult(QJsonObject{
-        {"deleted_ids", deleted},
-        {"failed_ids",
-         QJsonArray::fromVariantList(result.value(QStringLiteral("failedElementIds")).toList())},
-        {"message", result.value(QStringLiteral("message")).toString()}});
   };
   RegisterOrFail(registry, std::move(remove), &ok, error);
 

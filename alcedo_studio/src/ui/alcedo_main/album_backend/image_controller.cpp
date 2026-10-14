@@ -590,7 +590,18 @@ auto ImageController::ResolveRatingTarget(uint elementId, uint imageId) const ->
   return target;
 }
 
-auto ImageController::DeleteImages(const QVariantList& targetEntries) -> QVariantMap {
+auto ImageController::DeleteResultMap(const DeleteExecutionResult& result) -> QVariantMap {
+  return QVariantMap{
+      {QStringLiteral("success"), result.success_},
+      {QStringLiteral("deletedCount"), result.deleted_count_},
+      {QStringLiteral("failedCount"), result.failed_count_},
+      {QStringLiteral("deletedElementIds"), ToVariantIdList(result.deleted_element_ids_)},
+      {QStringLiteral("failedElementIds"), ToVariantIdList(result.failed_element_ids_)},
+      {QStringLiteral("message"), result.message_}};
+}
+
+auto ImageController::StartDeleteImages(const QVariantList& targetEntries) -> QVariantMap {
+  QVariantMap result{{QStringLiteral("started"), false}, {QStringLiteral("message"), QString{}}};
   if (policy_) {
     const QVariantMap policy = policy_->EvaluateDeleteImages(targetEntries);
     if (!policy.value(QStringLiteral("allowed")).toBool()) {
@@ -601,28 +612,86 @@ auto ImageController::DeleteImages(const QVariantList& targetEntries) -> QVarian
       if (status_) {
         status_->SetTaskState(PL_TEXT("%1", reason), 0, false);
       }
-      return QVariantMap{{QStringLiteral("success"), false},
-                         {QStringLiteral("deletedCount"), 0},
-                         {QStringLiteral("failedCount"), targetEntries.size()},
-                         {QStringLiteral("deletedElementIds"), QVariantList{}},
-                         {QStringLiteral("failedElementIds"), QVariantList{}},
-                         {QStringLiteral("message"), reason}};
+      result[QStringLiteral("message")] = reason;
+      return result;
     }
   }
-  const auto  delete_result = DeleteTargets(CollectDeleteTargets(targetEntries));
+  QString refusal;
+  auto    batch = PrepareDeleteBatch(CollectDeleteTargets(targetEntries), &refusal);
+  if (!batch.has_value()) {
+    result[QStringLiteral("message")] = refusal;
+    return result;
+  }
 
-  QVariantMap result{{"success", false},
-                     {"deletedCount", 0},
-                     {"failedCount", 0},
-                     {"deletedElementIds", QVariantList{}},
-                     {"failedElementIds", QVariantList{}},
-                     {"message", delete_result.message_}};
+  const int target_count = static_cast<int>(batch->targets_.size());
+  delete_running_        = true;
+  if (background_tasks_ != nullptr) {
+    const QString          reason = PL_TEXT("Images are being deleted.").Render();
+    BackgroundTaskSnapshot snapshot;
+    snapshot.kind_             = BackgroundTaskKind::ImageDelete;
+    snapshot.state_            = BackgroundTaskState::Running;
+    snapshot.detail_           = PL_TEXT("%1 images", target_count).Render();
+    snapshot.progress_percent_ = -1;
+    snapshot.cancelable_       = false;
+    snapshot.shutdown_policy_  = BackgroundTaskShutdownPolicy::WaitForFinish;
+    if (batch->delete_from_library_) {
+      snapshot.title_ = PL_TEXT("Deleting images").Render();
+    } else {
+      snapshot.title_ = PL_TEXT("Removing images from album").Render();
+    }
+    snapshot.locks_ = {
+        {InteractionCapability::DeleteImages, 0, reason},
+        {InteractionCapability::CloseProject, 0, reason},
+    };
+    for (const auto& target : batch->targets_) {
+      const auto element_id = static_cast<quint64>(target.element_id_);
+      snapshot.affected_targets_.push_back(element_id);
+      snapshot.locks_.push_back({InteractionCapability::EditImageRating, element_id, reason});
+      snapshot.locks_.push_back({InteractionCapability::EditImageDescription, element_id, reason});
+      snapshot.locks_.push_back({InteractionCapability::EditImageRatingReason, element_id, reason});
+      snapshot.locks_.push_back({InteractionCapability::RunImageAnalysis, element_id, reason});
+    }
+    delete_task_id_ = background_tasks_->RegisterTask(snapshot);
+  }
+  QVariantList target_ids;
+  target_ids.reserve(target_count);
+  for (const auto& target : batch->targets_) {
+    target_ids.push_back(static_cast<uint>(target.element_id_));
+  }
+  emit DeleteImagesStarting(target_ids);
+  status_->SetTaskState(batch->delete_from_library_
+                            ? PL_TEXT("Deleting %1 image(s)...", target_count)
+                            : PL_TEXT("Removing %1 image(s) from album...", target_count),
+                        0, false);
 
-  result["success"]           = delete_result.success_;
-  result["deletedCount"]      = delete_result.deleted_count_;
-  result["failedCount"]       = delete_result.failed_count_;
-  result["deletedElementIds"] = ToVariantIdList(delete_result.deleted_element_ids_);
-  result["failedElementIds"]  = ToVariantIdList(delete_result.failed_element_ids_);
+  QPointer<ImageController> self(this);
+  std::thread([self, job = MakeDeleteJob(*batch), batch = std::move(*batch)]() mutable {
+    auto outcome        = std::make_shared<DeleteBatchOutcome>(job());
+    auto finished_batch = std::make_shared<DeleteBatch>(std::move(batch));
+    QMetaObject::invokeMethod(
+        self.data(),
+        [self, outcome, finished_batch]() {
+          if (!self) {
+            return;
+          }
+          const QVariantMap result =
+              DeleteResultMap(self->FinishDeleteBatch(*finished_batch, *outcome));
+          if (self->background_tasks_ != nullptr && !self->delete_task_id_.isEmpty()) {
+            self->background_tasks_->FinishTask(self->delete_task_id_,
+                                                result.value(QStringLiteral("success")).toBool()
+                                                    ? BackgroundTaskState::Succeeded
+                                                    : BackgroundTaskState::Failed,
+                                                result.value(QStringLiteral("message")).toString());
+            self->delete_task_id_.clear();
+          }
+          self->delete_running_ = false;
+          emit self->DeleteImagesFinished(result);
+        },
+        Qt::QueuedConnection);
+  }).detach();
+
+  result[QStringLiteral("started")] = true;
+  result[QStringLiteral("taskId")]  = delete_task_id_;
   return result;
 }
 
@@ -736,60 +805,51 @@ auto ImageController::AddImagesToFolder(const QVariantList& targetEntries, uint 
   return result;
 }
 
-auto ImageController::DeleteTargets(const std::vector<DeleteTarget>& targets)
-    -> DeleteExecutionResult {
-  DeleteExecutionResult result;
-
-  auto&                 ph = project_->handler();
-  if (ph.project_loading()) {
-    const auto msg = PL_TEXT("Project is loading. Please wait.");
+auto ImageController::PrepareDeleteBatch(const std::vector<DeleteTarget>& targets, QString* refusal)
+    -> std::optional<DeleteBatch> {
+  const auto refuse = [this,
+                       refusal](const i18n::LocalizedText& msg) -> std::optional<DeleteBatch> {
     status_->SetTaskState(msg, 0, false);
-    result.message_ = msg.Render();
-    return result;
+    *refusal = msg.Render();
+    return std::nullopt;
+  };
+
+  auto& ph = project_->handler();
+  if (ph.project_loading()) {
+    return refuse(PL_TEXT("Project is loading. Please wait."));
   }
   if (!ph.project()) {
-    const auto msg = PL_TEXT("No project is loaded.");
-    status_->SetTaskState(msg, 0, false);
-    result.message_ = msg.Render();
-    return result;
+    return refuse(PL_TEXT("No project is loaded."));
+  }
+  if (delete_running_) {
+    return refuse(PL_TEXT("Images are being deleted."));
   }
 
   auto* ie = import_export_;
   if (ie && ie->current_import_job() && !ie->current_import_job()->IsCancelationAcked()) {
-    const auto msg = PL_TEXT("Cannot delete images while import is running.");
-    status_->SetTaskState(msg, 0, false);
-    result.message_ = msg.Render();
-    return result;
+    return refuse(PL_TEXT("Cannot delete images while import is running."));
   }
   if (ie && ie->export_inflight()) {
-    const auto msg = PL_TEXT("Cannot delete images while export is running.");
-    status_->SetTaskState(msg, 0, false);
-    result.message_ = msg.Render();
-    return result;
+    return refuse(PL_TEXT("Cannot delete images while export is running."));
   }
 
   if (targets.empty()) {
-    const auto msg = PL_TEXT("No valid images selected for deletion.");
-    status_->SetTaskState(msg, 0, false);
-    result.message_ = msg.Render();
-    return result;
+    return refuse(PL_TEXT("No valid images selected for deletion."));
   }
 
   const auto folder_id = folders_->CurrentFolderElementId();
   if (!folder_id.has_value()) {
-    const auto msg = PL_TEXT("Folder scope is unavailable.");
-    status_->SetTaskState(msg, 0, false);
-    result.message_ = msg.Render();
-    return result;
+    return refuse(PL_TEXT("Folder scope is unavailable."));
   }
-  const bool                          delete_from_library = folder_id.value() == 0;
+  if (!ph.project()->GetAlbumBrowseService()) {
+    return refuse(PL_TEXT("Image service is unavailable."));
+  }
 
-  std::unordered_set<sl_element_id_t> target_ids;
-  target_ids.reserve(targets.size() * 2 + 1);
-  std::vector<sl_element_id_t> delete_element_ids;
-  delete_element_ids.reserve(targets.size());
-  std::vector<DeleteTarget> resolved_targets = targets;
-  for (auto& target : resolved_targets) {
+  DeleteBatch batch;
+  batch.folder_id_           = folder_id.value();
+  batch.delete_from_library_ = folder_id.value() == 0;
+  batch.targets_             = targets;
+  for (auto& target : batch.targets_) {
     if (target.image_id_ == 0 || target.file_path_.empty()) {
       if (const auto* item = library_->FindAlbumItem(target.element_id_); item) {
         if (target.image_id_ == 0) {
@@ -803,120 +863,119 @@ auto ImageController::DeleteTargets(const std::vector<DeleteTarget>& targets)
         }
       }
     }
+  }
+  return batch;
+}
 
-    target_ids.insert(target.element_id_);
-    if (target.element_id_ != 0) {
-      delete_element_ids.push_back(target.element_id_);
+auto ImageController::MakeDeleteJob(DeleteBatch batch) const
+    -> std::function<DeleteBatchOutcome()> {
+  const auto& ph   = project_->handler();
+  const auto& proj = ph.project();
+  return [batch = std::move(batch), browse = proj->GetAlbumBrowseService(),
+          image_pool = proj->GetImagePoolService(), export_svc = ph.export_service(),
+          pipeline_svc = ph.pipeline_service(), save_job = ph.MakeSaveAndPackageJob()]() {
+    DeleteBatchOutcome           outcome;
+
+    std::vector<sl_element_id_t> delete_element_ids;
+    delete_element_ids.reserve(batch.targets_.size());
+    for (const auto& target : batch.targets_) {
+      if (target.element_id_ != 0) {
+        delete_element_ids.push_back(target.element_id_);
+      }
     }
-  }
-
-  auto proj         = ph.project();
-  auto browse       = proj->GetAlbumBrowseService();
-  auto image_pool   = proj->GetImagePoolService();
-  auto export_svc   = ph.export_service();
-  auto pipeline_svc = ph.pipeline_service();
-
-  if (!browse) {
-    const auto msg = PL_TEXT("Image service is unavailable.");
-    status_->SetTaskState(msg, 0, false);
-    result.message_ = msg.Render();
-    return result;
-  }
-
-  const auto delete_result =
-      browse->DeleteFilesInFolderByElementIds(folder_id.value(), delete_element_ids);
-  std::vector<sl_element_id_t> deleted_ids;
-  deleted_ids.reserve(delete_result.deleted_files_.size());
-  for (const auto& file : delete_result.deleted_files_) {
-    deleted_ids.push_back(file.element_id_);
-  }
-
-  std::unordered_set<sl_element_id_t> deleted_id_set(deleted_ids.begin(), deleted_ids.end());
-  std::vector<sl_element_id_t>        failed_ids;
-  failed_ids.reserve(resolved_targets.size());
-  for (const auto& target : resolved_targets) {
-    if (target.element_id_ != 0 && !deleted_id_set.contains(target.element_id_)) {
-      failed_ids.push_back(target.element_id_);
+    try {
+      const auto delete_result =
+          browse->DeleteFilesInFolderByElementIds(batch.folder_id_, delete_element_ids);
+      outcome.deleted_element_ids_.reserve(delete_result.deleted_files_.size());
+      for (const auto& file : delete_result.deleted_files_) {
+        outcome.deleted_element_ids_.push_back(file.element_id_);
+      }
+    } catch (...) {
+      // Nothing was deleted: every target counts as failed.
+      outcome.deleted_element_ids_.clear();
+      return outcome;
     }
-  }
+    if (outcome.deleted_element_ids_.empty()) {
+      return outcome;
+    }
 
-  std::vector<sl_element_id_t> cleanup_element_ids;
-  std::vector<image_id_t>      cleanup_image_ids;
-  cleanup_element_ids.reserve(deleted_ids.size());
-  cleanup_image_ids.reserve(deleted_ids.size());
+    // A file removed from an album stays in the project, with its pipeline and image.
+    std::vector<sl_element_id_t> cleanup_element_ids;
+    std::vector<image_id_t>      cleanup_image_ids;
+    if (batch.delete_from_library_) {
+      const std::unordered_set<sl_element_id_t> deleted_id_set(outcome.deleted_element_ids_.begin(),
+                                                               outcome.deleted_element_ids_.end());
+      for (const auto& target : batch.targets_) {
+        if (!deleted_id_set.contains(target.element_id_)) {
+          continue;
+        }
+        cleanup_element_ids.push_back(target.element_id_);
+        if (target.image_id_ != 0) {
+          cleanup_image_ids.push_back(target.image_id_);
+        }
+      }
+    }
 
-  for (const auto& target : resolved_targets) {
+    if (!cleanup_element_ids.empty() && export_svc) {
+      try {
+        export_svc->RemoveExportTasks(cleanup_element_ids);
+      } catch (...) {
+      }
+    }
+    if (!cleanup_element_ids.empty() && pipeline_svc) {
+      try {
+        pipeline_svc->DeletePipelines(cleanup_element_ids);
+      } catch (...) {
+      }
+    }
+    if (!cleanup_image_ids.empty() && image_pool) {
+      try {
+        image_pool->RemoveBatch(cleanup_image_ids);
+        image_pool->SyncWithStorage();
+      } catch (...) {
+        outcome.save_ok_ = false;
+      }
+    }
+
+    QString ignored_error;
+    if (!save_job(&ignored_error)) {
+      outcome.save_ok_ = false;
+    }
+    return outcome;
+  };
+}
+
+auto ImageController::FinishDeleteBatch(const DeleteBatch& batch, const DeleteBatchOutcome& outcome)
+    -> DeleteExecutionResult {
+  const std::unordered_set<sl_element_id_t> deleted_id_set(outcome.deleted_element_ids_.begin(),
+                                                           outcome.deleted_element_ids_.end());
+  std::vector<sl_element_id_t>              failed_ids;
+  for (const auto& target : batch.targets_) {
+    if (target.element_id_ == 0) {
+      continue;
+    }
     if (!deleted_id_set.contains(target.element_id_)) {
+      failed_ids.push_back(target.element_id_);
       continue;
     }
-
-    if (!delete_from_library) {
-      continue;
-    }
-
-    try {
-      library_->thumbs().RemoveThumbnailState(target.element_id_, target.image_id_);
-    } catch (...) {
-    }
-
-    cleanup_element_ids.push_back(target.element_id_);
-    if (target.image_id_ != 0) {
-      cleanup_image_ids.push_back(target.image_id_);
-    }
-  }
-
-  bool save_ok = true;
-
-  if (!cleanup_element_ids.empty() && export_svc) {
-    try {
-      export_svc->RemoveExportTasks(cleanup_element_ids);
-    } catch (...) {
-    }
-  }
-  if (!cleanup_element_ids.empty() && pipeline_svc) {
-    try {
-      pipeline_svc->DeletePipelines(cleanup_element_ids);
-    } catch (...) {
-    }
-  }
-  if (!cleanup_image_ids.empty() && image_pool) {
-    try {
-      image_pool->RemoveBatch(cleanup_image_ids);
-    } catch (...) {
-      save_ok = false;
-    }
-  }
-
-  if (!cleanup_image_ids.empty() && image_pool) {
-    try {
-      image_pool->SyncWithStorage();
-    } catch (...) {
-      save_ok = false;
-    }
-  }
-
-  if (!deleted_ids.empty()) {
-    try {
-      if (!ph.meta_path().empty()) {
-        proj->SaveProject(ph.meta_path());
+    if (batch.delete_from_library_) {
+      try {
+        library_->thumbs().RemoveThumbnailState(target.element_id_, target.image_id_);
+      } catch (...) {
       }
-      QString ignored_error;
-      if (!ph.PackageCurrentProjectFiles(&ignored_error)) {
-        save_ok = false;
-      }
-    } catch (...) {
-      save_ok = false;
     }
   }
 
-  if (!deleted_ids.empty()) {
+  if (!outcome.deleted_element_ids_.empty()) {
+    library_->selection()->Prune(outcome.deleted_element_ids_);
     library_->ReloadCurrentFolder();
   }
 
-  const int deleted_count = static_cast<int>(deleted_ids.size());
-  const int failed_count  = static_cast<int>(failed_ids.size());
+  const bool delete_from_library = batch.delete_from_library_;
+  const int  deleted_count       = static_cast<int>(outcome.deleted_element_ids_.size());
+  const int  failed_count        = static_cast<int>(failed_ids.size());
 
-  auto      msg           = i18n::LocalizedText{};
+  auto       msg                 = i18n::LocalizedText{};
   if (deleted_count == 0) {
     msg = delete_from_library ? PL_TEXT("No images were deleted.")
                               : PL_TEXT("No images were removed from this album.");
@@ -928,7 +987,7 @@ auto ImageController::DeleteTargets(const std::vector<DeleteTarget>& targets)
               ? PL_TEXT("Deleted %1 image(s); %2 failed.", deleted_count, failed_count)
               : PL_TEXT("Removed %1 image(s); %2 failed.", deleted_count, failed_count);
   }
-  if (!save_ok) {
+  if (!outcome.save_ok_) {
     msg = PL_TEXT("%1 Project state save failed.", msg.Render());
   }
 
@@ -938,13 +997,27 @@ auto ImageController::DeleteTargets(const std::vector<DeleteTarget>& targets)
     status_->ScheduleIdleTaskStateReset(1500);
   }
 
+  DeleteExecutionResult result;
   result.success_             = deleted_count > 0;
   result.deleted_count_       = deleted_count;
   result.failed_count_        = failed_count;
-  result.deleted_element_ids_ = std::move(deleted_ids);
+  result.deleted_element_ids_ = outcome.deleted_element_ids_;
   result.failed_element_ids_  = std::move(failed_ids);
   result.message_             = msg.Render();
   return result;
+}
+
+auto ImageController::DeleteTargets(const std::vector<DeleteTarget>& targets)
+    -> DeleteExecutionResult {
+  QString refusal;
+  auto    batch = PrepareDeleteBatch(targets, &refusal);
+  if (!batch.has_value()) {
+    DeleteExecutionResult result;
+    result.message_ = refusal;
+    return result;
+  }
+  const DeleteBatchOutcome outcome = MakeDeleteJob(*batch)();
+  return FinishDeleteBatch(*batch, outcome);
 }
 
 auto ImageController::GetImageDetails(uint elementId, uint imageId) -> QVariantMap {

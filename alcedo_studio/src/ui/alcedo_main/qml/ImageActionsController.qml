@@ -139,9 +139,10 @@ Item {
     }
 
     function selectAllCurrentAlbum() {
-        if (!host.backendInteractive || appModules.library.thumbnailModel.loading) {
+        if (!host.backendInteractive) {
             return
         }
+        // The backend reads every photo of the query; a page that still loads does not matter.
         appModules.library.SelectAllInCurrentView()
     }
 
@@ -373,9 +374,23 @@ Item {
         if (!root.pendingDeleteTargets || root.pendingDeleteTargets.length === 0) {
             return
         }
-        // LibraryMutationOperations prunes the selection and the export queue and closes a
-        // deleted editor image.
-        const result = appModules.libraryMutations.DeleteTargetsAsUser(root.pendingDeleteTargets)
+        // The delete runs on a worker as a background task. When it starts, a deleted editor
+        // image closes; when it is complete, the backend prunes the selection and the export
+        // queue, and onDeleteTargetsFinished below clears a deleted focused image.
+        const result = appModules.libraryMutations.StartDeleteTargetsAsUser(
+            root.pendingDeleteTargets)
+        if (result && result.started !== true && result.message) {
+            host.showSnackbar(result.message)
+        }
+        root.pendingDeleteTargets = []
+    }
+
+    Connections {
+        target: appModules.libraryMutations
+        function onDeleteTargetsFinished(result) { root.handleDeleteFinished(result) }
+    }
+
+    function handleDeleteFinished(result) {
         if (result && result.success === false && result.message) {
             host.showSnackbar(result.message)
         }
@@ -391,7 +406,6 @@ Item {
                 }
             }
         }
-        root.pendingDeleteTargets = []
     }
 
     function requestSetImageRating(rating) {

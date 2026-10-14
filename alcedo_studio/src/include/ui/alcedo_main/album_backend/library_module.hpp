@@ -178,8 +178,14 @@ class LibraryModule final : public QObject, public IAlbumCatalog {
   Q_INVOKABLE void SetThumbnailCacheHint(uint visibleCells, uint maxEdge = 1024);
   Q_INVOKABLE bool LoadMoreThumbnails();
   Q_INVOKABLE bool LoadThumbnailsThroughIndex(int index);
-  /// Selects every photo of the current view that is loaded after a load through the last
-  /// photo (Select All). Clears the selection when the view is empty.
+  /**
+   * @brief Select All: selects every photo of the accepted library query.
+   *
+   * @details The query worker reads all file ids of the query, so the result does not depend on
+   * the loaded pages or the scroll position; the selection changes when the read completes.
+   * While a refresh runs, the read waits for the refreshed result. Clears the selection when the
+   * view is empty. Every Ctrl+A path (library, section view, editor filmstrip) calls this.
+   */
   Q_INVOKABLE void SelectAllInCurrentView();
   /// Row in the current collection + filter listing, not just the loaded page.
   /// Returns -1 when the element is outside that listing.
@@ -215,9 +221,6 @@ class LibraryModule final : public QObject, public IAlbumCatalog {
   /// They arrive with OrderedFileIdsReady as selection items `{elementId, fileId, imageId,
   /// fileName}`. Reads ids and typed columns only, no thumbnail metadata.
   Q_INVOKABLE qulonglong RequestOrderedFileIds(const QVariantList& ranges);
-  /// Same as RequestOrderedFileIds for every occurrence of the accepted result (Ctrl+A: all
-  /// unique files, also those of collapsed groups).
-  Q_INVOKABLE qulonglong RequestAllFileIds();
   /// Find @p fileId in the accepted result with SQL ranking on the worker and load its page.
   /// The occurrence arrives with FocusPositionReady (-1 when the file no longer matches).
   Q_INVOKABLE void       RequestFocusPosition(uint fileId, const QString& preferredGroupTitle = {},

@@ -21,6 +21,7 @@ enum class SearchRequestKind : std::uint8_t {
   kApply       = 1,  ///< Library refresh: first page, groups, and stats of the applied query.
   kLibraryPage = 2,  ///< Later page of the accepted library query (scroll or section jump).
   kLibraryIds  = 3,  ///< Position or ordered-id read of the accepted library query.
+  kSelectAll   = 4,  ///< Read of every file id of the accepted library query (Select All).
 };
 
 /// One worker thread that runs search requests in submit order with latest-wins coalescing.
@@ -77,7 +78,7 @@ class SearchRequestWorker {
   std::condition_variable      wake_;
   std::deque<PendingRequest>   pending_{};
   std::condition_variable      idle_;
-  std::array<std::uint64_t, 4> newest_generation_{};
+  std::array<std::uint64_t, 5> newest_generation_{};
   std::uint64_t                last_generation_ = 0;
   bool                         stopping_        = false;
   bool                         running_         = false;

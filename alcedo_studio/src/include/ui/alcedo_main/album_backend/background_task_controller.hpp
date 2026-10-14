@@ -31,6 +31,8 @@ enum class BackgroundTaskKind {
   AdjustmentPaste,
   /// Star ratings written to several library images and saved to the project.
   RatingUpdate,
+  /// Library images deleted (or removed from an album) and the project saved.
+  ImageDelete,
   /// An automation agent (CLI or MCP) holds control of the GUI session. Canceling the task
   /// gives control back to the user.
   AgentControl,

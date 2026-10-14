@@ -110,6 +110,21 @@ auto WaitUntil(Predicate&& predicate, std::chrono::milliseconds timeout) -> bool
   return predicate();
 }
 
+/// Starts the delete of @p targets and processes events until DeleteTargetsFinished. A delete
+/// that does not start returns the start result.
+auto DeleteAndWait(LibraryMutationOperations& operations, const QVariantList& targets)
+    -> QVariantMap {
+  QSignalSpy        finished(&operations, &LibraryMutationOperations::DeleteTargetsFinished);
+  const QVariantMap started = operations.StartDeleteTargets(targets);
+  if (!started.value(QStringLiteral("started")).toBool()) {
+    return started;
+  }
+  if (!WaitUntil([&] { return finished.count() > 0; }, std::chrono::minutes(1))) {
+    return {};
+  }
+  return finished.takeFirst().at(0).toMap();
+}
+
 class LibraryMutationOperationsTest : public ApplicationModuleHostTestFixture {
  protected:
   /// Creates a project, imports @p count CI RAW files, and returns their library rows.
@@ -146,7 +161,7 @@ TEST_F(LibraryMutationOperationsTest, DeleteOpenEditorImageClosesEditorImage) {
   EXPECT_EQ(operations.DeleteScope(), QStringLiteral("project"));
   const QVariantList targets = operations.ResolveTargets(QVariantMap{}, true);
   ASSERT_EQ(targets.size(), 1);
-  const QVariantMap result = operations.DeleteTargets(targets);
+  const QVariantMap result = DeleteAndWait(operations, targets);
 
   EXPECT_EQ(result.value(QStringLiteral("deletedElementIds")).toList(),
             (QVariantList{QVariant(element)}));
@@ -173,7 +188,7 @@ TEST_F(LibraryMutationOperationsTest, DeleteOpenImageInEditorWorkspaceShowsEmpty
 
   LibraryMutationOperations operations(host.images(), host.library()->selection(), host.folders(),
                                        &editor, &router);
-  const QVariantMap         result = operations.DeleteTargets(operations.ResolveTargets(row, true));
+  const QVariantMap result = DeleteAndWait(operations, operations.ResolveTargets(row, true));
 
   EXPECT_EQ(result.value(QStringLiteral("deletedCount")).toInt(), 1);
   EXPECT_EQ(router.workspace(), QStringLiteral("editor"));

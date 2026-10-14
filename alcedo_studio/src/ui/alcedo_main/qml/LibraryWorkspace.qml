@@ -697,7 +697,6 @@ RowLayout {
                     host.librarySectionScrollAnchor = scrollAnchor()
                 }
             }
-            selectedImagesById: host.selectedImagesById
             exportQueueById: host.exportQueueById
             onZoomChanged: function(level) { root.gridZoomLevel = level }
             onImageSelectionChanged: function(elementId, imageId, fileName, isHdr, selected) {
@@ -738,7 +737,6 @@ RowLayout {
                     }
                 }
             }
-            selectedImagesById: host.selectedImagesById
             exportQueueById: host.exportQueueById
             onImageSelectionChanged: function(elementId, imageId, fileName, isHdr, selected) {
                 host.selectionState.setImageSelected(elementId, imageId, fileName, isHdr, selected)

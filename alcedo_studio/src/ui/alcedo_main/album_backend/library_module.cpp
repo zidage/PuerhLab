@@ -205,19 +205,51 @@ bool LibraryModule::LoadThumbnailsThroughIndex(int index) {
 }
 
 void LibraryModule::SelectAllInCurrentView() {
-  const int total = TotalCount();
-  if (total <= 0) {
+  if (refresh_in_flight_) {
+    // The ids must come from the result that the next refresh accepts.
+    RunAfterRefresh([this]() { SelectAllInCurrentView(); });
+    return;
+  }
+  auto input = occurrence_count_ > 0 ? AcceptedReadInput({}) : nullptr;
+  if (!input) {
+    query_worker_->Invalidate(SearchRequestKind::kSelectAll);
     selection_.Clear();
     return;
   }
-  (void)LoadThumbnailsThroughIndex(total - 1);
-  std::vector<LibrarySelection::SelectedImage> images;
-  images.reserve(thumbnail_model_.items().size());
-  for (const auto& item : thumbnail_model_.items()) {
-    images.push_back(LibrarySelection::SelectedImage{item.element_id, item.image_id, item.file_name,
-                                                     item.is_hdr});
-  }
-  selection_.Replace(std::move(images));
+  // Every occurrence: all unique files of the query, also those of collapsed groups.
+  const int64_t occurrence_end = occurrence_count_;
+  query_worker_->Submit(SearchRequestKind::kSelectAll, [this, input,
+                                                        occurrence_end](std::uint64_t generation) {
+    std::vector<LibrarySelection::SelectedImage> images;
+    QString                                      error;
+    try {
+      const auto filter = MergeFilterNodes(input->stats_filter_, input->search_.filter_);
+      const auto ids    = input->browse_->ReadAlbumFileIds(
+          input->folder_id_, filter, input->options_, input->active_model_key_, 0, occurrence_end);
+      // Ids and names from typed columns, no thumbnail metadata.
+      const auto rows = input->browse_->ReadAlbumFileRows(ids);
+      images.reserve(rows.size());
+      for (const auto& row : rows) {
+        images.push_back(LibrarySelection::SelectedImage{
+            row.file_id_, row.image_id_, QString::fromUtf8(row.file_name_.c_str()), false});
+      }
+    } catch (const std::exception& e) {
+      error = QString::fromUtf8(e.what());
+    }
+    QMetaObject::invokeMethod(
+        this,
+        [this, generation, images = std::move(images), error]() mutable {
+          if (!query_worker_->IsCurrent(SearchRequestKind::kSelectAll, generation)) {
+            return;
+          }
+          if (!error.isEmpty()) {
+            SetQueryError(error);
+            return;
+          }
+          selection_.Replace(std::move(images));
+        },
+        Qt::QueuedConnection);
+  });
 }
 
 int LibraryModule::IndexOfElementInCurrentView(uint elementId) {
@@ -540,6 +572,7 @@ void LibraryModule::SubmitPendingRefresh() {
     query_worker_->Invalidate(SearchRequestKind::kApply);
     query_worker_->Invalidate(SearchRequestKind::kLibraryPage);
     query_worker_->Invalidate(SearchRequestKind::kLibraryIds);
+    query_worker_->Invalidate(SearchRequestKind::kSelectAll);
     ResetThumbnailWindow();
     if (stats_) {
       stats_->ClearStats();
@@ -906,12 +939,6 @@ auto LibraryModule::RequestOrderedFileIds(const QVariantList& ranges) -> qulongl
             Qt::QueuedConnection);
       });
   return static_cast<qulonglong>(request_id);
-}
-
-auto LibraryModule::RequestAllFileIds() -> qulonglong {
-  return RequestOrderedFileIds(QVariantList{QVariantMap{
-      {QStringLiteral("begin"), qint64{0}},
-      {QStringLiteral("end"), static_cast<qint64>(std::max<int64_t>(occurrence_count_, 1))}}});
 }
 
 void LibraryModule::RequestFocusPosition(uint fileId, const QString& preferredGroupTitle,

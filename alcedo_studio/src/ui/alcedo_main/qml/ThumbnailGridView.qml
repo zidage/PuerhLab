@@ -20,7 +20,8 @@ Item {
     readonly property int dataFontWeight: 500
     readonly property real dataLetterSpacing: -0.2
 
-    property var selectedImagesById: ({})
+    // The library selection (LibrarySelection). A delegate asks it for its own photo.
+    readonly property var selection: appModules.library.selection
     property var exportQueueById: ({})
 
     // ── Zoom control ──────────────────────────────────────────────────
@@ -680,8 +681,8 @@ Item {
     }
 
     function isImageSelected(elementId) {
-        return Object.prototype.hasOwnProperty.call(
-            selectedImagesById, keyForElement(elementId))
+        // Reading revision makes a binding that calls this read again after each change.
+        return selection.revision >= 0 && selection.IsSelected(Number(elementId))
     }
 
     function isImageQueued(elementId) {
@@ -760,7 +761,7 @@ Item {
         appModules.library.LoadThumbnailsThroughIndex(Math.max(anchor, index))
         const rangeItems = selectionItemsForRange(anchor, index)
         if (additive) {
-            root.replaceSelection(Object.values(selectedImagesById).concat(rangeItems))
+            root.selection.AddItems(rangeItems)
         } else {
             root.replaceSelection(rangeItems)
         }
@@ -1220,7 +1221,6 @@ Item {
         property point dragCurrent: Qt.point(0, 0)
         property real dragStartContentY: 0
         property bool isDragging: false
-        property var preDragSelection: ({})
         property bool dragAdditive: false
 
         cursorShape: hoveredIndex >= 0 ? Qt.PointingHandCursor : Qt.ArrowCursor
@@ -1286,8 +1286,8 @@ Item {
         function applyRubberBandSelection() {
             const bandItems = collectRubberBandItems()
             if (dragAdditive) {
-                const merged = Object.values(preDragSelection).concat(bandItems)
-                root.replaceSelection(merged)
+                // The selection from before the drag plus the photos in the band.
+                root.selection.SetRangeItems(bandItems)
             } else {
                 root.replaceSelection(bandItems)
             }
@@ -1299,9 +1299,7 @@ Item {
             }
             isDragging = true
             dragAdditive = root.hasMultiSelectModifier(modifiers)
-            if (dragAdditive) {
-                preDragSelection = Object.assign({}, root.selectedImagesById)
-            }
+            root.selection.EndRange()
             applyRubberBandSelection()
         }
 
@@ -1363,7 +1361,6 @@ Item {
             dragStartContentY = grid.contentY
             isDragging = false
             dragAdditive = false
-            preDragSelection = ({})
             mouse.accepted = true
         }
 

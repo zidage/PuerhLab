@@ -17,7 +17,8 @@ Item {
     property var editorSession: null
     // InteractionPolicyController is the authoritative save-checkpoint gate.
     property var interactionPolicy: null
-    property var selectedImagesById: ({})
+    // The library selection (LibrarySelection). A delegate asks it for its own photo.
+    readonly property var selection: appModules.library.selection
     property bool collapsed: editorSession ? editorSession.filmstripCollapsed : false
     // Minimum scale = current default dock proportion; live max = 50% of window.
     readonly property real minExpandedHeight: 128
@@ -275,8 +276,8 @@ Item {
     }
 
     function isImageSelected(elementId) {
-        return Object.prototype.hasOwnProperty.call(
-            selectedImagesById || ({}), keyForElement(elementId))
+        // Reading revision makes a binding that calls this read again after each change.
+        return selection.revision >= 0 && selection.IsSelected(Number(elementId))
     }
 
     function selectionItemForIndex(index) {
@@ -349,7 +350,7 @@ Item {
         }
         const rangeItems = root.selectionItemsForRange(anchor, index)
         if (additive) {
-            root.replaceSelection(Object.values(selectedImagesById || ({})).concat(rangeItems))
+            root.selection.AddItems(rangeItems)
         } else {
             root.replaceSelection(rangeItems)
         }
@@ -394,21 +395,12 @@ Item {
         if (!selectionEnabled) {
             return
         }
+        // The same backend Select All as the library (every photo of the query).
         if (host && host.selectAllCurrentAlbum) {
             host.selectAllCurrentAlbum()
-            return
+        } else {
+            appModules.library.SelectAllInCurrentView()
         }
-        const total = thumbnailModel
-                ? Number(thumbnailModel.totalCount || totalCount) : 0
-        if (total <= 0) {
-            root.replaceSelection([])
-            selectionAnchorIndex = -1
-            return
-        }
-        if (libraryModule && libraryModule.LoadThumbnailsThroughIndex) {
-            libraryModule.LoadThumbnailsThroughIndex(total - 1)
-        }
-        root.replaceSelection(root.selectionItemsForRange(0, total - 1))
         selectionAnchorIndex = 0
     }
 

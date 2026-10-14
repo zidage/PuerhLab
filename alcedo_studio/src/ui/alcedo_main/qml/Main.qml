@@ -209,7 +209,6 @@ ApplicationWindow {
     readonly property bool backendInteractive: appModules.project.serviceReady
                                                && !appModules.project.projectLoading
                                                && !appModules.project.acceleratorPreparing
-    readonly property var selectedImagesById: selectionState.selectedImagesById
     readonly property var exportQueueById: appModules.exportQueue.entriesById
     readonly property var semanticGeneration: appModules.semanticGeneration
     readonly property int selectedCount: selectionState.selectedCount

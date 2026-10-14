@@ -749,7 +749,7 @@ TEST_F(WorkspaceShellTests, LibraryGridPinsSurviveEditorSwitchDuringZoom) {
   auto* grid = loaded->window->findChild<QObject*>(QStringLiteral("libraryThumbnailGridView"));
   ASSERT_NE(grid, nullptr);
 
-  // Keep the explicit pin outside the four seeded delegate keys so the test
+  // Keep the explicit pin outside the four populated delegate keys so the test
   // measures the deferred release itself instead of combining two references.
   constexpr uint kElementId = 9000;
   constexpr uint kImageId   = 9000;
@@ -850,11 +850,11 @@ TEST_F(WorkspaceShellTests, PresentationViewportBindingSurvivesImageSwitchAToBTo
   if (raw_paths.empty()) {
     GTEST_SKIP() << "RAW fixture om1.dng is required for an interactive viewport session";
   }
-  const auto seeded = CreatePopulatedPackedProject(temp_dir_, raw_paths);
-  ASSERT_TRUE(seeded.has_value());
-  ASSERT_EQ(seeded->images_.size(), 2u);
+  const auto populated = CreatePopulatedPackedProject(temp_dir_, raw_paths);
+  ASSERT_TRUE(populated.has_value());
+  ASSERT_EQ(populated->images_.size(), 2u);
 
-  auto loaded = LoadMainWindowWithPackedProject(seeded->packed_path_);
+  auto loaded = LoadMainWindowWithPackedProject(populated->packed_path_);
   ASSERT_NE(loaded, nullptr);
   ASSERT_NE(loaded->window, nullptr);
   ASSERT_TRUE(InstallTestFrameProducer(loaded->host));
@@ -864,8 +864,8 @@ TEST_F(WorkspaceShellTests, PresentationViewportBindingSurvivesImageSwitchAToBTo
   ASSERT_NE(session, nullptr);
   ASSERT_NE(router, nullptr);
 
-  const auto image_a = seeded->images_.at(0);
-  const auto image_b = seeded->images_.at(1);
+  const auto image_a = populated->images_.at(0);
+  const auto image_b = populated->images_.at(1);
   router->OpenEditor(static_cast<uint>(image_a.file_id_), static_cast<uint>(image_a.image_id_));
   ASSERT_TRUE(WaitForInteractiveImage(loaded->host, session, static_cast<uint>(image_a.file_id_),
                                       static_cast<uint>(image_a.image_id_)));
@@ -1132,15 +1132,15 @@ TEST_F(WorkspaceShellTests, EditorViewportReceivesRealPointerAndWheelEvents) {
   if (raw_paths.empty()) {
     GTEST_SKIP() << "RAW fixture om1.dng is required for viewport input";
   }
-  const auto seeded = CreatePopulatedPackedProject(temp_dir_, raw_paths);
-  ASSERT_TRUE(seeded.has_value());
+  const auto populated = CreatePopulatedPackedProject(temp_dir_, raw_paths);
+  ASSERT_TRUE(populated.has_value());
 
-  auto loaded = LoadMainWindowWithPackedProject(seeded->packed_path_);
+  auto loaded = LoadMainWindowWithPackedProject(populated->packed_path_);
   ASSERT_NE(loaded, nullptr);
   ASSERT_NE(loaded->window, nullptr);
   ASSERT_TRUE(InstallTestFrameProducer(loaded->host));
 
-  const auto image = seeded->images_.front();
+  const auto image = populated->images_.front();
   loaded->host.workspace_router()->OpenEditor(static_cast<uint>(image.file_id_),
                                               static_cast<uint>(image.image_id_));
   ASSERT_TRUE(WaitForInteractiveImage(loaded->host, loaded->host.editor_session(),
@@ -1495,12 +1495,12 @@ TEST_F(WorkspaceShellTests, DeletingCurrentEditorImageDropsEditorToEmptyState) {
   if (raw_paths.empty()) {
     GTEST_SKIP() << "RAW fixture om1.dng is required for deleting an interactive image";
   }
-  const auto seeded = CreatePopulatedPackedProject(temp_dir_, raw_paths);
-  ASSERT_TRUE(seeded.has_value());
-  const auto file_id  = static_cast<uint>(seeded->file_id_);
-  const auto image_id = static_cast<uint>(seeded->image_id_);
+  const auto populated = CreatePopulatedPackedProject(temp_dir_, raw_paths);
+  ASSERT_TRUE(populated.has_value());
+  const auto file_id  = static_cast<uint>(populated->file_id_);
+  const auto image_id = static_cast<uint>(populated->image_id_);
 
-  auto       loaded   = LoadMainWindowWithPackedProject(seeded->packed_path_);
+  auto       loaded   = LoadMainWindowWithPackedProject(populated->packed_path_);
   ASSERT_NE(loaded, nullptr);
   ASSERT_NE(loaded->window, nullptr);
   ASSERT_TRUE(InstallTestFrameProducer(loaded->host));
@@ -1511,7 +1511,7 @@ TEST_F(WorkspaceShellTests, DeletingCurrentEditorImageDropsEditorToEmptyState) {
   ASSERT_NE(router, nullptr);
   ASSERT_NE(session, nullptr);
 
-  // Edit the seeded image; Open records it as the last-edited image.
+  // Edit the populated image; Open records it as the last-edited image.
   router->OpenEditor(file_id, image_id);
   ASSERT_TRUE(WaitForInteractiveImage(loaded->host, session, file_id, image_id));
   ASSERT_EQ(router->workspace(), QStringLiteral("editor"));
@@ -1532,7 +1532,11 @@ TEST_F(WorkspaceShellTests, DeletingCurrentEditorImageDropsEditorToEmptyState) {
       loaded->window->findChild<QObject*>(QStringLiteral("imageActionsController"));
   ASSERT_NE(image_actions, nullptr);
   ASSERT_TRUE(QMetaObject::invokeMethod(image_actions, "runDeleteTargets"));
-  ProcessEvents(500);
+  // The delete runs on a worker; wait until the reloaded view no longer shows the image.
+  for (int attempt = 0; attempt < 200 && loaded->host.library()->ShownCount() > 0; ++attempt) {
+    ProcessEvents(50);
+  }
+  ProcessEvents(200);
 
   // Editor stays selected, drops to the empty state, and forgets the image.
   EXPECT_EQ(router->workspace(), QStringLiteral("editor"));
@@ -1674,12 +1678,12 @@ TEST_F(WorkspaceShellTests, LibraryScrollPositionSurvivesEditorRoundTrip) {
 
 TEST_F(WorkspaceShellTests, LibraryFolderFilterSurvivesEditorRoundTrip) {
   ASSERT_TRUE(QCoreApplication::instance());
-  const auto seeded = CreatePopulatedPackedProject(temp_dir_);
-  ASSERT_TRUE(seeded.has_value());
-  const auto file_id  = static_cast<uint>(seeded->file_id_);
-  const auto image_id = static_cast<uint>(seeded->image_id_);
+  const auto populated = CreatePopulatedPackedProject(temp_dir_);
+  ASSERT_TRUE(populated.has_value());
+  const auto file_id  = static_cast<uint>(populated->file_id_);
+  const auto image_id = static_cast<uint>(populated->image_id_);
 
-  auto       loaded   = LoadMainWindowWithPackedProject(seeded->packed_path_);
+  auto       loaded   = LoadMainWindowWithPackedProject(populated->packed_path_);
   ASSERT_NE(loaded, nullptr);
   ASSERT_NE(loaded->window, nullptr);
   ProcessEvents(80);
@@ -1726,11 +1730,11 @@ TEST_F(WorkspaceShellTests, LibraryFolderFilterSurvivesEditorRoundTrip) {
 
 TEST_F(WorkspaceShellTests, EditorCollectionChangeOpensFirstImageWhenCurrentMissing) {
   ASSERT_TRUE(QCoreApplication::instance());
-  const auto seeded = CreatePopulatedPackedProject(temp_dir_, {}, 2);
-  ASSERT_TRUE(seeded.has_value());
-  ASSERT_EQ(seeded->images_.size(), 2u);
+  const auto populated = CreatePopulatedPackedProject(temp_dir_, {}, 2);
+  ASSERT_TRUE(populated.has_value());
+  ASSERT_EQ(populated->images_.size(), 2u);
 
-  auto loaded = LoadMainWindowWithPackedProject(seeded->packed_path_);
+  auto loaded = LoadMainWindowWithPackedProject(populated->packed_path_);
   ASSERT_NE(loaded, nullptr);
   ASSERT_NE(loaded->window, nullptr);
   ProcessEvents(80);
@@ -1742,8 +1746,8 @@ TEST_F(WorkspaceShellTests, EditorCollectionChangeOpensFirstImageWhenCurrentMiss
       FindFolderId(loaded->host.folders()->Folders(), QStringLiteral("AlbumOnlySecond"));
   ASSERT_NE(album_id, 0u);
 
-  const auto first  = seeded->images_[0];
-  const auto second = seeded->images_[1];
+  const auto   first  = populated->images_[0];
+  const auto   second = populated->images_[1];
   QVariantList targets;
   targets.push_back(QVariantMap{{QStringLiteral("elementId"), static_cast<uint>(second.file_id_)},
                                 {QStringLiteral("imageId"), static_cast<uint>(second.image_id_)}});
@@ -1775,11 +1779,11 @@ TEST_F(WorkspaceShellTests, EditorCollectionChangeOpensFirstImageWhenCurrentMiss
 
 TEST_F(WorkspaceShellTests, EditorCollectionChangeRevealsCurrentImageWhenStillPresent) {
   ASSERT_TRUE(QCoreApplication::instance());
-  const auto seeded = CreatePopulatedPackedProject(temp_dir_, {}, 2);
-  ASSERT_TRUE(seeded.has_value());
-  ASSERT_EQ(seeded->images_.size(), 2u);
+  const auto populated = CreatePopulatedPackedProject(temp_dir_, {}, 2);
+  ASSERT_TRUE(populated.has_value());
+  ASSERT_EQ(populated->images_.size(), 2u);
 
-  auto loaded = LoadMainWindowWithPackedProject(seeded->packed_path_);
+  auto loaded = LoadMainWindowWithPackedProject(populated->packed_path_);
   ASSERT_NE(loaded, nullptr);
   ASSERT_NE(loaded->window, nullptr);
   ProcessEvents(80);
@@ -1790,8 +1794,8 @@ TEST_F(WorkspaceShellTests, EditorCollectionChangeRevealsCurrentImageWhenStillPr
   const uint album_id = FindFolderId(loaded->host.folders()->Folders(), QStringLiteral("AlbumBoth"));
   ASSERT_NE(album_id, 0u);
 
-  const auto first  = seeded->images_[0];
-  const auto second = seeded->images_[1];
+  const auto   first  = populated->images_[0];
+  const auto   second = populated->images_[1];
   QVariantList targets;
   targets.push_back(QVariantMap{{QStringLiteral("elementId"), static_cast<uint>(first.file_id_)},
                                 {QStringLiteral("imageId"), static_cast<uint>(first.image_id_)}});
@@ -1868,17 +1872,17 @@ TEST_F(WorkspaceShellTests, HistoryAndVersionsOpenSwitchAndCollapseFromLeftNavba
   if (raw_paths.empty()) {
     GTEST_SKIP() << "RAW fixture om1.dng is required for the history rail";
   }
-  const auto seeded = CreatePopulatedPackedProject(temp_dir_, raw_paths);
-  ASSERT_TRUE(seeded.has_value());
+  const auto populated = CreatePopulatedPackedProject(temp_dir_, raw_paths);
+  ASSERT_TRUE(populated.has_value());
 
-  auto loaded = LoadMainWindowWithPackedProject(seeded->packed_path_);
+  auto loaded = LoadMainWindowWithPackedProject(populated->packed_path_);
   ASSERT_NE(loaded, nullptr);
   ASSERT_NE(loaded->window, nullptr);
   ASSERT_TRUE(InstallTestFrameProducer(loaded->host));
 
   auto* session = loaded->host.editor_session();
   ASSERT_NE(session, nullptr);
-  const auto image = seeded->images_.front();
+  const auto image = populated->images_.front();
   loaded->host.workspace_router()->OpenEditor(static_cast<uint>(image.file_id_),
                                               static_cast<uint>(image.image_id_));
   ASSERT_TRUE(WaitForInteractiveImage(loaded->host, loaded->host.editor_session(),
@@ -2038,17 +2042,17 @@ TEST_F(WorkspaceShellTests, AdjustmentPanelsSwitchAndSurviveWorkspaceRoundTrip) 
   if (raw_paths.empty()) {
     GTEST_SKIP() << "RAW fixture om1.dng is required for adjustment panel navigation";
   }
-  const auto seeded = CreatePopulatedPackedProject(temp_dir_, raw_paths);
-  ASSERT_TRUE(seeded.has_value());
+  const auto populated = CreatePopulatedPackedProject(temp_dir_, raw_paths);
+  ASSERT_TRUE(populated.has_value());
 
-  auto loaded = LoadMainWindowWithPackedProject(seeded->packed_path_);
+  auto loaded = LoadMainWindowWithPackedProject(populated->packed_path_);
   ASSERT_NE(loaded, nullptr);
   ASSERT_NE(loaded->window, nullptr);
   ASSERT_TRUE(InstallTestFrameProducer(loaded->host));
 
   auto* session = loaded->host.editor_session();
   ASSERT_NE(session, nullptr);
-  const auto image = seeded->images_.front();
+  const auto image = populated->images_.front();
   loaded->host.workspace_router()->OpenEditor(static_cast<uint>(image.file_id_),
                                               static_cast<uint>(image.image_id_));
   ASSERT_TRUE(WaitForInteractiveImage(loaded->host, loaded->host.editor_session(),

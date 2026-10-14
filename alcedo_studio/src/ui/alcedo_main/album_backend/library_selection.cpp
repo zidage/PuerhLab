@@ -36,12 +36,16 @@ auto LibrarySelection::ItemMap(const SelectedImage& image) const -> QVariantMap 
                      {QStringLiteral("isHdr"), image.is_hdr}};
 }
 
-auto LibrarySelection::SelectedImagesById() const -> QVariantMap {
-  QVariantMap map;
-  for (const auto& [element_id, image] : selected_) {
-    map.insert(QString::number(element_id), ItemMap(image));
-  }
-  return map;
+auto LibrarySelection::ImageFromItem(const QVariantMap& item) const -> SelectedImage {
+  return Normalized(
+      SelectedImage{static_cast<sl_element_id_t>(item.value(QStringLiteral("elementId")).toUInt()),
+                    static_cast<image_id_t>(item.value(QStringLiteral("imageId")).toUInt()),
+                    item.value(QStringLiteral("fileName")).toString(),
+                    item.value(QStringLiteral("isHdr")).toBool()});
+}
+
+auto LibrarySelection::IsSelected(uint elementId) const -> bool {
+  return selected_.contains(static_cast<sl_element_id_t>(elementId));
 }
 
 auto LibrarySelection::SelectedElementIds() const -> std::vector<sl_element_id_t> {
@@ -59,6 +63,7 @@ void LibrarySelection::SetImageSelected(uint elementId, uint imageId, const QStr
   if (element_id == 0 || selected_.contains(element_id) == selected) {
     return;
   }
+  range_added_.clear();
   if (selected) {
     selected_.emplace(
         element_id,
@@ -66,7 +71,7 @@ void LibrarySelection::SetImageSelected(uint elementId, uint imageId, const QStr
   } else {
     selected_.erase(element_id);
   }
-  emit SelectionChanged();
+  NotifyChanged();
 }
 
 void LibrarySelection::Clear() { Assign({}); }
@@ -74,19 +79,61 @@ void LibrarySelection::Clear() { Assign({}); }
 void LibrarySelection::Replace(const QVariantList& items) {
   std::map<sl_element_id_t, SelectedImage> next;
   for (const QVariant& value : items) {
-    const QVariantMap item = value.toMap();
-    const auto        element_id =
-        static_cast<sl_element_id_t>(item.value(QStringLiteral("elementId")).toUInt());
-    if (element_id == 0) {
-      continue;
+    SelectedImage image = ImageFromItem(value.toMap());
+    if (image.element_id != 0) {
+      const sl_element_id_t element_id = image.element_id;
+      next[element_id]                 = std::move(image);
     }
-    next[element_id] = Normalized(SelectedImage{
-        element_id, static_cast<image_id_t>(item.value(QStringLiteral("imageId")).toUInt()),
-        item.value(QStringLiteral("fileName")).toString(),
-        item.value(QStringLiteral("isHdr")).toBool()});
   }
   Assign(std::move(next));
 }
+
+void LibrarySelection::AddItems(const QVariantList& items) {
+  range_added_.clear();
+  bool changed = false;
+  for (const QVariant& value : items) {
+    SelectedImage image = ImageFromItem(value.toMap());
+    if (image.element_id != 0) {
+      const sl_element_id_t element_id = image.element_id;
+      changed = selected_.emplace(element_id, std::move(image)).second || changed;
+    }
+  }
+  if (changed) {
+    NotifyChanged();
+  }
+}
+
+void LibrarySelection::SetRangeItems(const QVariantList& items) {
+  std::map<sl_element_id_t, SelectedImage> range;
+  for (const QVariant& value : items) {
+    SelectedImage image = ImageFromItem(value.toMap());
+    if (image.element_id != 0) {
+      const sl_element_id_t element_id = image.element_id;
+      range[element_id]                = std::move(image);
+    }
+  }
+  bool changed = false;
+  for (auto it = range_added_.begin(); it != range_added_.end();) {
+    if (range.contains(*it)) {
+      ++it;
+      continue;
+    }
+    selected_.erase(*it);
+    it      = range_added_.erase(it);
+    changed = true;
+  }
+  for (auto& [element_id, image] : range) {
+    if (selected_.emplace(element_id, std::move(image)).second) {
+      range_added_.insert(element_id);
+      changed = true;
+    }
+  }
+  if (changed) {
+    NotifyChanged();
+  }
+}
+
+void LibrarySelection::EndRange() { range_added_.clear(); }
 
 void LibrarySelection::Replace(std::vector<SelectedImage> images) {
   std::map<sl_element_id_t, SelectedImage> next;
@@ -125,14 +172,16 @@ void LibrarySelection::PruneElements(const QVariantList& elementIds) {
 void LibrarySelection::Prune(const std::vector<sl_element_id_t>& element_ids) {
   bool changed = false;
   for (const auto element_id : element_ids) {
+    range_added_.erase(element_id);
     changed = selected_.erase(element_id) > 0 || changed;
   }
   if (changed) {
-    emit SelectionChanged();
+    NotifyChanged();
   }
 }
 
 void LibrarySelection::Assign(std::map<sl_element_id_t, SelectedImage> next) {
+  range_added_.clear();
   const bool same =
       next.size() == selected_.size() &&
       std::equal(next.begin(), next.end(), selected_.begin(), [](const auto& lhs, const auto& rhs) {
@@ -142,6 +191,11 @@ void LibrarySelection::Assign(std::map<sl_element_id_t, SelectedImage> next) {
     return;
   }
   selected_ = std::move(next);
+  NotifyChanged();
+}
+
+void LibrarySelection::NotifyChanged() {
+  ++revision_;
   emit SelectionChanged();
 }
 
