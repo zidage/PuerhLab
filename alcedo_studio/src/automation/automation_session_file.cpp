@@ -10,9 +10,12 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
+#include <QJsonValue>
 #include <QRegularExpression>
 #include <QSaveFile>
 #include <QStandardPaths>
+#include <cmath>
+#include <limits>
 #include <utility>
 
 #if defined(_WIN32)
@@ -47,6 +50,15 @@ auto ToJson(const AutomationSessionFile& file) -> QJsonObject {
                      {"host_mode", file.host_mode},
                      {"project_path", file.project_path},
                      {"started_at", file.started_at.toUTC().toString(Qt::ISODate)}};
+}
+
+/// True for a JSON number that is a whole number from 1 to @p largest.
+auto IsPositiveInteger(const QJsonValue& value, double largest) -> bool {
+  if (!value.isDouble()) {
+    return false;
+  }
+  const double number = value.toDouble();
+  return number >= 1.0 && number <= largest && std::trunc(number) == number;
 }
 
 }  // namespace
@@ -107,28 +119,60 @@ auto ReadAutomationSessionFile(const QString& path, QString* error)
     return std::nullopt;
   }
 
-  const QJsonObject object = document.object();
-  for (const char* key : {"protocol_version", "pid"}) {
-    if (!object.value(QLatin1String(key)).isDouble()) {
-      SetError(error, QStringLiteral("'%1' has no number '%2'").arg(path, QLatin1String(key)));
+  const QJsonObject object       = document.object();
+  const auto        not_a_record = [&](const QString& reason) {
+    SetError(error, QStringLiteral("'%1' is not an Alcedo session record: %2").arg(path, reason));
+  };
+  if (!IsPositiveInteger(object.value("protocol_version"), std::numeric_limits<int>::max())) {
+    not_a_record(QStringLiteral("'protocol_version' is not a positive integer"));
+    return std::nullopt;
+  }
+  // 2^53, the largest integer up to which a JSON number keeps every integer exactly.
+  constexpr double kLargestExactJsonInteger = 9007199254740992.0;
+  if (!IsPositiveInteger(object.value("pid"), kLargestExactJsonInteger)) {
+    not_a_record(QStringLiteral("'pid' is not a positive integer"));
+    return std::nullopt;
+  }
+  for (const char* key : {"session_name", "socket_name", "host_mode", "started_at"}) {
+    if (object.value(QLatin1String(key)).toString().isEmpty()) {
+      not_a_record(QStringLiteral("'%1' is not a non-empty string").arg(QLatin1String(key)));
       return std::nullopt;
     }
   }
-  for (const char* key : {"session_name", "socket_name", "host_mode"}) {
-    if (object.value(QLatin1String(key)).toString().isEmpty()) {
-      SetError(error, QStringLiteral("'%1' has no string '%2'").arg(path, QLatin1String(key)));
-      return std::nullopt;
-    }
+  if (!object.value("project_path").isString()) {
+    not_a_record(QStringLiteral("'project_path' is not a string"));
+    return std::nullopt;
+  }
+  const QString session_name = object.value("session_name").toString();
+  if (!IsValidAutomationSessionName(session_name)) {
+    not_a_record(QStringLiteral("'session_name' is not a valid session name"));
+    return std::nullopt;
+  }
+  // The host writes each record to `<session_name>.json`.
+  if (QFileInfo(path).fileName() != session_name + QStringLiteral(".json")) {
+    not_a_record(QStringLiteral("the file name is not '%1.json'").arg(session_name));
+    return std::nullopt;
+  }
+  const QString host_mode = object.value("host_mode").toString();
+  if (host_mode != QStringLiteral("headless") && host_mode != QStringLiteral("gui")) {
+    not_a_record(QStringLiteral("'host_mode' is neither 'headless' nor 'gui'"));
+    return std::nullopt;
+  }
+  const QDateTime started_at =
+      QDateTime::fromString(object.value("started_at").toString(), Qt::ISODate);
+  if (!started_at.isValid()) {
+    not_a_record(QStringLiteral("'started_at' is not an ISO 8601 date and time"));
+    return std::nullopt;
   }
 
   AutomationSessionFile file;
   file.protocol_version = object.value("protocol_version").toInt();
-  file.session_name     = object.value("session_name").toString();
+  file.session_name     = session_name;
   file.socket_name      = object.value("socket_name").toString();
   file.pid              = static_cast<qint64>(object.value("pid").toDouble());
-  file.host_mode        = object.value("host_mode").toString();
+  file.host_mode        = host_mode;
   file.project_path     = object.value("project_path").toString();
-  file.started_at       = QDateTime::fromString(object.value("started_at").toString(), Qt::ISODate);
+  file.started_at       = started_at;
   return file;
 }
 
@@ -142,7 +186,7 @@ auto ReadAutomationSessionFiles(const QString& session_dir)
     AutomationSessionFileEntry entry;
     entry.path  = info.absoluteFilePath();
     entry.file  = ReadAutomationSessionFile(entry.path, &entry.read_error);
-    entry.stale = !entry.file.has_value() || !IsAutomationProcessRunning(entry.file->pid);
+    entry.stale = entry.file.has_value() && !IsAutomationProcessRunning(entry.file->pid);
     entries.push_back(std::move(entry));
   }
   return entries;

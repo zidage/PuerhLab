@@ -7,9 +7,12 @@
 
 #include <gtest/gtest.h>
 
+#include <QByteArray>
 #include <QCoreApplication>
 #include <QDir>
 #include <QElapsedTimer>
+#include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -19,6 +22,7 @@
 #include <algorithm>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #if defined(_WIN32)
@@ -494,6 +498,90 @@ TEST_F(AlcedoCliTest, StaleSessionIsListedAndPruned) {
 
   // With one live session left, the implicit selection uses it.
   EXPECT_EQ(RunCli({"call", "session.ping"}).exit_code, 0);
+}
+
+TEST_F(AlcedoCliTest, PruneRemovesOnlyStaleSessionRecordsAndReportsSkippedFiles) {
+  StartSession(QStringLiteral("live"));
+  WriteSessionFile(QStringLiteral("silent"), QStringLiteral("alcedo-cli-test-no-listener"),
+                   QCoreApplication::applicationPid());
+  QProcess exited;
+  exited.start(QCoreApplication::applicationFilePath(), {QStringLiteral("--gtest_list_tests")});
+  ASSERT_TRUE(exited.waitForStarted(10000));
+  const qint64 dead_pid = exited.processId();
+  ASSERT_TRUE(exited.waitForFinished(30000));
+  WriteSessionFile(QStringLiteral("dead"), QStringLiteral("alcedo-cli-test-dead"), dead_pid);
+
+  // Files that are not session records. Some of them name the dead process, so a reader that
+  // accepts them would find them stale.
+  const QJsonObject partial_record{{"protocol_version", 1},
+                                   {"session_name", "partial"},
+                                   {"pid", static_cast<double>(dead_pid)},
+                                   {"host_mode", "headless"}};
+  // A complete record in a file whose name is not `<session_name>.json`.
+  const QJsonObject renamed_record{{"protocol_version", 1},
+                                   {"session_name", "other"},
+                                   {"socket_name", "alcedo-cli-test-dead"},
+                                   {"pid", static_cast<double>(dead_pid)},
+                                   {"host_mode", "headless"},
+                                   {"project_path", ""},
+                                   {"started_at", "2026-10-08T09:00:00Z"}};
+  const QByteArray  dead_pid_text = QByteArray::number(dead_pid);
+  using NamedFileBytes            = std::vector<std::pair<QString, QByteArray>>;
+  const NamedFileBytes kept_files = {
+      {"user-settings.json", R"({"theme":"dark","valuable":"keep"})"},
+      {"malformed.json", R"({"pid": )" + dead_pid_text + ","},
+      {"array.json", "[" + dead_pid_text + "]"},
+      {"partial.json", QJsonDocument(partial_record).toJson(QJsonDocument::Compact)},
+      {"renamed.json", QJsonDocument(renamed_record).toJson(QJsonDocument::Compact)},
+  };
+  for (const auto& [name, bytes] : kept_files) {
+    QFile output(session_dir_.filePath(name));
+    ASSERT_TRUE(output.open(QIODevice::WriteOnly));
+    ASSERT_EQ(output.write(bytes), bytes.size());
+  }
+  const auto file_names = [](const QJsonArray& values, const QString& key) {
+    QStringList names;
+    for (const QJsonValue& value : values) {
+      names.push_back(
+          QFileInfo(key.isEmpty() ? value.toString() : value.toObject().value(key).toString())
+              .fileName());
+    }
+    names.sort();
+    return names;
+  };
+
+  const CliRun prune = RunCli({"--json", "session", "prune"});
+
+  ASSERT_EQ(prune.exit_code, 0) << prune.stderr_text.toStdString();
+  const QJsonObject result = QJsonDocument::fromJson(prune.stdout_text.toUtf8()).object();
+  EXPECT_EQ(file_names(result.value("removed").toArray(), {}),
+            (QStringList{"dead.json", "silent.json"}));
+  EXPECT_EQ(file_names(result.value("skipped").toArray(), QStringLiteral("path")),
+            (QStringList{"array.json", "malformed.json", "partial.json", "renamed.json",
+                         "user-settings.json"}));
+  for (const QJsonValue& skipped : result.value("skipped").toArray()) {
+    EXPECT_FALSE(skipped.toObject().value("reason").toString().isEmpty());
+  }
+  EXPECT_FALSE(QFile::exists(session_dir_.filePath("dead.json")));
+  EXPECT_FALSE(QFile::exists(session_dir_.filePath("silent.json")));
+  EXPECT_TRUE(QFile::exists(session_dir_.filePath("live.json")));
+  for (const auto& [name, bytes] : kept_files) {
+    QFile input(session_dir_.filePath(name));
+    ASSERT_TRUE(input.open(QIODevice::ReadOnly)) << name.toStdString();
+    EXPECT_EQ(input.readAll(), bytes) << name.toStdString();
+  }
+
+  const CliRun text_prune = RunCli({"session", "prune"});
+  EXPECT_EQ(text_prune.exit_code, 0) << text_prune.stderr_text.toStdString();
+  const QStringList lines = text_prune.stdout_text.split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+  ASSERT_EQ(lines.size(), 1 + static_cast<qsizetype>(kept_files.size()))
+      << text_prune.stdout_text.toStdString();
+  EXPECT_EQ(lines.front().trimmed(), QStringLiteral("no stale session files"));
+  for (qsizetype i = 1; i < lines.size(); ++i) {
+    EXPECT_TRUE(lines.at(i).startsWith(QStringLiteral("skipped "))) << lines.at(i).toStdString();
+  }
+  EXPECT_TRUE(text_prune.stdout_text.contains(QStringLiteral("user-settings.json")));
+  EXPECT_TRUE(QFile::exists(session_dir_.filePath("user-settings.json")));
 }
 
 TEST_F(AlcedoCliTest, UsageErrorsExitFour) {

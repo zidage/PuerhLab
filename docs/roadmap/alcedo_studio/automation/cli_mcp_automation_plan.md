@@ -144,6 +144,10 @@ proposed default.
   named, the CLI fails with exit code 2 and lists them.
 - A session file is stale when its process does not exist or its socket does not answer `ping`.
   `alcedo-cli session list` reports stale files. `alcedo-cli session prune` removes them.
+- `session prune` removes a file only when it holds a complete session record (every field the
+  host writes, valid values, file name `<session_name>.json`) and that record is stale. It keeps
+  every other `*.json` file, including malformed JSON and unrelated JSON objects, and reports
+  each kept file with the reason in `skipped`.
 
 ### 2.3 Protocol
 

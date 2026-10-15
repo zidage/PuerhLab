@@ -6,12 +6,17 @@
 
 #include <gtest/gtest.h>
 
+#include <QByteArray>
 #include <QCoreApplication>
 #include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonValue>
 #include <QProcess>
 #include <QTemporaryDir>
 #include <QTimeZone>
 #include <utility>
+#include <vector>
 
 namespace alcedo::automation {
 namespace {
@@ -78,20 +83,90 @@ TEST(AutomationSessionFileTest, DeadProcessFileIsReportedStale) {
   EXPECT_FALSE(entries[1].stale);
 }
 
-TEST(AutomationSessionFileTest, UnreadableFileIsListedAsStaleWithError) {
+void WriteBytes(const QString& path, const QByteArray& bytes) {
+  QFile output(path);
+  ASSERT_TRUE(output.open(QIODevice::WriteOnly));
+  ASSERT_EQ(output.write(bytes), bytes.size());
+}
+
+/// The JSON text of a session record that names a process which does not run, with @p key set
+/// to @p value, or removed when @p value is undefined.
+auto DeadSessionRecordWith(const QString& name, const char* key, const QJsonValue& value)
+    -> QByteArray {
+  QJsonObject record{{"protocol_version", 1},
+                     {"session_name", name},
+                     {"socket_name", "alcedo-automation-1-" + name},
+                     {"pid", static_cast<double>(ExitedProcessId())},
+                     {"host_mode", "headless"},
+                     {"project_path", "D:/Photos/trip.alcd"},
+                     {"started_at", "2026-10-08T09:00:00Z"}};
+  if (value.isUndefined()) {
+    record.remove(QLatin1String(key));
+  } else {
+    record.insert(QLatin1String(key), value);
+  }
+  return QJsonDocument(record).toJson(QJsonDocument::Compact);
+}
+
+TEST(AutomationSessionFileTest, UnreadableFileIsListedWithErrorAndIsNotStale) {
   QTemporaryDir dir;
   ASSERT_TRUE(dir.isValid());
-  QFile broken(dir.filePath("broken.json"));
-  ASSERT_TRUE(broken.open(QIODevice::WriteOnly));
-  broken.write("{\"pid\": \"x\"}");
-  broken.close();
+  WriteBytes(dir.filePath("broken.json"), "{\"pid\": \"x\"}");
 
   const auto entries = ReadAutomationSessionFiles(dir.path());
 
   ASSERT_EQ(entries.size(), 1U);
   EXPECT_FALSE(entries[0].file.has_value());
-  EXPECT_TRUE(entries[0].stale);
+  EXPECT_FALSE(entries[0].stale);
   EXPECT_FALSE(entries[0].read_error.isEmpty());
+}
+
+TEST(AutomationSessionFileTest, FilesThatAreNotSessionRecordsAreRejectedAndAreNeverStale) {
+  QTemporaryDir dir;
+  ASSERT_TRUE(dir.isValid());
+  const std::vector<std::pair<QString, QByteArray>> files = {
+      {"user-settings", R"({"theme":"dark","valuable":"keep"})"},
+      {"malformed", R"({"session_name": "malformed", )"},
+      {"array", R"([{"session_name":"array","pid":1}])"},
+      {"no-socket", DeadSessionRecordWith("no-socket", "socket_name", QJsonValue::Undefined)},
+      {"no-project", DeadSessionRecordWith("no-project", "project_path", QJsonValue::Undefined)},
+      {"no-start", DeadSessionRecordWith("no-start", "started_at", QJsonValue::Undefined)},
+      {"zero-pid", DeadSessionRecordWith("zero-pid", "pid", 0)},
+      {"fraction-pid", DeadSessionRecordWith("fraction-pid", "pid", 12.5)},
+      {"text-pid", DeadSessionRecordWith("text-pid", "pid", "12")},
+      {"zero-protocol", DeadSessionRecordWith("zero-protocol", "protocol_version", 0)},
+      {"bad-mode", DeadSessionRecordWith("bad-mode", "host_mode", "daemon")},
+      {"bad-start", DeadSessionRecordWith("bad-start", "started_at", "yesterday")},
+      {"bad-name", DeadSessionRecordWith("bad-name", "session_name", "a/b")},
+      {"other-name", DeadSessionRecordWith("other-name", "session_name", "settings")},
+  };
+  for (const auto& [name, bytes] : files) {
+    WriteBytes(dir.filePath(name + ".json"), bytes);
+  }
+
+  const auto entries = ReadAutomationSessionFiles(dir.path());
+
+  ASSERT_EQ(entries.size(), files.size());
+  for (const AutomationSessionFileEntry& entry : entries) {
+    SCOPED_TRACE(entry.path.toStdString());
+    EXPECT_FALSE(entry.file.has_value());
+    EXPECT_FALSE(entry.stale);
+    EXPECT_FALSE(entry.read_error.isEmpty());
+  }
+}
+
+TEST(AutomationSessionFileTest, ValidRecordOfDeadProcessIsStale) {
+  QTemporaryDir dir;
+  ASSERT_TRUE(dir.isValid());
+  WriteBytes(dir.filePath("complete.json"),
+             DeadSessionRecordWith("complete", "host_mode", QStringLiteral("gui")));
+
+  const auto entries = ReadAutomationSessionFiles(dir.path());
+
+  ASSERT_EQ(entries.size(), 1U);
+  ASSERT_TRUE(entries[0].file.has_value()) << entries[0].read_error.toStdString();
+  EXPECT_EQ(entries[0].file->host_mode, QStringLiteral("gui"));
+  EXPECT_TRUE(entries[0].stale);
 }
 
 TEST(AutomationSessionFileTest, NameWithPathSeparatorIsRejected) {
