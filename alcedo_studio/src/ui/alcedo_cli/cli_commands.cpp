@@ -81,6 +81,7 @@ Commands:
   session prune                   Remove the stale session records. Keep every other file
                                   and report why it was skipped.
   watch                           Print notifications until interrupted.
+  version                         Print the Alcedo Studio version. Also: --version.
   help                            Print this text.
 
 Exit codes: 0 success, 1 command error, 2 session selection error, 3 connection error,
@@ -933,6 +934,10 @@ auto RunAlcedoCli(const QStringList& arguments) -> int {
   if (command == QStringLiteral("help") || command == QStringLiteral("--help") ||
       command == QStringLiteral("-h")) {
     WriteOut(QString::fromUtf8(kUsage));
+    return Exit(CliExitCode::Success);
+  }
+  if (command == QStringLiteral("version") || command == QStringLiteral("--version")) {
+    WriteOut(QStringLiteral(ALCEDO_APP_VERSION "\n"));
     return Exit(CliExitCode::Success);
   }
   if (command == QStringLiteral("call")) {
