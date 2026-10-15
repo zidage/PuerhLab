@@ -4,6 +4,7 @@
 
 #include "ui/alcedo_main/automation/automation_command_support.hpp"
 
+#include <QFileInfo>
 #include <QStringList>
 #include <algorithm>
 #include <exception>
@@ -105,6 +106,55 @@ void SendAutomationParamError(AutomationReply& reply, const QString& pointer,
                               const QString& message) {
   reply.SendError(AutomationErrorCode::InvalidParams, message,
                   QJsonObject{{"pointer", pointer}, {"reason", message}});
+}
+
+auto AutomationExistingOutputReason(const QString& path) -> QString {
+  const QFileInfo info(path);
+  // exists() follows links, so a link to a missing file needs isSymLink().
+  if (!info.exists() && !info.isSymLink()) {
+    return {};
+  }
+  return QStringLiteral(
+             "%1 exists. Commands write only new files and do not replace an existing "
+             "file; choose another path.")
+      .arg(path);
+}
+
+AutomationNewOutputFile::AutomationNewOutputFile(QString path)
+    : path_(std::move(path)), file_(path_) {}
+
+AutomationNewOutputFile::~AutomationNewOutputFile() { Discard(); }
+
+auto AutomationNewOutputFile::Create() -> QString {
+  if (file_.open(QIODevice::WriteOnly | QIODevice::NewOnly)) {
+    created_ = true;
+    return {};
+  }
+  const QString existing = AutomationExistingOutputReason(path_);
+  if (!existing.isEmpty()) {
+    return existing;
+  }
+  return QStringLiteral("The file %1 cannot be created: %2").arg(path_, file_.errorString());
+}
+
+auto AutomationNewOutputFile::WritePng(const QImage& image) -> QString {
+  if (!created_ || !file_.isOpen()) {
+    return QStringLiteral("The file %1 was not created.").arg(path_);
+  }
+  if (!image.save(&file_, "PNG") || !file_.flush()) {
+    return QStringLiteral("The PNG file cannot be written: %1").arg(path_);
+  }
+  file_.close();
+  return {};
+}
+
+void AutomationNewOutputFile::Keep() { kept_ = true; }
+
+void AutomationNewOutputFile::Discard() {
+  if (created_ && !kept_) {
+    file_.remove();
+    created_ = false;
+  }
 }
 
 AutomationCommandWait::AutomationCommandWait(AutomationReply reply, QObject* parent)

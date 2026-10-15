@@ -115,10 +115,11 @@ struct ThumbnailFile {
 };
 
 /// Renders the library thumbnail of @p row with @p thumbnails, scales it to @p long_edge, and
-/// writes it to the PNG file @p out. Calls @p done on the GUI thread with the file or the error.
+/// writes it as PNG to @p out, which the caller created. Calls @p done on the GUI thread with the
+/// file or the error. A failure removes @p out.
 void WriteThumbnailPng(const std::shared_ptr<ThumbnailService>& thumbnails,
-                       const SearchResultRow& row, const QString& out, int long_edge,
-                       std::function<void(ThumbnailFile)> done) {
+                       const SearchResultRow& row, std::shared_ptr<AutomationNewOutputFile> out,
+                       int long_edge, std::function<void(ThumbnailFile)> done) {
   std::weak_ptr<ThumbnailService> weak_service = thumbnails;
   // The render answers on a worker thread; the conversion and the answer run on this one.
   CallbackDispatcher              dispatcher   = [](std::function<void()> callback) {
@@ -127,7 +128,8 @@ void WriteThumbnailPng(const std::shared_ptr<ThumbnailService>& thumbnails,
   };
   thumbnails->GetThumbnailDetailed(
       row.file_id_, row.image_id_,
-      [weak_service, out, long_edge, done = std::move(done)](ThumbnailRequestResult result) {
+      [weak_service, out = std::move(out), long_edge,
+       done = std::move(done)](ThumbnailRequestResult result) {
         QImage  image;
         QString failure = QString::fromStdString(result.message);
         if (result.status == ThumbnailRequestStatus::kReady && result.guard &&
@@ -150,18 +152,21 @@ void WriteThumbnailPng(const std::shared_ptr<ThumbnailService>& thumbnails,
           file.error_ = failure.isEmpty()
                             ? QStringLiteral("The thumbnail render returned no image.")
                             : failure;
+          out->Discard();
           done(std::move(file));
           return;
         }
         if (std::max(image.width(), image.height()) > long_edge) {
           image = image.scaled(long_edge, long_edge, Qt::KeepAspectRatio, Qt::SmoothTransformation);
         }
-        if (!image.save(out, "PNG")) {
-          file.error_ = QStringLiteral("The PNG file cannot be written: %1").arg(out);
+        if (const QString write_failure = out->WritePng(image); !write_failure.isEmpty()) {
+          file.error_ = write_failure;
+          out->Discard();
           done(std::move(file));
           return;
         }
-        file.path_   = out;
+        out->Keep();
+        file.path_   = out->path();
         file.width_  = image.width();
         file.height_ = image.height();
         done(std::move(file));
@@ -202,9 +207,24 @@ void AnswerDelete(AutomationCommandWait* wait, const QVariantMap& result) {
       QJsonObject{{"deleted_ids", deleted}, {"failed_ids", failed}, {"message", message}});
 }
 
-/// Requests the next thumbnails of @p batch until kThumbnailsInFlight renders run. Answers the
-/// request when the last thumbnail is written or has failed. Stops requesting when the request
-/// was answered by its time limit.
+/// Answers the library.thumbnails request of @p batch with every item.
+void AnswerThumbnails(const ThumbnailBatch& batch) {
+  QJsonArray items;
+  int        failed = 0;
+  for (const QJsonObject& written : batch.items_) {
+    failed += written.contains("error") ? 1 : 0;
+    items.push_back(written);
+  }
+  batch.wait_->SendResult(
+      QJsonObject{{"items", items},
+                  {"written_count", static_cast<int>(batch.items_.size()) - failed},
+                  {"failed_count", failed}});
+}
+
+/// Requests the next thumbnails of @p batch until kThumbnailsInFlight renders run. A thumbnail
+/// file that cannot be created, for example because a file has its path, fails its item without
+/// a render. Answers the request when the last thumbnail is written or has failed. Stops
+/// requesting when the request was answered by its time limit.
 void RequestNextThumbnails(const std::shared_ptr<ThumbnailBatch>& batch) {
   while (batch->in_flight_ < kThumbnailsInFlight && batch->next_ < batch->rows_.size()) {
     if (batch->wait_ == nullptr || batch->wait_->IsAnswered()) {
@@ -218,37 +238,35 @@ void RequestNextThumbnails(const std::shared_ptr<ThumbnailBatch>& batch) {
     }
     const std::size_t      index = batch->next_++;
     const SearchResultRow& row   = batch->rows_[index];
-    const QString out = QDir(batch->out_dir_).filePath(QStringLiteral("%1.png").arg(row.file_id_));
-    ++batch->in_flight_;
-    WriteThumbnailPng(thumbnails, row, out, batch->long_edge_, [batch, index](ThumbnailFile file) {
-      --batch->in_flight_;
+    auto                   out   = std::make_shared<AutomationNewOutputFile>(
+        QDir(batch->out_dir_).filePath(QStringLiteral("%1.png").arg(row.file_id_)));
+    if (const QString failure = out->Create(); !failure.isEmpty()) {
+      batch->items_[index].insert("error", failure);
       ++batch->finished_;
-      QJsonObject& item = batch->items_[index];
-      if (file.error_.isEmpty()) {
-        item.insert("path", file.path_);
-        item.insert("width", file.width_);
-        item.insert("height", file.height_);
-      } else {
-        item.insert("error", file.error_);
-      }
-      if (batch->wait_ == nullptr || batch->wait_->IsAnswered()) {
-        return;
-      }
-      if (batch->finished_ < batch->rows_.size()) {
-        RequestNextThumbnails(batch);
-        return;
-      }
-      QJsonArray items;
-      int        failed = 0;
-      for (const QJsonObject& written : batch->items_) {
-        failed += written.contains("error") ? 1 : 0;
-        items.push_back(written);
-      }
-      batch->wait_->SendResult(
-          QJsonObject{{"items", items},
-                      {"written_count", static_cast<int>(batch->items_.size()) - failed},
-                      {"failed_count", failed}});
-    });
+      continue;
+    }
+    ++batch->in_flight_;
+    WriteThumbnailPng(thumbnails, row, std::move(out), batch->long_edge_,
+                      [batch, index](ThumbnailFile file) {
+                        --batch->in_flight_;
+                        ++batch->finished_;
+                        QJsonObject& item = batch->items_[index];
+                        if (file.error_.isEmpty()) {
+                          item.insert("path", file.path_);
+                          item.insert("width", file.width_);
+                          item.insert("height", file.height_);
+                        } else {
+                          item.insert("error", file.error_);
+                        }
+                        if (batch->wait_ == nullptr || batch->wait_->IsAnswered()) {
+                          return;
+                        }
+                        RequestNextThumbnails(batch);
+                      });
+  }
+  if (batch->finished_ == batch->rows_.size() && batch->wait_ != nullptr &&
+      !batch->wait_->IsAnswered()) {
+    AnswerThumbnails(*batch);
   }
 }
 
@@ -658,10 +676,12 @@ auto RegisterAutomationLibraryCommands(AutomationCommandRegistry& registry,
   thumbnail.method      = QStringLiteral("library.thumbnail");
   thumbnail.description = QStringLiteral(
       "Renders the library thumbnail of a photo and writes it as a PNG file whose long edge is "
-      "'long_edge'.");
+      "'long_edge'. 'out' must end in .png and must not exist: the command creates a new file "
+      "and does not replace an existing one.");
   thumbnail.params_schema = AutomationClosedParamsSchema(
       QJsonObject{{"element_id", QJsonObject{{"type", "integer"}, {"minimum", 1}}},
-                  {"out", QJsonObject{{"type", "string"}, {"description", "The PNG file."}}},
+                  {"out", QJsonObject{{"type", "string"},
+                                      {"description", "The new PNG file; it must not exist."}}},
                   {"long_edge", QJsonObject{{"type", "integer"},
                                             {"minimum", 16},
                                             {"maximum", kMaxThumbnailLongEdge},
@@ -680,6 +700,11 @@ auto RegisterAutomationLibraryCommands(AutomationCommandRegistry& registry,
     const auto    element_id = static_cast<sl_element_id_t>(params.value("element_id").toDouble());
     const int     long_edge  = params.value("long_edge").toInt(512);
     const QString out        = QFileInfo(params.value("out").toString()).absoluteFilePath();
+    if (!out.endsWith(QStringLiteral(".png"), Qt::CaseInsensitive)) {
+      SendAutomationParamError(reply, QStringLiteral("/out"),
+                               QStringLiteral("the file name must end in .png"));
+      return;
+    }
     const auto    browse     = project->GetAlbumBrowseService();
     auto          thumbnails = host->project()->handler().thumbnail_service();
     if (!browse || !thumbnails) {
@@ -706,18 +731,25 @@ auto RegisterAutomationLibraryCommands(AutomationCommandRegistry& registry,
       return;
     }
 
+    auto file = std::make_shared<AutomationNewOutputFile>(out);
+    if (const QString failure = file->Create(); !failure.isEmpty()) {
+      SendAutomationParamError(reply, QStringLiteral("/out"), failure);
+      return;
+    }
+
     QPointer<AutomationCommandWait> wait = new AutomationCommandWait(std::move(reply), host);
-    WriteThumbnailPng(thumbnails, rows.front(), out, long_edge, [wait](ThumbnailFile file) {
-      if (wait == nullptr) {
-        return;
-      }
-      if (!file.error_.isEmpty()) {
-        wait->SendOwnerError(AutomationErrorCode::Failed, file.error_);
-        return;
-      }
-      wait->SendResult(
-          QJsonObject{{"path", file.path_}, {"width", file.width_}, {"height", file.height_}});
-    });
+    WriteThumbnailPng(
+        thumbnails, rows.front(), std::move(file), long_edge, [wait](ThumbnailFile written) {
+          if (wait == nullptr) {
+            return;
+          }
+          if (!written.error_.isEmpty()) {
+            wait->SendOwnerError(AutomationErrorCode::Failed, written.error_);
+            return;
+          }
+          wait->SendResult(QJsonObject{
+              {"path", written.path_}, {"width", written.width_}, {"height", written.height_}});
+        });
   };
   RegisterOrFail(registry, std::move(thumbnail), &ok, error);
 
@@ -727,7 +759,7 @@ auto RegisterAutomationLibraryCommands(AutomationCommandRegistry& registry,
       "Renders the library thumbnails of 'element_ids' and writes each as the PNG file "
       "<element_id>.png in 'out_dir', with the long edge 'long_edge'. Answers when every "
       "thumbnail is written or has failed: each item has 'path', 'width', and 'height', or "
-      "'error'.");
+      "'error'. A file that exists is not replaced; its item has 'error'.");
   thumbnails.params_schema = AutomationClosedParamsSchema(
       QJsonObject{
           {"element_ids", BatchElementIdsParam()},
