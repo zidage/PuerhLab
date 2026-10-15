@@ -78,7 +78,8 @@ Commands:
                                   Start a headless session and wait until it answers.
   session stop                    Shut the session down and wait for its process to exit.
   session list                    List the session files and their state.
-  session prune                   Remove the stale session files.
+  session prune                   Remove the stale session records. Keep every other file
+                                  and report why it was skipped.
   watch                           Print notifications until interrupted.
   help                            Print this text.
 
@@ -187,7 +188,8 @@ auto ReadSessionStates(const QString& session_dir) -> std::vector<AutomationSess
   std::vector<AutomationSessionFileEntry> entries =
       automation::ReadAutomationSessionFiles(session_dir);
   for (AutomationSessionFileEntry& entry : entries) {
-    if (!entry.stale && entry.file->protocol_version == automation::kAutomationProtocolVersion) {
+    if (entry.file.has_value() && !entry.stale &&
+        entry.file->protocol_version == automation::kAutomationProtocolVersion) {
       entry.stale = !SessionAnswersPing(*entry.file);
     }
   }
@@ -195,7 +197,8 @@ auto ReadSessionStates(const QString& session_dir) -> std::vector<AutomationSess
 }
 
 auto IsUsable(const AutomationSessionFileEntry& entry) -> bool {
-  return !entry.stale && entry.file->protocol_version == automation::kAutomationProtocolVersion;
+  return entry.file.has_value() && !entry.stale &&
+         entry.file->protocol_version == automation::kAutomationProtocolVersion;
 }
 
 auto ProtocolMismatchMessage(const AutomationSessionFile& file) -> QString {
@@ -764,24 +767,36 @@ auto RunSessionList(const CliOptions& options) -> int {
   return Exit(CliExitCode::Success);
 }
 
+/// Removes only the files that hold a stale Alcedo session record. A file that cannot be read or
+/// is not a session record may belong to another program, so it is kept and reported.
 auto RunSessionPrune(const CliOptions& options) -> int {
   QJsonArray removed;
-  QString    text;
+  QJsonArray skipped;
+  QString    removed_text;
+  QString    skipped_text;
   for (const AutomationSessionFileEntry& entry : ReadSessionStates(options.session_dir)) {
+    if (!entry.file.has_value()) {
+      skipped.push_back(QJsonObject{{"path", entry.path}, {"reason", entry.read_error}});
+      skipped_text += QStringLiteral("skipped %1: %2\n").arg(entry.path, entry.read_error);
+      continue;
+    }
     if (!entry.stale) {
       continue;
     }
     if (QFile::remove(entry.path)) {
       removed.push_back(entry.path);
-      text += QStringLiteral("removed %1\n").arg(entry.path);
+      removed_text += QStringLiteral("removed %1\n").arg(entry.path);
     } else {
       WriteErr(QStringLiteral("alcedo-cli: cannot remove '%1'\n").arg(entry.path));
     }
   }
   if (options.json) {
-    WriteOut(ToJsonText(QJsonObject{{"removed", removed}}, QJsonDocument::Compact) + '\n');
+    WriteOut(ToJsonText(QJsonObject{{"removed", removed}, {"skipped", skipped}},
+                        QJsonDocument::Compact) +
+             '\n');
   } else {
-    WriteOut(text.isEmpty() ? QStringLiteral("no stale session files\n") : text);
+    WriteOut((removed_text.isEmpty() ? QStringLiteral("no stale session files\n") : removed_text) +
+             skipped_text);
   }
   return Exit(CliExitCode::Success);
 }

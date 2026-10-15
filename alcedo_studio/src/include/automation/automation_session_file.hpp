@@ -28,11 +28,14 @@ struct AutomationSessionFile {
 struct AutomationSessionFileEntry {
   /// Absolute path of the file.
   QString                              path;
-  /// The file content, or nothing when the file cannot be read.
+  /// The session record, or nothing when the file cannot be read or is not an Alcedo session
+  /// record.
   std::optional<AutomationSessionFile> file;
+  /// Why `file` is empty.
   QString                              read_error;
-  /// True when the file cannot be read or its process does not run. A client also treats a
-  /// session whose socket does not answer `session.ping` as stale.
+  /// True only for a session record whose process does not run. A client also treats a session
+  /// whose socket does not answer `session.ping` as stale. A file without a session record is
+  /// never stale, so that no caller removes a file that Alcedo did not write.
   bool                                 stale = false;
 };
 
@@ -51,11 +54,14 @@ auto AutomationSessionFilePath(const QString& session_dir, const QString& sessio
                                               const AutomationSessionFile& file,
                                               QString*                     error = nullptr) -> bool;
 
-/// Reads one session file. Returns nothing and writes @p error for an unreadable file.
+/// Reads one session file. Returns nothing and writes @p error when the file cannot be read or is
+/// not an Alcedo session record: a JSON object with every field that WriteAutomationSessionFile
+/// writes, valid values, and a file name of `<session_name>.json`.
 auto               ReadAutomationSessionFile(const QString& path, QString* error = nullptr)
     -> std::optional<AutomationSessionFile>;
 
-/// Reads every `*.json` file in @p session_dir, sorted by file name, and marks the stale ones.
+/// Reads every `*.json` file in @p session_dir, sorted by file name, and marks the stale session
+/// records.
 auto ReadAutomationSessionFiles(const QString& session_dir)
     -> std::vector<AutomationSessionFileEntry>;
 
