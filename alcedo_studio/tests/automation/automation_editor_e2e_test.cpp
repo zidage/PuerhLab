@@ -312,12 +312,42 @@ TEST_F(AutomationEditorE2ETest, PreviewWithoutCompareWritesOnlyCurrentFileWithFi
   EXPECT_EQ(QDir(out_dir).entryList(QDir::Files), QStringList{QStringLiteral("shot_7_current.png")})
       << "no root file is written";
 
+  // Issue #401: shot_7_current.png exists, so the request fails and writes no file.
+  QFile current_file(current_path);
+  ASSERT_TRUE(current_file.open(QIODevice::ReadOnly));
+  const QByteArray current_bytes = current_file.readAll();
+  current_file.close();
+  const CliRun existing =
+      Call(QStringLiteral("render.preview"),
+           QJsonObject{{"out_dir", out_dir}, {"long_edge", 128}, {"file_stem", "shot_7"}});
+  EXPECT_EQ(existing.exit_code, 1);
+  EXPECT_EQ(existing.json.value("error").toObject().value("code").toInt(), -32602);
+  ASSERT_TRUE(current_file.open(QIODevice::ReadOnly));
+  EXPECT_EQ(current_file.readAll(), current_bytes);
+  current_file.close();
+  EXPECT_EQ(QDir(out_dir).entryList(QDir::Files), QStringList{QStringLiteral("shot_7_current.png")})
+      << "the rejected request writes no root file";
+
   const QJsonObject both =
       Result(QStringLiteral("render.preview"),
-             QJsonObject{{"out_dir", out_dir}, {"long_edge", 256}, {"file_stem", "shot_7"}});
+             QJsonObject{{"out_dir", out_dir}, {"long_edge", 256}, {"file_stem", "shot_8"}});
   EXPECT_EQ(QFileInfo(both.value("root").toObject().value("path").toString()).fileName(),
-            QStringLiteral("shot_7_root.png"))
+            QStringLiteral("shot_8_root.png"))
       << "compare defaults to 'root'";
+
+  // An existing root file alone also fails the request; the current file is not written.
+  const QString root_only = QDir(out_dir).filePath(QStringLiteral("shot_9_root.png"));
+  QFile         user_file(root_only);
+  ASSERT_TRUE(user_file.open(QIODevice::WriteOnly | QIODevice::NewOnly));
+  user_file.write("USER DATA MUST SURVIVE");
+  user_file.close();
+  const CliRun root_exists =
+      Call(QStringLiteral("render.preview"),
+           QJsonObject{{"out_dir", out_dir}, {"long_edge", 128}, {"file_stem", "shot_9"}});
+  EXPECT_EQ(root_exists.json.value("error").toObject().value("code").toInt(), -32602);
+  EXPECT_FALSE(QFileInfo::exists(QDir(out_dir).filePath(QStringLiteral("shot_9_current.png"))));
+  ASSERT_TRUE(user_file.open(QIODevice::ReadOnly));
+  EXPECT_EQ(user_file.readAll(), QByteArray("USER DATA MUST SURVIVE"));
 
   const CliRun folder = Call(QStringLiteral("render.preview"),
                              QJsonObject{{"out_dir", out_dir}, {"file_stem", "../outside"}});

@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include <QFile>
+#include <QImage>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QJsonValue>
@@ -49,6 +51,40 @@ void SendAutomationOwnerError(AutomationReply& reply, AutomationErrorCode code,
 /// `data.reason` set to @p message.
 void SendAutomationParamError(AutomationReply& reply, const QString& pointer,
                               const QString& message);
+
+/// The reason why a command cannot create a new output file at @p path because a file, folder, or
+/// link already has the path; empty when the path is free. Only for an early answer before a
+/// render: AutomationNewOutputFile::Create is what keeps an existing file unchanged.
+auto AutomationExistingOutputReason(const QString& path) -> QString;
+
+/// A new output file of a command. Create makes the file with an exclusive open
+/// (QIODevice::NewOnly), which fails when a file, folder, or link already has the path, also one
+/// that appeared after an earlier check. A command therefore never changes an existing file. The
+/// destructor calls Discard, so a failed command leaves no empty or partial file.
+class AutomationNewOutputFile final {
+ public:
+  explicit AutomationNewOutputFile(QString path);
+  ~AutomationNewOutputFile();
+  AutomationNewOutputFile(const AutomationNewOutputFile&)                                  = delete;
+  auto               operator=(const AutomationNewOutputFile&) -> AutomationNewOutputFile& = delete;
+
+  /// Creates the file. Returns the reason of a failure.
+  auto               Create() -> QString;
+  /// Encodes @p image as PNG into the created file and closes it. Returns the reason of a failure.
+  auto               WritePng(const QImage& image) -> QString;
+  /// Keeps the file when this object ends. Call it when the command succeeded.
+  void               Keep();
+  /// Removes the created file unless Keep marked it. Call it before a failure answer, so the
+  /// file is gone when the client reads the answer.
+  void               Discard();
+  [[nodiscard]] auto path() const -> const QString& { return path_; }
+
+ private:
+  QString path_;
+  QFile   file_;
+  bool    created_ = false;
+  bool    kept_    = false;
+};
 
 /// The reply of one command that waits for owner signals. Connect the owner signals with this
 /// object as the context: the first Send call answers the request and deletes this object with

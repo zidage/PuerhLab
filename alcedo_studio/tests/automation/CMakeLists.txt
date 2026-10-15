@@ -33,6 +33,13 @@ alcedo_add_automation_test(AutomationCommandRegistryTest
     SOURCES automation_command_registry_test.cpp
     LIBRARIES AutomationHostLib)
 
+# The exclusive create of command output files (issue #401).
+alcedo_add_automation_test(AutomationNewOutputFileTest
+    SOURCES automation_new_output_file_test.cpp
+    LIBRARIES AutomationHostLib Qt6::Gui
+    LABEL ci_automation_flow
+    CATEGORIES ci_automation)
+
 alcedo_add_automation_test(AutomationServerTest
     SOURCES automation_server_test.cpp
     LIBRARIES AutomationHostLib Qt6::Network)

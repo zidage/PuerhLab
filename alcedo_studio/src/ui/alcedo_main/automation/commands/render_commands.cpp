@@ -10,6 +10,7 @@
 #include <QJsonObject>
 #include <QMetaObject>
 #include <QPointer>
+#include <QStringList>
 #include <QThreadPool>
 #include <array>
 #include <exception>
@@ -45,19 +46,20 @@ auto FileJson(const PreviewFile& file) -> QJsonObject {
   return QJsonObject{{"path", file.path_}, {"width", file.width_}, {"height", file.height_}};
 }
 
-/// Converts @p rendered and writes it to @p path. Returns the reason of a failure.
-auto WritePng(const RenderedPipelineImage& rendered, const QString& path, PreviewFile* file)
-    -> QString {
+/// Converts @p rendered and writes it as PNG to @p out, which the caller created. Returns the
+/// reason of a failure.
+auto WritePng(const RenderedPipelineImage& rendered, AutomationNewOutputFile& out,
+              PreviewFile* file) -> QString {
   ui::ComparisonPresentationImage converted;
   try {
     converted = ui::ConvertRenderedImageForComparison(rendered);
   } catch (const std::exception& e) {
     return QString::fromUtf8(e.what());
   }
-  if (!converted.image.save(path, "PNG")) {
-    return QStringLiteral("The PNG file cannot be written: %1").arg(path);
+  if (const QString failure = out.WritePng(converted.image); !failure.isEmpty()) {
+    return failure;
   }
-  file->path_   = path;
+  file->path_   = out.path();
   file->width_  = converted.image.width();
   file->height_ = converted.image.height();
   return {};
@@ -114,7 +116,8 @@ auto RegisterAutomationRenderCommands(AutomationCommandRegistry& registry,
       "root) and writes <file_stem>_root.png; with compare 'none', it renders and writes only the "
       "current file. file_stem defaults to the photo file name without its extension. The long "
       "edge of each file is long_edge pixels at most. 'region' (x, y, w, h in 0..1 of the "
-      "cropped image) renders only that part. Answers -32005 while the editor renders another "
+      "cropped image) renders only that part. The files must not exist: the command creates new "
+      "files and does not replace existing ones. Answers -32005 while the editor renders another "
       "image job, for example an open comparison; that job continues.");
   preview.params_schema = AutomationClosedParamsSchema(
       QJsonObject{
@@ -192,6 +195,15 @@ auto RegisterAutomationRenderCommands(AutomationCommandRegistry& registry,
     }
     const QString current_path = QDir(out_dir).filePath(stem + QStringLiteral("_current.png"));
     const QString root_path    = QDir(out_dir).filePath(stem + QStringLiteral("_root.png"));
+    // An early answer before the render. The exclusive create below keeps a file that appears
+    // after this check.
+    for (const QString& path :
+         with_root ? QStringList{current_path, root_path} : QStringList{current_path}) {
+      if (const QString existing = AutomationExistingOutputReason(path); !existing.isEmpty()) {
+        SendAutomationParamError(reply, QStringLiteral("/out_dir"), existing);
+        return;
+      }
+    }
 
     QPointer<AutomationCommandWait> wait = new AutomationCommandWait(std::move(reply), host);
     const auto answer = [wait](std::function<void(AutomationCommandWait*)> send) {
@@ -226,11 +238,28 @@ auto RegisterAutomationRenderCommands(AutomationCommandRegistry& registry,
           auto images = std::make_shared<EditorPreviewImagesResult>(std::move(result));
           QThreadPool::globalInstance()->start(
               [answer, images, current_path, root_path, with_root] {
-                PreviewFile current;
-                PreviewFile root;
-                QString     failure = WritePng(images->current, current_path, &current);
+                // Both files are created before either is written, and a failure removes both,
+                // so an error answer leaves no file of this request.
+                AutomationNewOutputFile current_file(current_path);
+                AutomationNewOutputFile root_file(root_path);
+                PreviewFile             current;
+                PreviewFile             root;
+                QString                 failure = current_file.Create();
                 if (failure.isEmpty() && with_root) {
-                  failure = WritePng(images->root, root_path, &root);
+                  failure = root_file.Create();
+                }
+                if (failure.isEmpty()) {
+                  failure = WritePng(images->current, current_file, &current);
+                }
+                if (failure.isEmpty() && with_root) {
+                  failure = WritePng(images->root, root_file, &root);
+                }
+                if (failure.isEmpty()) {
+                  current_file.Keep();
+                  root_file.Keep();
+                } else {
+                  current_file.Discard();
+                  root_file.Discard();
                 }
                 answer([failure, current, root, with_root](AutomationCommandWait* wait) {
                   if (!failure.isEmpty()) {

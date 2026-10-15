@@ -9,7 +9,10 @@
 
 #include <gtest/gtest.h>
 
+#include <QByteArray>
+#include <QCryptographicHash>
 #include <QDir>
+#include <QFile>
 #include <QImage>
 #include <QJsonArray>
 #include <QJsonObject>
@@ -134,6 +137,87 @@ TEST_F(AutomationLibraryE2ETest, ThumbnailsCommandWritesOnePngPerElementInReques
            QJsonObject{{"element_ids", QJsonArray{999999}}, {"out_dir", out_dir}});
   EXPECT_EQ(unknown.exit_code, 1);
   EXPECT_EQ(unknown.json.value("error").toObject().value("code").toInt(), -32602);
+  Stop();
+}
+
+// Issue #401: a thumbnail command never replaces an existing file, and reports it.
+TEST_F(AutomationLibraryE2ETest, ThumbnailCommandsKeepExistingFilesAndSourceImageUnchanged) {
+  const auto raw_files = CollectCiRawFiles();
+  ASSERT_GE(raw_files.size(), 2u) << "the CI RAW files are missing under " << TEST_IMG_PATH;
+  ASSERT_FALSE(StartWithNewProject(QStringLiteral("no_replace_project")).isEmpty());
+  const std::vector<std::filesystem::path> imported(raw_files.begin(), raw_files.begin() + 2);
+  ASSERT_EQ(ImportAndWait(imported).value("counts").toObject().value("completed"), QJsonValue(2));
+  const QJsonArray listed = ListItems();
+  ASSERT_EQ(listed.size(), 2);
+  const QJsonValue first_id  = listed.at(0).toObject().value("element_id");
+  const QJsonValue second_id = listed.at(1).toObject().value("element_id");
+
+  const QByteArray user_data("USER DATA MUST SURVIVE");
+  const QString    folder = QDir(root_).filePath(QStringLiteral("user_files"));
+  ASSERT_TRUE(QDir().mkpath(folder));
+  const auto write_user_file = [&user_data](const QString& path) {
+    QFile file(path);
+    return file.open(QIODevice::WriteOnly | QIODevice::NewOnly) &&
+           file.write(user_data) == user_data.size();
+  };
+  const auto read_bytes = [](const QString& path) {
+    QFile file(path);
+    return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray();
+  };
+  const QString document = QDir(folder).filePath(QStringLiteral("important-document.txt"));
+  const QString png_name = QDir(folder).filePath(QStringLiteral("important-document.png"));
+  ASSERT_TRUE(write_user_file(document));
+  ASSERT_TRUE(write_user_file(png_name));
+  const QString    source_path = ui::test::PathToQString(raw_files.front());
+  const QByteArray source_hash =
+      QCryptographicHash::hash(read_bytes(source_path), QCryptographicHash::Sha256);
+  ASSERT_FALSE(read_bytes(source_path).isEmpty());
+
+  for (const QString& out : {document, png_name, source_path}) {
+    const CliRun run = Call(QStringLiteral("library.thumbnail"),
+                            QJsonObject{{"element_id", first_id}, {"out", out}, {"long_edge", 32}});
+    EXPECT_EQ(run.exit_code, 1) << out.toStdString();
+    const QJsonObject error = run.json.value("error").toObject();
+    EXPECT_EQ(error.value("code").toInt(), -32602) << out.toStdString();
+    EXPECT_EQ(error.value("data").toObject().value("pointer").toString(), QStringLiteral("/out"));
+  }
+  EXPECT_EQ(read_bytes(document), user_data);
+  EXPECT_EQ(read_bytes(png_name), user_data);
+  EXPECT_EQ(QCryptographicHash::hash(read_bytes(source_path), QCryptographicHash::Sha256),
+            source_hash);
+
+  // library.thumbnails: the existing <element_id>.png fails its item; the other is written.
+  const QString out_dir = QDir(root_).filePath(QStringLiteral("batch_thumbs"));
+  ASSERT_TRUE(QDir().mkpath(out_dir));
+  const QString existing_path = QDir(out_dir).filePath(
+      QStringLiteral("%1.png").arg(static_cast<qint64>(first_id.toDouble())));
+  ASSERT_TRUE(write_user_file(existing_path));
+  const QJsonObject result = Result(QStringLiteral("library.thumbnails"),
+                                    QJsonObject{{"element_ids", QJsonArray{first_id, second_id}},
+                                                {"out_dir", out_dir},
+                                                {"long_edge", 64}});
+  EXPECT_EQ(result.value("written_count").toInt(), 1);
+  EXPECT_EQ(result.value("failed_count").toInt(), 1);
+  const QJsonArray items = result.value("items").toArray();
+  ASSERT_EQ(items.size(), 2);
+  EXPECT_TRUE(items.at(0).toObject().value("error").toString().contains(QStringLiteral("exists")))
+      << items.at(0).toObject().value("error").toString().toStdString();
+  EXPECT_FALSE(items.at(0).toObject().contains("path"));
+  EXPECT_EQ(read_bytes(existing_path), user_data);
+  const QImage written(items.at(1).toObject().value("path").toString());
+  ASSERT_FALSE(written.isNull());
+  EXPECT_EQ(std::max(written.width(), written.height()), 64);
+
+  // A second request finds both files and replaces neither.
+  const QByteArray  written_bytes = read_bytes(items.at(1).toObject().value("path").toString());
+  const QJsonObject again         = Result(QStringLiteral("library.thumbnails"),
+                                           QJsonObject{{"element_ids", QJsonArray{first_id, second_id}},
+                                                       {"out_dir", out_dir},
+                                                       {"long_edge", 128}});
+  EXPECT_EQ(again.value("written_count").toInt(), 0);
+  EXPECT_EQ(again.value("failed_count").toInt(), 2);
+  EXPECT_EQ(read_bytes(existing_path), user_data);
+  EXPECT_EQ(read_bytes(items.at(1).toObject().value("path").toString()), written_bytes);
   Stop();
 }
 
