@@ -1855,6 +1855,14 @@ Alcedo 将改用 %1。</translation>
         <source>Delete Images</source>
         <translation>删除图像</translation>
     </message>
+    <message>
+        <source>Agent Sessions</source>
+        <translation>智能体会话</translation>
+    </message>
+    <message>
+        <source>Other Tasks</source>
+        <translation>其他任务</translation>
+    </message>
 </context>
 <context>
     <name>CacheSettingsPanel</name>

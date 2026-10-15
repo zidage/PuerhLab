@@ -1634,6 +1634,14 @@ Alcedo will use %1 instead.</translation>
         <source>Agent</source>
         <translation type="unfinished">Agent</translation>
     </message>
+    <message>
+        <source>Agent Sessions</source>
+        <translation type="unfinished">Agent Sessions</translation>
+    </message>
+    <message>
+        <source>Other Tasks</source>
+        <translation type="unfinished">Other Tasks</translation>
+    </message>
 </context>
 <context>
     <name>CacheSettingsPanel</name>
