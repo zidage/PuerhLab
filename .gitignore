@@ -1141,3 +1141,6 @@ nul
 # AMD OpenCL compile check: driver packages, extracted amdocl folders, ROCm SDK and the
 # built harness. Downloaded and used by scripts/amd_opencl/amd_opencl_check.py.
 /.amd_opencl/
+
+# Local example scripts and notes (not tracked)
+/docs/examples/

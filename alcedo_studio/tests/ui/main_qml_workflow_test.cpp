@@ -224,6 +224,18 @@ TEST_F(MainQmlWorkflowTests, ProductionWindowLoadsAndRoutesCoreWorkspaceActions)
     const QString completed_task_id = host.background_tasks()->RegisterTask(completed_task);
     host.background_tasks()->FinishTask(completed_task_id, BackgroundTaskState::Succeeded);
   }
+  // Several agent sessions must scroll with the other tasks, not overflow the dialog.
+  constexpr int kAgentSessionCount = 4;
+  for (int index = 0; index < kAgentSessionCount; ++index) {
+    BackgroundTaskSnapshot agent_task;
+    agent_task.kind_            = BackgroundTaskKind::AgentControl;
+    agent_task.state_           = BackgroundTaskState::Running;
+    agent_task.title_           = QStringLiteral("Agent session %1").arg(index);
+    agent_task.pinned_          = true;
+    agent_task.shutdown_policy_ = BackgroundTaskShutdownPolicy::WaitForFinish;
+    const QString agent_task_id = host.background_tasks()->RegisterTask(agent_task);
+    host.background_tasks()->FinishTask(agent_task_id, BackgroundTaskState::Succeeded);
+  }
   BackgroundTaskSnapshot refreshing_task;
   refreshing_task.kind_             = BackgroundTaskKind::ModelDownload;
   refreshing_task.state_            = BackgroundTaskState::Running;
@@ -248,6 +260,23 @@ TEST_F(MainQmlWorkflowTests, ProductionWindowLoadsAndRoutesCoreWorkspaceActions)
             AppTheme::Instance().fontSizeHeadline());
 
   ProcessEvents(200);
+  // Repeater-created cards are visual children only, so walk the item tree of
+  // the scrolling list itself.
+  int agent_cards_in_list = 0;
+  std::vector<QQuickItem*> pending_items{qobject_cast<QQuickItem*>(background_tasks_list)};
+  while (!pending_items.empty()) {
+    QQuickItem* item = pending_items.back();
+    pending_items.pop_back();
+    if (item == nullptr) {
+      continue;
+    }
+    if (item->objectName() == QStringLiteral("agentSessionCard")) {
+      ++agent_cards_in_list;
+    }
+    const auto children = item->childItems();
+    pending_items.insert(pending_items.end(), children.begin(), children.end());
+  }
+  EXPECT_EQ(agent_cards_in_list, kAgentSessionCount);
   ASSERT_GT(background_tasks_list->property("contentHeight").toReal(),
             background_tasks_list->property("height").toReal());
   ASSERT_TRUE(background_tasks_list->setProperty("contentY", 100.0));
