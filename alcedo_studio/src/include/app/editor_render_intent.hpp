@@ -78,6 +78,11 @@ enum class EditorRenderResultKind : std::uint8_t {
   // task: the existing full frame is reused (renderer re-samples via the
   // item-to-renderer synchronize() path).
   Reused,
+  // The pipeline rendered the frame, but the presentation sink refused it
+  // because the viewport is suspended (window minimized or hidden). Not an
+  // error: the session renders the current state again when presentation
+  // resumes.
+  PresentationSuspended,
 };
 
 /// Opaque presentation-sink identity. The coordinator never owns the sink; the

@@ -64,6 +64,8 @@ enum class EditorSessionCommandKind : std::uint8_t {
   SetPresentationTarget,
   SetPresentationSize,
   SetGeometryOverlay,
+  /// The bound viewport was suspended (minimized/hidden) or resumed.
+  SetPresentationSuspended,
   SetAdjustmentProjectionNode,
   RenameColorGrade,
   SetColorGradeDeletionProtected,
@@ -132,6 +134,8 @@ struct EditorSessionCommand {
   int                                     presentation_width   = 0;
   int                                     presentation_height  = 0;
   bool                                    geometry_overlay_active = false;
+  /// SetPresentationSuspended only.
+  bool                                    presentation_suspended  = false;
   NodeId                                  node_id;
   /// Desired deletion-only protection for SetColorGradeDeletionProtected.
   bool                                    deletion_protected = false;

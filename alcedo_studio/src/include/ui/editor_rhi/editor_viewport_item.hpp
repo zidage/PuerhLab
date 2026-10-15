@@ -111,6 +111,12 @@ class EditorViewportItem : public QQuickRhiItem {
   // a reused viewport.
   void               suspendPresentation();
   void               resumePresentation();
+  // True between suspendPresentation and the next resumePresentation. While
+  // suspended the frame sink refuses frames at once instead of waiting for a
+  // consumer that a minimized window never provides.
+  [[nodiscard]] auto presentationSuspended() const -> bool {
+    return presentation_suspended_.load(std::memory_order_acquire);
+  }
   // Re-evaluate window exposure / minimize state (also used by tests after
   // programmatic hide/show where Qt may not emit the expected signals promptly).
   Q_INVOKABLE void   refreshPresentationAvailability();
@@ -171,6 +177,8 @@ class EditorViewportItem : public QQuickRhiItem {
   void targetSizeRequested(int width, int height);
   /// Emitted after @ref NotePresentedMaskGeometry stores a newer frame geometry.
   void PresentedMaskGeometryChanged();
+  /// Emitted on the GUI thread when @ref presentationSuspended changes.
+  void PresentationSuspendedChanged();
 
  protected:
   auto createRenderer() -> QQuickRhiItemRenderer* override;
@@ -215,6 +223,7 @@ class EditorViewportItem : public QQuickRhiItem {
   std::atomic<qulonglong>    session_epoch_{0};
   std::atomic<int>           view_state_push_count_{0};
   std::atomic<bool>          presentation_requested_{false};
+  std::atomic<bool>          presentation_suspended_{false};
   std::atomic<bool>          adjustment_frame_requested_{false};
   std::atomic<std::uint64_t> adjustment_frame_request_count_{0};
   std::atomic<bool>          interactive_present_loop_{false};

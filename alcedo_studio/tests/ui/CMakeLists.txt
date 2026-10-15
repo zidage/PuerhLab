@@ -1717,6 +1717,31 @@ alcedo_ui_gtest_discover_tests(EditorCropInteractionTest
     PROPERTIES LABELS "geometry_overlay;interaction")
 alcedo_register_test_target(EditorCropInteractionTest ui)
 
+# Minimized editor window: the viewport sink refuses frames at once instead of
+# waiting for a scene-graph consumer, and the target is writable after restore.
+add_executable(EditorViewportSuspensionTest
+    ${ALCEDO_TEST_ROOT}/ui/editor_viewport_suspension_test.cpp
+    ${ALCEDO_TEST_ROOT}/ui/widget_test_main.cpp
+)
+target_include_directories(EditorViewportSuspensionTest
+    PUBLIC ${ALCEDO_INCLUDE_DIR}
+    PRIVATE ${ALCEDO_TEST_DIR}
+)
+target_link_libraries(EditorViewportSuspensionTest
+    PRIVATE
+        EditorRhiViewport
+        GTest::gtest
+        Qt6::Core
+        Qt6::Gui
+        Qt6::Test
+        Qt6::Quick
+        Qt6::Widgets
+)
+alcedo_ui_gtest_discover_tests(EditorViewportSuspensionTest
+    TEST_PREFIX "EditorViewportSuspensionTest."
+    PROPERTIES LABELS "editor_rhi;presentation")
+alcedo_register_test_target(EditorViewportSuspensionTest ui)
+
 add_executable(AnalyticMaskCreationTest
     ${ALCEDO_TEST_ROOT}/ui/analytic_mask_creation_test.cpp
     ${ALCEDO_TEST_ROOT}/ui/ui_test_main.cpp

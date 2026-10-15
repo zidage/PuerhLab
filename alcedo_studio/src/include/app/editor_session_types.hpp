@@ -49,6 +49,10 @@ enum class EditorSessionResultKind : std::uint8_t {
   /// render that a command routed, like FramePresented: the command's commit stays, but no frame
   /// of it will be presented.
   FrameFailed,
+  /// The frame of `render_request_id` was not presented because the viewport is suspended
+  /// (window minimized or hidden). The command's commit stays; the session presents the current
+  /// state when the viewport is shown again.
+  FrameDeferred,
 };
 
 /// Public session identity carries durable domain ids only. Worker correlation
@@ -114,6 +118,7 @@ struct HistoryOperationEvent {
     case EditorSessionResultKind::SaveStarted:
     case EditorSessionResultKind::FramePresented:
     case EditorSessionResultKind::FrameFailed:
+    case EditorSessionResultKind::FrameDeferred:
       return false;
     case EditorSessionResultKind::Accepted:
     case EditorSessionResultKind::StateChanged:

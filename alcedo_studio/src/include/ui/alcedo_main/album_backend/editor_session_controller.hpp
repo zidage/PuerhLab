@@ -609,6 +609,8 @@ class EditorSessionController final : public QObject, public IEditorAdjustmentSu
   QMetaObject::Connection interaction_view_change_connection_;
   QMetaObject::Connection interaction_policy_connection_;
   QMetaObject::Connection presented_geometry_connection_;
+  // Forwards viewport suspension (minimize/hide) so refused frames render again on resume.
+  QMetaObject::Connection presentation_suspended_connection_;
   mutable std::unique_ptr<EditorScopeController> scope_controller_;
   std::unique_ptr<EditorMaskCreationAdapter>     mask_creation_;
   std::shared_ptr<alcedo::MaskThumbnailService>  mask_thumbnail_service_;

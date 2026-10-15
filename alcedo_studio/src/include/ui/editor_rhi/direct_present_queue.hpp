@@ -105,6 +105,7 @@ class DirectPresentQueue final {
     std::size_t   producer_writing_count      = 0;
     std::size_t   ready_count                 = 0;
     bool          consumer_available          = true;
+    bool          presentation_suspended      = false;
   };
 
   struct PrepareResult {
@@ -127,13 +128,14 @@ class DirectPresentQueue final {
   void               FailSizeRequest(const SizeRequest& request);
   [[nodiscard]] auto DrainSizeRequests() -> std::vector<SizeRequest>;
 
-  // Producer wait for an explicit create/fail/invalidate/shutdown result.
+  // Producer wait for an explicit create/fail/invalidate/suspend/shutdown result.
   // Never uses a timer as a correctness mechanism.
   [[nodiscard]] auto WaitForWritableSlot(const SizeRequest& request) -> std::optional<int>;
 
   // Worker-thread producers: wait briefly for synchronize() to enable the
   // consumer. The timeout prevents a hidden/unloaded viewport from retaining a
   // pipeline worker indefinitely. GUI-thread callers must not use this.
+  // Returns false at once while presentation is suspended.
   [[nodiscard]] auto WaitUntilConsumerAvailable(std::chrono::milliseconds timeout) -> bool;
 
   // Render thread publishes a fully created native into a selected slot.
@@ -165,6 +167,11 @@ class DirectPresentQueue final {
                                        std::uint64_t image_identity);
 
   void               SetConsumerAvailable(bool available);
+  // The viewport is minimized or hidden. Unlike a consumer that is not
+  // synchronized yet, a suspended consumer does not come back on its own, so
+  // producers fail at once instead of waiting with the render lock held.
+  void               SetPresentationSuspended(bool suspended);
+  [[nodiscard]] auto PresentationSuspended() const -> bool;
   void InvalidateSessionEpoch(std::uint64_t session_epoch, std::uint64_t image_identity = 0);
   void InvalidateTargetGeneration();
   void Shutdown();
@@ -213,6 +220,7 @@ class DirectPresentQueue final {
   // a visible exposed window publishes consumer availability.
   bool                         consumer_available_          = false;
   bool                         shutdown_                    = false;
+  bool                         presentation_suspended_      = false;
   std::uint64_t                target_generation_           = 0;
   std::uint64_t                session_epoch_               = 0;
   std::uint64_t                image_identity_              = 0;

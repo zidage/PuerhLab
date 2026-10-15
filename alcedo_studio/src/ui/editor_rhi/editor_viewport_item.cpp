@@ -250,13 +250,24 @@ void EditorViewportItem::cancelPendingFrames() {
 void EditorViewportItem::suspendPresentation() {
   stopInteractivePresentLoop();
   presentation_requested_.store(false, std::memory_order_release);
+  // Suspend before dropping the consumer so a producer woken by the consumer
+  // change sees the suspension and fails at once.
+  present_queue_->SetPresentationSuspended(true);
   present_queue_->SetConsumerAvailable(false);
   notifyDiagnosticsChanged();
+  if (!presentation_suspended_.exchange(true, std::memory_order_acq_rel)) {
+    emit PresentationSuspendedChanged();
+  }
 }
 
 void EditorViewportItem::resumePresentation() {
   presentation_requested_.store(true, std::memory_order_release);
+  // Producers wait for the next synchronize() again, as at startup.
+  present_queue_->SetPresentationSuspended(false);
   requestPresentUpdate();
+  if (presentation_suspended_.exchange(false, std::memory_order_acq_rel)) {
+    emit PresentationSuspendedChanged();
+  }
 }
 
 void EditorViewportItem::requestPresentUpdate() { requestPresentUpdateOnGuiThread(); }

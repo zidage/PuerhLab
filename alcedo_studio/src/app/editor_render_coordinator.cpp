@@ -258,6 +258,12 @@ void EditorRenderCoordinator::Emit(EditorRenderResult result) {
         diag::NoteRenderE2eTerminal(result.request_id, "cancelled");
       }
       break;
+    case EditorRenderResultKind::PresentationSuspended:
+      ++cancelled_count_;
+      if (result.request_id != 0) {
+        diag::NoteRenderE2eTerminal(result.request_id, "presentation-suspended");
+      }
+      break;
     case EditorRenderResultKind::Failed:
       ++failed_count_;
       last_error_ = result.message.empty() ? "Render failed" : result.message;
@@ -571,9 +577,12 @@ void EditorRenderCoordinator::NotifySchedulerCompleted(std::uint64_t request_id,
       const bool already_terminal = terminal_request_ids_.count(request_id) != 0;
       const bool cancelled = inflight_->request.intent.cancellation &&
                              inflight_->request.intent.cancellation->IsCancelled();
+      // A sink refusal while the viewport is minimized is not a render error.
+      const bool suspended = !success && IsPresentationSuspendedMessage(message);
       EditorRenderResult completed;
       completed.kind       = success     ? EditorRenderResultKind::FrameReady
                              : cancelled ? EditorRenderResultKind::Cancelled
+                             : suspended ? EditorRenderResultKind::PresentationSuspended
                                          : EditorRenderResultKind::Failed;
       completed.request_id = request_id;
       completed.intent     = inflight_->request.intent;

@@ -172,6 +172,9 @@ class IEditorSessionBackend {
   /// Keep geometry editing on the source-frame overlay until the panel closes.
   /// Backends that do not render through the unified session path may ignore it.
   virtual void SetGeometryOverlayActive(bool /*active*/) {}
+  /// The bound viewport was minimized/hidden (true) or shown again (false). Frames refused
+  /// while suspended are rendered again on resume. Backends without a viewport may ignore it.
+  virtual void SetPresentationSuspended(bool /*suspended*/) {}
   /**
    * @brief Reproject load-only panel values from @p node_id.
    *
@@ -688,6 +691,7 @@ class EditorSessionService final : public IEditorSessionBackend {
   void SetPresentationSinkId(PresentationSinkId sink_id) override;
   void SetPresentationSize(int width, int height) override;
   void SetGeometryOverlayActive(bool active) override;
+  void SetPresentationSuspended(bool suspended) override;
 
   auto Open(sl_element_id_t element_id, image_id_t image_id) -> EditorSessionResult override;
   auto Switch(sl_element_id_t element_id, image_id_t image_id) -> EditorSessionResult override;

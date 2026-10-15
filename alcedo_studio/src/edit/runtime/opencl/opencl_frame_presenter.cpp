@@ -11,6 +11,7 @@
 #include <opencv2/core.hpp>
 #include <span>
 #include <stdexcept>
+#include <string>
 
 #include "edit/scope/detail/scope_opencl_shared.hpp"
 #include "edit/scope/scope_analyzer.hpp"
@@ -42,6 +43,10 @@ void FramePresenter<OpenClBackend>::Present(BasicRenderDevice<OpenClBackend>& de
   try {
     const auto mapping = sink.MapResourceForWrite(FrameMemoryDomain::OpenClDevice);
     resource_mapped    = true;
+    if (!mapping && mapping.presentation_suspended) {
+      throw std::runtime_error(std::string(kPresentationSuspendedMessage) +
+                               "OpenClRenderer: the viewport is minimized or hidden");
+    }
     if (!mapping || mapping.pixel_format != FramePixelFormat::RGBA32F ||
         mapping.memory_domain != FrameMemoryDomain::OpenClDevice ||
         mapping.target_type != FrameWriteTargetType::OpenClImage || mapping.data == nullptr) {
