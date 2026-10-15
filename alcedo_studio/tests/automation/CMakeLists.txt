@@ -61,7 +61,8 @@ alcedo_add_automation_test(AlcedoCliTest
     LIBRARIES AutomationHostLib Qt6::Network)
 target_compile_definitions(AlcedoCliTest PRIVATE
     ALCEDO_CLI_PATH="$<TARGET_FILE:alcedo_cli>"
-    ALCEDO_CLI_TEST_HOST_PATH="$<TARGET_FILE:alcedo_cli_test_host>")
+    ALCEDO_CLI_TEST_HOST_PATH="$<TARGET_FILE:alcedo_cli_test_host>"
+    ALCEDO_APP_VERSION="${PROJECT_VERSION}")
 add_dependencies(AlcedoCliTest alcedo_cli alcedo_cli_test_host)
 
 alcedo_add_automation_test(HeadlessFrameSinkTest

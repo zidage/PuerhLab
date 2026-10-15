@@ -339,6 +339,15 @@ TEST_F(AlcedoCliTest, CallPrintsResultAndExitsZero) {
   EXPECT_EQ(run.stdout_text.trimmed(), QStringLiteral(R"({"pong":true})"));
 }
 
+TEST_F(AlcedoCliTest, VersionPrintsApplicationVersionWithoutSession) {
+  for (const QString& command : {QStringLiteral("--version"), QStringLiteral("version")}) {
+    const CliRun run = RunCli({command});
+
+    EXPECT_EQ(run.exit_code, 0) << run.stderr_text.toStdString();
+    EXPECT_EQ(run.stdout_text.trimmed(), QStringLiteral(ALCEDO_APP_VERSION));
+  }
+}
+
 TEST_F(AlcedoCliTest, AmbiguousSessionExitsTwoAndListsNames) {
   StartSession(QStringLiteral("alpha"));
   StartSession(QStringLiteral("beta"));
