@@ -111,6 +111,9 @@ if(APPLE)
         "-framework QuartzCore"
         "-framework CoreGraphics"
         "-framework Metal"
+        # color_manager.mm tags the layer with the export ICC profile when CoreGraphics has no
+        # named color space with the display encoding's curve.
+        ExportIccProfileResolver
     )
 endif()
 if(WIN32)
