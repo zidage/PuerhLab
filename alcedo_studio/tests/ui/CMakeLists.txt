@@ -82,7 +82,7 @@ if(APPLE AND ALCEDO_ENABLE_METAL)
       ${ALCEDO_TEST_ROOT}/ui/editor_window_color_management_test.mm)
   target_include_directories(EditorWindowColorManagementTest PUBLIC ${ALCEDO_INCLUDE_DIR})
   target_link_libraries(EditorWindowColorManagementTest
-      PRIVATE EditorRhiViewport GTest::gtest_main)
+      PRIVATE EditorRhiViewport ExportIccProfileResolver GTest::gtest_main)
   set_source_files_properties(
       ${ALCEDO_TEST_ROOT}/ui/editor_window_color_management_test.mm
       PROPERTIES LANGUAGE OBJCXX)

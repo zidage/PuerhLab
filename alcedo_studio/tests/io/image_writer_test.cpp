@@ -20,9 +20,11 @@
 #include <memory>
 #include <opencv2/imgcodecs.hpp>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "alcedo_version.hpp"
+#include "icc_tone_curve_test_support.hpp"
 #include "image/image_buffer.hpp"
 #include "image/metadata.hpp"
 #include "io/image/exif_ifd_tags.hpp"
@@ -135,6 +137,19 @@ auto HasOiioAttr(const std::filesystem::path& path, const char* key) -> bool {
   const bool present = input->spec().find_attribute(key) != nullptr;
   input->close();
   return present;
+}
+
+auto ReadOiioIccProfile(const std::filesystem::path& path) -> std::vector<uint8_t> {
+  OIIO_NAMESPACE_USING
+  auto input = ImageInput::open(PathToUtf8(path));
+  if (!input) return {};
+  std::vector<uint8_t> bytes;
+  if (const ParamValue* attr = input->spec().find_attribute("ICCProfile"); attr != nullptr) {
+    const auto* data = static_cast<const uint8_t*>(attr->data());
+    bytes.assign(data, data + attr->type().size());
+  }
+  input->close();
+  return bytes;
 }
 
 auto ReadOiioShape(const std::filesystem::path& path) -> std::array<int, 3> {
@@ -714,6 +729,42 @@ TEST_F(ImageWriterTests, RecipePhysicalSizeWritesPixelsDpiCaptureMetadataAndDisc
   EXPECT_EQ(ReadOiioIntAttr(dst_path, "Exif:PixelYDimension"), 5);
   EXPECT_NEAR(ReadOiioFloatAttr(dst_path, "XResolution"), 10.0f, 0.01f);
   EXPECT_TRUE(HasOiioAttr(dst_path, "ICCProfile"));
+}
+
+// A color-managed viewer decodes the exported code values with the curve of the embedded profile.
+// The profile must declare the curve that encoded the pixels for every Rec.709 display encoding
+// (issue #391: macOS embedded the BT.709 camera curve for gamma 2.2 pixels).
+TEST_F(ImageWriterTests, ExportedJpegIccToneCurveMatchesRec709Encoding) {
+  const auto src_path = temp_dir_ / "rec709_source.jpg";
+  WriteTestJpeg(src_path, {32, 64, 96, 96, 64, 32}, 2, 1);
+
+  for (const auto eotf :
+       {ColorUtils::EOTF::BT1886, ColorUtils::EOTF::GAMMA_2_2, ColorUtils::EOTF::SRGB_PIECEWISE}) {
+    const std::string   label    = ColorUtils::EOTFToString(eotf);
+    const auto          dst_path = temp_dir_ / ("rec709_" + label + ".jpg");
+    cv::Mat             rgba32f(1, 2, CV_32FC4, cv::Scalar(0.2f, 0.4f, 0.6f, 1.0f));
+    auto                image_data = std::make_shared<ImageBuffer>(rgba32f.clone());
+
+    ExportFormatOptions options;
+    options.format_      = ImageFormatType::JPEG;
+    options.export_path_ = dst_path;
+    ASSERT_NO_THROW(ImageWriter::WriteImageToPath(
+        src_path, image_data, options,
+        ExportColorProfileConfig{ColorUtils::ColorSpace::REC709, eotf, 100.0f}))
+        << label;
+
+    const auto icc = ReadOiioIccProfile(dst_path);
+    ASSERT_FALSE(icc.empty()) << label;
+    for (const std::string_view tag : {"rTRC", "gTRC", "bTRC"}) {
+      const auto curve = icc_tone_curve_test::ReadIccToneCurve(icc, tag);
+      ASSERT_TRUE(curve.has_value()) << label << " " << tag;
+      for (const double code : {0.02, 0.05, 0.1, 0.18, 0.25, 0.5, 0.75, 1.0}) {
+        const double expected = CeDecode(static_cast<int>(eotf), static_cast<float>(code));
+        EXPECT_NEAR(curve->Evaluate(code), expected, 5e-4)
+            << label << " " << tag << " code value " << code;
+      }
+    }
+  }
 }
 
 TEST_F(ImageWriterTests, RecipeCanOmitMetadataAndIccFromTiff) {
