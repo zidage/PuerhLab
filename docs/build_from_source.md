@@ -46,10 +46,6 @@ git submodule update --init --recursive \
 git submodule update --init alcedo_studio/src/third_party/QuickQanava
 ```
 
-Note / 说明:
-- `win_debug` and `win_release_test` default to `ALCEDO_ENABLE_WEBGPU=ON`, which requires a Dawn source checkout at `alcedo_studio/third_party/dawn` (or pass `-DALCEDO_ENABLE_WEBGPU=OFF`).
-- `win_debug` 和 `win_release_test` 默认开启 `ALCEDO_ENABLE_WEBGPU=ON`，需要在 `alcedo_studio/third_party/dawn` 提供 Dawn 源码（或通过 `-DALCEDO_ENABLE_WEBGPU=OFF` 关闭）。
-
 ## 3) Windows (MSVC + presets) / Windows（MSVC + 预设）
 
 Use the wrapper so MSVC/CUDA env vars are prepared first:
@@ -84,8 +80,8 @@ cmd /c scripts\msvc_env.cmd --build --preset win_debug --parallel 8
 
 ### 3.3 Release build (`win_release`) / 发布构建（`win_release`）
 
-`win_release` currently sets `ALCEDO_BUILD_TESTS=OFF` and `ALCEDO_ENABLE_WEBGPU=OFF`.
-`win_release` 当前默认 `ALCEDO_BUILD_TESTS=OFF` 且 `ALCEDO_ENABLE_WEBGPU=OFF`。
+`win_release` currently sets `ALCEDO_BUILD_TESTS=OFF`.
+`win_release` 当前默认 `ALCEDO_BUILD_TESTS=OFF`。
 
 ```powershell
 cmd /c scripts\msvc_env.cmd --preset win_release `
@@ -242,9 +238,7 @@ Runtime resolution: Metal loads metallibs from the compile-time path first, then
 | --- | --- | --- |
 | `ALCEDO_ENABLE_CUDA` | Enable CUDA backend when toolkit is available. | 当工具链可用时启用 CUDA 后端。 |
 | `ALCEDO_ENABLE_METAL` | Enable Metal backend on Apple platforms. | 在 Apple 平台启用 Metal 后端。 |
-| `ALCEDO_ENABLE_WEBGPU` | Enable Dawn/WebGPU support on Windows. | 在 Windows 上启用 Dawn/WebGPU 支持。 |
 | `ALCEDO_BUILD_TESTS` | Build tests/demos. | 构建测试与示例。 |
 | `ALCEDO_DEPLOY_SOFTWARE_OPENGL` | Bundle `opengl32sw.dll` during Windows deploy. | Windows 部署时打包 `opengl32sw.dll`。 |
 | `ALCEDO_QT_DEPLOY_TOOL_OPTIONS` | Semicolon-separated options passed to Qt deploy tool. | 传递给 Qt 部署工具的分号分隔参数。 |
-| `ALCEDO_DAWN_SOURCE_DIR` | Dawn source path used by WebGPU build. | WebGPU 构建使用的 Dawn 源码路径。 |
 | `PUERHLAB_LENSFUN_GLIB2_BASE_DIR` | Override GLib2 base dir for bundled Lensfun build on Windows. | 覆盖 Windows 上内置 Lensfun 构建使用的 GLib2 根目录。 |
