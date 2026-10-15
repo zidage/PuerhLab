@@ -14,6 +14,7 @@
 #include <fstream>
 #include <future>
 #include <iostream>
+#include <iterator>
 #include <memory>
 #include <opencv2/core.hpp>
 #include <opencv2/imgcodecs.hpp>
@@ -579,6 +580,57 @@ TEST_F(ExportServiceTests, EnqueueRefusesTasksThatCannotResolveTheirCommittedSta
   const auto results = done_fut.get();
   ASSERT_NE(results, nullptr);
   EXPECT_TRUE(results->empty());
+}
+
+namespace {
+void WriteFileBytes(const std::filesystem::path& path, const std::string& bytes) {
+  std::ofstream out(path, std::ios::binary | std::ios::trunc);
+  ASSERT_TRUE(out.is_open()) << path.string();
+  out << bytes;
+}
+
+auto ReadFileText(const std::filesystem::path& path) -> std::string {
+  std::ifstream in(path, std::ios::binary);
+  return std::string(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+}
+}  // namespace
+
+// CommitExportFile has no separate existence check: the destination below already exists when the
+// rename runs, which is the state a file created by another process after any earlier check
+// produces. The FAIL commit must refuse in the rename itself and leave the destination unchanged.
+TEST_F(ExportServiceTests, FailCollisionCommitNeverReplacesExistingDestination) {
+  const auto      temporary_path = export_dir_ / "commit_fail.alcedo-export-1-0.tmp.jpg";
+  const auto      final_path     = export_dir_ / "commit_fail.jpg";
+  std::error_code cleanup_error;
+  std::filesystem::remove(final_path, cleanup_error);
+  WriteFileBytes(temporary_path, "new export bytes");
+  WriteFileBytes(final_path, "existing destination bytes");
+
+  try {
+    CommitExportFile(temporary_path, final_path, ExportCollisionPolicy::FAIL);
+    ADD_FAILURE() << "FAIL commit replaced an existing destination";
+  } catch (const std::runtime_error& error) {
+    EXPECT_STREQ(error.what(), "ExportService: output file already exists");
+  }
+  EXPECT_EQ(ReadFileText(final_path), "existing destination bytes");
+  EXPECT_EQ(ReadFileText(temporary_path), "new export bytes");
+
+  // Without a destination the same FAIL commit moves the temporary file into place.
+  std::filesystem::remove(final_path);
+  CommitExportFile(temporary_path, final_path, ExportCollisionPolicy::FAIL);
+  EXPECT_EQ(ReadFileText(final_path), "new export bytes");
+  EXPECT_FALSE(std::filesystem::exists(temporary_path));
+}
+
+TEST_F(ExportServiceTests, ReplaceCollisionCommitReplacesExistingDestination) {
+  const auto temporary_path = export_dir_ / "commit_replace.alcedo-export-1-0.tmp.jpg";
+  const auto final_path     = export_dir_ / "commit_replace.jpg";
+  WriteFileBytes(temporary_path, "new export bytes");
+  WriteFileBytes(final_path, "existing destination bytes");
+
+  CommitExportFile(temporary_path, final_path, ExportCollisionPolicy::REPLACE);
+  EXPECT_EQ(ReadFileText(final_path), "new export bytes");
+  EXPECT_FALSE(std::filesystem::exists(temporary_path));
 }
 
 // A raster source carries its own ICC profile. The exported file embeds the export profile from
