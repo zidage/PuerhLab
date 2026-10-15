@@ -1163,9 +1163,6 @@ if(WIN32 AND TARGET ${ALCEDO_MAIN_BIN})
              \"${_cuda_bin_dir}\"
              \${ALCEDO_RUNTIME_DEP_DIRS}
          )
-         if(NOT \"${_third_party_dawn_bin}\" STREQUAL \"\")
-             list(APPEND _search_dirs \"${_third_party_dawn_bin}\")
-         endif()
          file(GET_RUNTIME_DEPENDENCIES
              EXECUTABLES ${ALCEDO_RUNTIME_EXES}
              DIRECTORIES \${_search_dirs}
@@ -1204,18 +1201,6 @@ if(WIN32 AND TARGET ${ALCEDO_MAIN_BIN})
          if(_unresolved)
              list(JOIN _unresolved \"\\n  \" _unresolved_text)
              message(FATAL_ERROR \"[alcedo] Unresolved runtime deps:\\n  \${_unresolved_text}\")
-         endif()
-         if(NOT \"${_third_party_dawn_bin}\" STREQUAL \"\")
-             # Explicitly copy bundled Dawn DLLs even if they are not direct linker dependencies
-             # (Dawn may load them dynamically at runtime).
-             file(GLOB _dawn_dlls \"${_third_party_dawn_bin}/*.dll\")
-             set(_alcedo_dawn_runtime_dlls \"${ALCEDO_DAWN_RUNTIME_DLLS}\")
-             if(_alcedo_dawn_runtime_dlls)
-                 list(APPEND _dawn_dlls \${_alcedo_dawn_runtime_dlls})
-             endif()
-             foreach(_dawn_dll IN LISTS _dawn_dlls)
-                 file(INSTALL DESTINATION \"\${_bindir}\" TYPE SHARED_LIBRARY FILES \"\${_dawn_dll}\")
-             endforeach()
          endif()
         "
     )

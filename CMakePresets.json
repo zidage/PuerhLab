@@ -36,7 +36,6 @@
         "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/vcpkg/scripts/buildsystems/vcpkg.cmake",
         "CMAKE_INSTALL_PREFIX": "${sourceDir}/build/install",
         "ALCEDO_BUILD_TESTS": "OFF",
-        "ALCEDO_ENABLE_WEBGPU": "OFF",
         "ALCEDO_REQUIRE_UPDATE_KEY": "ON",
         "ALCEDO_ENABLE_BRUSH_MASK": "OFF"
       }
@@ -127,7 +126,6 @@
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
         "ALCEDO_ENABLE_CUDA": "OFF",
         "ALCEDO_ENABLE_METAL": "ON",
-        "ALCEDO_ENABLE_WEBGPU": "OFF",
         "ALCEDO_BUILD_TESTS": "ON",
         "ALCEDO_BUILD_TESTS_BY_DEFAULT": "OFF",
         "ALCEDO_BUILD_CI_TESTS": "ON",
