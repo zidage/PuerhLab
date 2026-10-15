@@ -5,6 +5,7 @@
 #pragma once
 
 #include <cstddef>
+#include <filesystem>
 #include <functional>
 #include <list>
 #include <memory>
@@ -48,6 +49,24 @@ struct ExportResult {
   std::string           failed_stage_;
   std::string           message_;
 };
+
+/**
+ * @brief Move the encoded file at @p temporary_path to @p final_path.
+ *
+ * Under ExportCollisionPolicy::FAIL the move is one no-replace rename in the file system
+ * (MoveFileExW without MOVEFILE_REPLACE_EXISTING on Windows, renameatx_np with RENAME_EXCL on
+ * macOS, renameat2 with RENAME_NOREPLACE on Linux, link() and unlink() elsewhere). An existing
+ * @p final_path is never changed, also when another process creates it during the export.
+ * Under ExportCollisionPolicy::REPLACE an existing @p final_path is replaced.
+ *
+ * Thread: any thread.
+ * @throws std::runtime_error "ExportService: output file already exists" when the policy is FAIL
+ *         and @p final_path exists; std::runtime_error or std::system_error for other failures.
+ *         On failure @p temporary_path stays in place and the caller removes it.
+ */
+void CommitExportFile(const std::filesystem::path& temporary_path,
+                      const std::filesystem::path& final_path,
+                      ExportCollisionPolicy        collision_policy);
 
 struct ExportProgress {
   size_t          total_         = 0;

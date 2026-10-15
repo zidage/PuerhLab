@@ -10,12 +10,20 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <system_error>
 #include <utility>
 
 #if defined(_WIN32)
 #include <Windows.h>
+#else
+#include <fcntl.h>
+#include <unistd.h>
+
+#include <cerrno>
+#include <cstdio>
+#include <cstring>
 #endif
 
 #include "edit/runtime/drt_display.hpp"
@@ -68,36 +76,59 @@ auto TemporaryExportPath(const std::filesystem::path& final_path, image_id_t ima
   return final_path.parent_path() / name;
 }
 
+}  // namespace
+
 void CommitExportFile(const std::filesystem::path& temporary_path,
                       const std::filesystem::path& final_path,
                       ExportCollisionPolicy        collision_policy) {
-  std::error_code exists_error;
-  const bool      final_exists = std::filesystem::exists(final_path, exists_error);
-  if (exists_error) {
-    throw std::runtime_error("ExportService: cannot inspect output path: " +
-                             exists_error.message());
-  }
-  if (final_exists && collision_policy == ExportCollisionPolicy::FAIL) {
-    throw std::runtime_error("ExportService: output file already exists");
-  }
-
+  constexpr const char* kAlreadyExists = "ExportService: output file already exists";
 #if defined(_WIN32)
+  // Without MOVEFILE_REPLACE_EXISTING the move fails when final_path exists, in one step.
   DWORD flags = MOVEFILE_WRITE_THROUGH;
   if (collision_policy == ExportCollisionPolicy::REPLACE) flags |= MOVEFILE_REPLACE_EXISTING;
   if (!MoveFileExW(temporary_path.c_str(), final_path.c_str(), flags)) {
-    throw std::system_error(static_cast<int>(GetLastError()), std::system_category(),
+    const DWORD error = GetLastError();
+    if (error == ERROR_ALREADY_EXISTS || error == ERROR_FILE_EXISTS) {
+      throw std::runtime_error(kAlreadyExists);
+    }
+    throw std::system_error(static_cast<int>(error), std::system_category(),
                             "ExportService: cannot commit output file");
   }
 #else
-  std::error_code rename_error;
-  std::filesystem::rename(temporary_path, final_path, rename_error);
-  if (rename_error) {
-    throw std::runtime_error("ExportService: cannot commit output file: " + rename_error.message());
+  if (collision_policy == ExportCollisionPolicy::REPLACE) {
+    std::error_code rename_error;
+    std::filesystem::rename(temporary_path, final_path, rename_error);
+    if (rename_error) {
+      throw std::runtime_error("ExportService: cannot commit output file: " +
+                               rename_error.message());
+    }
+    return;
+  }
+
+  // FAIL: the kernel refuses the rename when final_path exists, so a file created by another
+  // process after any earlier check is never replaced. std::filesystem::rename replaces silently.
+#if defined(__APPLE__)
+  const int commit_result =
+      renameatx_np(AT_FDCWD, temporary_path.c_str(), AT_FDCWD, final_path.c_str(), RENAME_EXCL);
+#elif defined(__linux__) && defined(RENAME_NOREPLACE)
+  const int commit_result =
+      renameat2(AT_FDCWD, temporary_path.c_str(), AT_FDCWD, final_path.c_str(), RENAME_NOREPLACE);
+#else
+  // link() fails with EEXIST when final_path exists; the temporary name is removed afterwards.
+  const int commit_result = link(temporary_path.c_str(), final_path.c_str());
+  if (commit_result == 0 && unlink(temporary_path.c_str()) != 0) {
+    throw std::runtime_error(std::string("ExportService: cannot remove temporary output file: ") +
+                             std::strerror(errno));
+  }
+#endif
+  if (commit_result != 0) {
+    const int error = errno;
+    if (error == EEXIST) throw std::runtime_error(kAlreadyExists);
+    throw std::runtime_error(std::string("ExportService: cannot commit output file: ") +
+                             std::strerror(error));
   }
 #endif
 }
-
-}  // namespace
 
 ExportService::ExportService(std::shared_ptr<SleeveServiceImpl>   sleeve_service,
                              std::shared_ptr<ImagePoolService>    image_pool_service,
