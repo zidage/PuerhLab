@@ -1940,6 +1940,7 @@ void EditorSessionService::FinishSerialFrameIfNeeded(const EditorRenderResult& r
     case EditorRenderResultKind::FrameReady:
     case EditorRenderResultKind::Failed:
     case EditorRenderResultKind::Cancelled:
+    case EditorRenderResultKind::PresentationSuspended:
       break;
     default:
       return;
@@ -2371,6 +2372,28 @@ void EditorSessionService::SetGeometryOverlayActive(bool active) {
   render_.SetGeometryOverlayActive(active);
 }
 
+void EditorSessionService::SetPresentationSuspended(bool suspended) {
+  if (!InOwnerReduction()) {
+    EditorSessionCommand command;
+    command.kind                   = EditorSessionCommandKind::SetPresentationSuspended;
+    command.presentation_suspended = suspended;
+    (void)SubmitCommand(std::move(command), [this](const EditorSessionCommand& queued) {
+      SetPresentationSuspended(queued.presentation_suspended);
+      EditorSessionResult accepted;
+      accepted.kind     = EditorSessionResultKind::Accepted;
+      accepted.state    = lifecycle_.state();
+      accepted.identity = lifecycle_.identity();
+      accepted.message  = queued.presentation_suspended ? "Presentation suspended"
+                                                        : "Presentation resumed";
+      // Like the presentation size, suspension moves no session-visible field.
+      return accepted;
+    });
+    return;
+  }
+  render_.SetPresentationSuspended(suspended, lifecycle_.identity(),
+                                   lifecycle_.active_image_load_request(), lifecycle_.state());
+}
+
 auto EditorSessionService::SetAdjustmentProjectionNode(const NodeId& node_id)
     -> EditorSessionResult {
   if (!InOwnerReduction()) {
@@ -2699,7 +2722,8 @@ void EditorSessionService::NotifyRenderResult(const EditorRenderResult& render_r
   switch (render_result.kind) {
     case EditorRenderResultKind::FrameReady:
     case EditorRenderResultKind::Failed:
-    case EditorRenderResultKind::Cancelled: {
+    case EditorRenderResultKind::Cancelled:
+    case EditorRenderResultKind::PresentationSuspended: {
       const auto now_ns = diag::PreviewPerformanceEnabled() ? diag::PreviewPerformance::NowNs()
                                                             : serial_admission_.NowNs();
       last_frame_finished_ns_.store(now_ns, std::memory_order_release);
@@ -2725,17 +2749,24 @@ void EditorSessionService::NotifyRenderResult(const EditorRenderResult& render_r
     BeginPublication();
     render_.NotifyRenderResult(completion.render_result, lifecycle_.identity(),
                                lifecycle_.active_image_load_request(), lifecycle_.state());
-    const bool frame_ready = completion.render_result.kind == EditorRenderResultKind::FrameReady;
-    if ((frame_ready || completion.render_result.kind == EditorRenderResultKind::Failed) &&
+    const auto kind        = completion.render_result.kind;
+    const bool frame_ready = kind == EditorRenderResultKind::FrameReady;
+    const bool deferred    = kind == EditorRenderResultKind::PresentationSuspended;
+    if ((frame_ready || deferred || kind == EditorRenderResultKind::Failed) &&
         current_operation_id_ != 0) {
-      // A failed render ends the wait of its command like a presented frame does.
+      // A failed or deferred render ends the wait of its command like a presented frame does:
+      // a minimized window must not hold a client until it is restored.
       EditorSessionResult frame;
       frame.kind              = frame_ready ? EditorSessionResultKind::FramePresented
+                                : deferred  ? EditorSessionResultKind::FrameDeferred
                                             : EditorSessionResultKind::FrameFailed;
       frame.state             = lifecycle_.state();
       frame.identity          = lifecycle_.identity();
       frame.render_request_id = completion.request_id;
-      if (!frame_ready) {
+      if (deferred) {
+        frame.message = "The viewport is minimized or hidden; the frame is presented when it is "
+                        "shown again";
+      } else if (!frame_ready) {
         frame.message = completion.render_result.message.empty() ? std::string("Render failed")
                                                                  : completion.render_result.message;
       }

@@ -60,11 +60,15 @@ void OperationWait::Observe(const EditorSessionResult& result) {
     return;
   }
   if (result.kind == EditorSessionResultKind::FramePresented ||
+      result.kind == EditorSessionResultKind::FrameDeferred ||
       result.kind == EditorSessionResultKind::FrameFailed) {
     if (render_request_id_ == 0 || result.render_request_id < render_request_id_) {
       return;
     }
-    if (result.kind == EditorSessionResultKind::FramePresented) {
+    // A minimized window defers the frame; the change itself is applied and is presented when
+    // the window is shown, so the command succeeds instead of waiting for the user.
+    if (result.kind == EditorSessionResultKind::FramePresented ||
+        result.kind == EditorSessionResultKind::FrameDeferred) {
       Finish(std::nullopt);
       return;
     }

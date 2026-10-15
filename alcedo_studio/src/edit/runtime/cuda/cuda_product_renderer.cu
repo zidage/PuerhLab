@@ -7,6 +7,7 @@
 #include <opencv2/core.hpp>
 #include <span>
 #include <stdexcept>
+#include <string>
 
 #include "cuda/cuda_check.hpp"
 #include "edit/runtime/cuda/cuda_frame_presenter.hpp"
@@ -66,6 +67,10 @@ void FramePresenter<CudaBackend>::Present(CudaRenderDevice& device, const GraphV
   sink.EnsureSize(static_cast<int>(width), static_cast<int>(height));
   const FrameWriteMapping mapping = sink.MapResourceForWrite(FrameMemoryDomain::CudaDevice);
   if (!mapping) {
+    if (mapping.presentation_suspended) {
+      throw std::runtime_error(std::string(kPresentationSuspendedMessage) +
+                               "CudaRenderer: the viewport is minimized or hidden");
+    }
     throw std::runtime_error("CudaRenderer: frame sink rejected the write mapping");
   }
 

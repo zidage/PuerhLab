@@ -1262,6 +1262,10 @@ void EditorSessionController::bindPresentationViewport(QObject* viewportItem) {
     QObject::disconnect(presented_geometry_connection_);
     presented_geometry_connection_ = {};
   }
+  if (presentation_suspended_connection_) {
+    QObject::disconnect(presentation_suspended_connection_);
+    presentation_suspended_connection_ = {};
+  }
   presentation_viewport_ = viewportItem;
   if (auto* item = qobject_cast<editor_rhi::EditorViewportItem*>(viewportItem)) {
     if (scope_controller_) {
@@ -1283,10 +1287,20 @@ void EditorSessionController::bindPresentationViewport(QObject* viewportItem) {
                     interaction->setDisplayedMaskGeometry(item->presentedMaskGeometry());
                   }
                 });
+    // A minimized window refuses frames without rendering them; the backend
+    // renders the current state again when the viewport is shown.
+    presentation_suspended_connection_ =
+        connect(item, &editor_rhi::EditorViewportItem::PresentationSuspendedChanged, this,
+                [this, item] {
+                  if (session_backend_) {
+                    session_backend_->SetPresentationSuspended(item->presentationSuspended());
+                  }
+                });
     // Stamp a stable presentation sink identity for render intents (Phase 5A).
     // DirectFrameSink owns the short scene-graph startup wait when this binding
     // precedes QQuickRhiItem::synchronize().
     if (session_backend_) {
+      session_backend_->SetPresentationSuspended(item->presentationSuspended());
       session_backend_->SetPresentationSinkId(
           static_cast<alcedo::PresentationSinkId>(reinterpret_cast<std::uintptr_t>(item)));
     }
@@ -1391,6 +1405,10 @@ void EditorSessionController::unbindPresentationViewport() {
     QObject::disconnect(presented_geometry_connection_);
     presented_geometry_connection_ = {};
   }
+  if (presentation_suspended_connection_) {
+    QObject::disconnect(presentation_suspended_connection_);
+    presentation_suspended_connection_ = {};
+  }
   if (auto* item = qobject_cast<editor_rhi::EditorViewportItem*>(presentation_viewport_.data())) {
     item->suspendPresentation();
   }
@@ -1400,6 +1418,8 @@ void EditorSessionController::unbindPresentationViewport() {
   presentation_viewport_.clear();
   if (session_backend_) {
     session_backend_->SetPresentationSinkId(0);
+    // No viewport is bound; a later binding reports its own suspension.
+    session_backend_->SetPresentationSuspended(false);
   }
   emit PresentationBindingChanged();
 }

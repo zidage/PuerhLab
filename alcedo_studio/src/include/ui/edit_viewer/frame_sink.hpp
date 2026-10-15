@@ -100,6 +100,10 @@ struct FrameWriteMapping {
   std::uintptr_t       native_object         = 0;
   void*                cuda_signal_semaphore = nullptr;
   std::uint64_t        cuda_signal_value     = 0;
+  /// Set on an empty mapping when the sink refused the write because its
+  /// viewport is suspended. The frame is not an error: the owner renders again
+  /// when presentation resumes.
+  bool                 presentation_suspended = false;
 
   explicit             operator bool() const { return data != nullptr || image_array != nullptr; }
 };

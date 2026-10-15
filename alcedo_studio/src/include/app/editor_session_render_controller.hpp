@@ -65,6 +65,13 @@ class EditorSessionRenderController final {
   void                           SetPresentationSize(int width, int height);
   /// Select source-frame rendering while the geometry panel owns the overlay.
   void                           SetGeometryOverlayActive(bool active);
+  /// The viewport was minimized/hidden (true) or shown again (false). On resume,
+  /// frames the sink refused while suspended are routed again for the current
+  /// state: the first frame of a loading image, else a QualityBase refresh, and
+  /// the newest refused detail patch after it.
+  void SetPresentationSuspended(bool suspended, const EditorSessionIdentity& identity,
+                                ImageLoadRequestId image_load_request, EditorSessionState state);
+  [[nodiscard]] auto presentation_suspended() const -> bool;
 
   /// Route the initial render for a new image. Accepts the session identity,
   /// image-load request, and state as immutable inputs from the facade.
@@ -140,6 +147,19 @@ class EditorSessionRenderController final {
   [[nodiscard]] auto  CoordinatorBusy() const -> bool;
   /// Emit a render event to the facade.
   void                EmitEvent(EditorRenderEvent event);
+  /// Emit BusyChanged when the coordinator busy state moved.
+  void                NotifyBusyIfChanged(std::uint64_t                operation_id,
+                                          const EditorSessionIdentity& identity,
+                                          EditorSessionState           state);
+  /// Record a frame the sink refused while the viewport was suspended.
+  void                NoteSuspendedPresentation(const EditorRenderResult&    render_result,
+                                                const EditorSessionIdentity& identity,
+                                                ImageLoadRequestId           image_load_request,
+                                                EditorSessionState           state);
+  /// Route the frames recorded by NoteSuspendedPresentation for the current state.
+  void                RouteSuspendedRefresh(const EditorSessionIdentity& identity,
+                                            ImageLoadRequestId           image_load_request,
+                                            EditorSessionState           state);
 
   struct PendingDetailRender {
     EditorRenderCommand   command{};
@@ -169,6 +189,16 @@ class EditorSessionRenderController final {
   std::optional<std::chrono::steady_clock::time_point> first_frame_route_time_{};
   double                                               first_frame_time_ms_ = -1.0;
   std::atomic<bool>                                    geometry_overlay_active_{false};
+  /// Last suspension reported by the viewport owner.
+  bool                                                 presentation_suspended_ = false;
+  /// One refresh per resume: a refusal that lands after the resume routes the
+  /// refresh itself, and a second refusal without a new resume does not loop.
+  bool                                                 suspended_refresh_routed_ = false;
+  /// Frames refused while suspended, for @ref suspended_image_load_request_.
+  ImageLoadRequestId                                   suspended_image_load_request_{};
+  bool                                                 suspended_first_frame_ = false;
+  bool                                                 suspended_full_frame_  = false;
+  std::optional<PendingDetailRender>                   suspended_detail_render_{};
 };
 
 }  // namespace alcedo

@@ -26,6 +26,12 @@ auto IsRenderReferenceFrame(FramePresentationMode presentation_mode, FrameRole r
   return presentation_mode != FramePresentationMode::RoiFrame && role != FrameRole::DetailPatch;
 }
 
+auto SuspendedMapping() -> FrameWriteMapping {
+  FrameWriteMapping mapping{};
+  mapping.presentation_suspended = true;
+  return mapping;
+}
+
 }  // namespace
 
 DirectFrameSink::DirectFrameSink(EditorViewportItem* item) : item_(item) {}
@@ -97,6 +103,11 @@ auto DirectFrameSink::ReserveWritableSlot(int width, int height) -> std::optiona
   auto*      queue          = item_->present_queue().get();
   const auto session_epoch  = item_->sessionEpoch();
   const auto image_identity = item_->imageIdentity();
+  // A minimized or hidden viewport services no target request; do not queue
+  // one or wait for it.
+  if (queue->PresentationSuspended()) {
+    return std::nullopt;
+  }
 
   auto       prepare        = queue->PrepareWrite(width, height, session_epoch, image_identity);
 
@@ -141,6 +152,12 @@ auto DirectFrameSink::ReserveWritableSlot(int width, int height) -> std::optiona
             static_cast<unsigned long long>(session_epoch));
     constexpr auto kSceneGraphStartupTimeout = std::chrono::seconds(5);
     if (!queue->WaitUntilConsumerAvailable(kSceneGraphStartupTimeout)) {
+      if (queue->PresentationSuspended()) {
+        qCDebug(editorPresentLog,
+                "[EditorPresent] presentation suspended while waiting for the consumer %dx%d",
+                width, height);
+        return std::nullopt;
+      }
       qCWarning(editorPresentLog,
                 "[EditorPresent] native target handshake timed out %dx%d waiting for the "
                 "scene-graph consumer",
@@ -155,6 +172,12 @@ auto DirectFrameSink::ReserveWritableSlot(int width, int height) -> std::optiona
           static_cast<unsigned long long>(session_epoch));
   auto slot = queue->WaitForWritableSlot(request);
   if (!slot.has_value()) {
+    if (queue->PresentationSuspended()) {
+      qCDebug(editorPresentLog,
+              "[EditorPresent] presentation suspended during native target handshake %dx%d",
+              width, height);
+      return std::nullopt;
+    }
     qCWarning(editorPresentLog, "[EditorPresent] native target handshake failed %dx%d", width,
               height);
     return std::nullopt;
@@ -246,6 +269,15 @@ auto DirectFrameSink::MapResourceForWrite(FrameMemoryDomain preferred_domain) ->
     qCWarning(editorPresentLog, "[EditorPresent] MapResourceForWrite: no item/present_queue");
     return {};
   }
+  auto* queue = item_->present_queue().get();
+  // The window is minimized or hidden. The frame is refused without waiting so
+  // the render lock is released at once; the owner renders again on resume.
+  if (queue->PresentationSuspended()) {
+    std::lock_guard lock(mutex_);
+    prepared_slot_index_ = -1;
+    qCDebug(editorPresentLog, "[EditorPresent] MapResourceForWrite: presentation suspended");
+    return SuspendedMapping();
+  }
 
   int width      = 0;
   int height     = 0;
@@ -267,6 +299,9 @@ auto DirectFrameSink::MapResourceForWrite(FrameMemoryDomain preferred_domain) ->
   if (slot_index < 0) {
     auto reserved = ReserveWritableSlot(width, height);
     if (!reserved.has_value()) {
+      if (queue->PresentationSuspended()) {
+        return SuspendedMapping();
+      }
       qCWarning(editorPresentLog,
                 "[EditorPresent] MapResourceForWrite: no writable slot %dx%d domain=%d "
                 "active_backend=%s queue_backend=%s",
@@ -277,18 +312,27 @@ auto DirectFrameSink::MapResourceForWrite(FrameMemoryDomain preferred_domain) ->
     slot_index = *reserved;
   }
 
-  auto begun = item_->present_queue()->BeginWrite(slot_index);
+  auto begun = queue->BeginWrite(slot_index);
   if (!begun.has_value() || !begun->native.valid()) {
+    if (queue->PresentationSuspended()) {
+      return SuspendedMapping();
+    }
     auto reserved = ReserveWritableSlot(width, height);
     if (!reserved.has_value()) {
+      if (queue->PresentationSuspended()) {
+        return SuspendedMapping();
+      }
       qCWarning(editorPresentLog,
                 "[EditorPresent] MapResourceForWrite: BeginWrite/reserve failed slot=%d %dx%d",
                 slot_index, width, height);
       return {};
     }
     slot_index = *reserved;
-    begun      = item_->present_queue()->BeginWrite(slot_index);
+    begun      = queue->BeginWrite(slot_index);
     if (!begun.has_value() || !begun->native.valid()) {
+      if (queue->PresentationSuspended()) {
+        return SuspendedMapping();
+      }
       qCWarning(editorPresentLog,
                 "[EditorPresent] MapResourceForWrite: BeginWrite failed after reserve slot=%d",
                 slot_index);

@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "app/editor_render_coordinator.hpp"
@@ -387,6 +388,157 @@ TEST_F(EditorSessionRenderControllerTest, SecondRouteInitialRenderReturnsRequest
                                                             lifecycle_->active_image_load_request());
   // Undo/redo should still submit a render, just not as a first-frame.
   EXPECT_NE(id2, 0u);
+}
+
+// The window is minimized while frames are rendering: the viewport sink refuses
+// each frame with the presentation-suspended message. Restoring the window must
+// render the current state again instead of leaving the refusals as failures.
+auto SuspendedSinkMessage() -> std::string {
+  return std::string(kPresentationSuspendedMessage) + "test viewport is minimized";
+}
+
+TEST_F(EditorSessionRenderControllerTest, FirstFrameRefusedWhileMinimizedRendersAgainOnRestore) {
+  OpenImage();
+  auto* sched = dynamic_cast<EditorSessionBootstrapSchedulerPort*>(scheduler_.get());
+  ASSERT_NE(sched, nullptr);
+  ASSERT_EQ(sched->scheduled().size(), 1u);
+
+  render_->SetPresentationSuspended(true, lifecycle_->identity(),
+                                    lifecycle_->active_image_load_request(), lifecycle_->state());
+  coordinator_->NotifySchedulerCompleted(sched->scheduled().front().request_id, false,
+                                         SuspendedSinkMessage());
+
+  // A refusal is neither a render failure nor a reason to render while minimized.
+  EXPECT_FALSE(std::any_of(events_.begin(), events_.end(), [](const EditorRenderEvent& event) {
+    return event.kind == EditorRenderEventKind::RenderFailed;
+  }));
+  EXPECT_EQ(coordinator_->diagnostics().failed_count, 0u);
+  EXPECT_TRUE(coordinator_->diagnostics().last_error.empty());
+  EXPECT_EQ(sched->scheduled().size(), 1u);
+  EXPECT_EQ(lifecycle_->state(), EditorSessionState::Loading);
+
+  render_->SetPresentationSuspended(false, lifecycle_->identity(),
+                                    lifecycle_->active_image_load_request(), lifecycle_->state());
+  ASSERT_EQ(sched->scheduled().size(), 2u);
+  const auto& retry = sched->scheduled().back();
+  EXPECT_EQ(retry.intent.reason, EditorRenderReason::Retry);
+  EXPECT_EQ(retry.intent.frame_role, FrameRole::InteractivePrimary);
+  EXPECT_EQ(render_->first_frame_request_id(), retry.request_id);
+
+  coordinator_->NotifySchedulerCompleted(retry.request_id, true);
+  EXPECT_TRUE(std::any_of(events_.begin(), events_.end(), [](const EditorRenderEvent& event) {
+    return event.kind == EditorRenderEventKind::FirstFrameReady;
+  }));
+  // The first frame then routes the QualityBase as on a normal open.
+  ASSERT_EQ(sched->scheduled().size(), 3u);
+  EXPECT_EQ(sched->scheduled().back().intent.frame_role, FrameRole::QualityBase);
+}
+
+TEST_F(EditorSessionRenderControllerTest,
+       QualityBaseRefusedWhileMinimizedRendersAgainAndReleasesDeferredDetail) {
+  OpenImage();
+  auto* sched = dynamic_cast<EditorSessionBootstrapSchedulerPort*>(scheduler_.get());
+  ASSERT_NE(sched, nullptr);
+  coordinator_->NotifySchedulerCompleted(sched->scheduled().front().request_id, true);
+  lifecycle_->MarkFirstFrameReady();
+  ASSERT_EQ(sched->scheduled().size(), 2u);
+  const auto quality_request_id = sched->scheduled().back().request_id;
+
+  render_->SetPresentationSuspended(true, lifecycle_->identity(),
+                                    lifecycle_->active_image_load_request(), lifecycle_->state());
+  coordinator_->NotifySchedulerCompleted(quality_request_id, false, SuspendedSinkMessage());
+
+  // A zoom while minimized waits for the QualityBase that was refused.
+  EditorRenderCommand detail;
+  detail.reason = EditorRenderReason::DetailRefresh;
+  ViewportRenderRegion region{};
+  region.x_          = 20;
+  detail.view_region = region;
+  EXPECT_EQ(render_
+                ->RouteViewChange(detail, lifecycle_->identity(),
+                                  lifecycle_->active_image_load_request(),
+                                  EditorSessionState::Interactive)
+                .kind,
+            EditorRenderEventKind::RenderReused);
+  EXPECT_EQ(sched->scheduled().size(), 2u);
+
+  render_->SetPresentationSuspended(false, lifecycle_->identity(),
+                                    lifecycle_->active_image_load_request(), lifecycle_->state());
+  ASSERT_EQ(sched->scheduled().size(), 3u);
+  const auto& refresh = sched->scheduled().back();
+  EXPECT_EQ(refresh.intent.frame_role, FrameRole::QualityBase);
+  EXPECT_EQ(refresh.intent.operation_id, 0u);
+
+  // The new QualityBase unblocks the zoomed detail patch.
+  coordinator_->NotifySchedulerCompleted(refresh.request_id, true);
+  ASSERT_EQ(sched->scheduled().size(), 4u);
+  const auto& detail_intent = sched->scheduled().back().intent;
+  EXPECT_EQ(detail_intent.frame_role, FrameRole::DetailPatch);
+  ASSERT_TRUE(detail_intent.view_region.has_value());
+  EXPECT_EQ(detail_intent.view_region->x_, 20);
+}
+
+TEST_F(EditorSessionRenderControllerTest, DetailRefusedWhileMinimizedRoutesOnlyTheDetailOnRestore) {
+  OpenImage();
+  PresentFirstFrame();
+  lifecycle_->MarkFirstFrameReady();
+  auto* sched = dynamic_cast<EditorSessionBootstrapSchedulerPort*>(scheduler_.get());
+  ASSERT_NE(sched, nullptr);
+
+  EditorRenderCommand detail;
+  detail.reason = EditorRenderReason::DetailRefresh;
+  ViewportRenderRegion region{};
+  region.x_          = 33;
+  detail.view_region = region;
+  ASSERT_EQ(render_
+                ->RouteViewChange(detail, lifecycle_->identity(),
+                                  lifecycle_->active_image_load_request(),
+                                  EditorSessionState::Interactive)
+                .kind,
+            EditorRenderEventKind::RenderRouted);
+  const auto detail_request_id = sched->scheduled().back().request_id;
+
+  render_->SetPresentationSuspended(true, lifecycle_->identity(),
+                                    lifecycle_->active_image_load_request(), lifecycle_->state());
+  coordinator_->NotifySchedulerCompleted(detail_request_id, false, SuspendedSinkMessage());
+  const auto scheduled_before_restore = sched->scheduled().size();
+
+  render_->SetPresentationSuspended(false, lifecycle_->identity(),
+                                    lifecycle_->active_image_load_request(), lifecycle_->state());
+  ASSERT_EQ(sched->scheduled().size(), scheduled_before_restore + 1u);
+  const auto& routed = sched->scheduled().back().intent;
+  EXPECT_EQ(routed.frame_role, FrameRole::DetailPatch);
+  ASSERT_TRUE(routed.view_region.has_value());
+  EXPECT_EQ(routed.view_region->x_, 33);
+}
+
+TEST_F(EditorSessionRenderControllerTest, RefusalThatArrivesAfterRestoreRoutesOneRefresh) {
+  OpenImage();
+  PresentFirstFrame();
+  lifecycle_->MarkFirstFrameReady();
+  auto* sched = dynamic_cast<EditorSessionBootstrapSchedulerPort*>(scheduler_.get());
+  ASSERT_NE(sched, nullptr);
+
+  // The window is restored before the refusal of a frame reaches the owner.
+  render_->SetPresentationSuspended(true, lifecycle_->identity(),
+                                    lifecycle_->active_image_load_request(), lifecycle_->state());
+  render_->SetPresentationSuspended(false, lifecycle_->identity(),
+                                    lifecycle_->active_image_load_request(), lifecycle_->state());
+  EditorRenderCommand settled;
+  settled.reason = EditorRenderReason::SettledAdjustment;
+  const auto edit_request_id =
+      render_->RouteInitialRender(settled, lifecycle_->identity(),
+                                  lifecycle_->active_image_load_request());
+  ASSERT_NE(edit_request_id, 0u);
+  const auto scheduled_before = sched->scheduled().size();
+
+  coordinator_->NotifySchedulerCompleted(edit_request_id, false, SuspendedSinkMessage());
+  ASSERT_EQ(sched->scheduled().size(), scheduled_before + 1u);
+  const auto refresh_request_id = sched->scheduled().back().request_id;
+
+  // A viewport that keeps refusing without a new resume must not loop.
+  coordinator_->NotifySchedulerCompleted(refresh_request_id, false, SuspendedSinkMessage());
+  EXPECT_EQ(sched->scheduled().size(), scheduled_before + 1u);
 }
 
 }  // namespace
