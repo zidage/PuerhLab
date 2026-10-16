@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="https://aoraw.org/">Project website</a> · <a href="https://aoraw.org/zh-cn/">项目网页</a> · <a href="https://zidage.github.io/AlcedoStudio_docs/docs/intro">Documentation</a> · <a href="https://github.com/zidage/AlcedoStudio/releases/tag/v0.3.1">Download v0.3.1</a>
+  <a href="https://aoraw.org/">Project website</a> · <a href="https://aoraw.org/zh-cn/">项目网页</a> · <a href="https://zidage.github.io/AlcedoStudio_docs/docs/intro">Documentation</a> · <a href="https://github.com/zidage/AlcedoStudio/releases/tag/v0.3.3">Download v0.3.3</a>
 </p>
 
 <p align="right"><a href="./README.md"><strong>English</strong></a> | <a href="./README.zh-CN.md">简体中文</a></p>
@@ -41,7 +41,7 @@ People who love photography tend to have a keen eye for color, yet editing tools
 
 🎨 **The processing pipeline should be transparent and follow industry standards**
 
-Alcedo uses node-based editing. You can freely reorder edits and organize mask hierarchies, so the thread of every step is clear at a glance. A built-in ACES workflow with customizable color science frees you from the tangle of vendor profiles and the endless, almost mystical debates about the "Leica look": every camera finally stands on equal footing. 113 updatable film LUTs, together with halation, grain, and black-mist effects, give you a striking cinematic look in one click.
+Alcedo uses node-based editing. You can freely reorder edits and organize mask hierarchies, so the thread of every step is clear at a glance. A built-in ACES workflow with customizable color science frees you from the tangle of vendor profiles and the endless, almost mystical debates about the "Leica look": every camera finally stands on equal footing. 113 updatable film LUTs, together with halation, grain, and black-mist effects, give you a striking cinematic look in one click, and your own 3D CUBE LUTs work too, whatever color space they were made for.
 
 🖼 **It should be as easy to use as the photo gallery on your phone**
 
@@ -58,6 +58,10 @@ High-resolution files with complex masks often strain memory and disk, and with 
 📖 **Users should not carry the complexity that comes with powerful features**
 
 Say goodbye to the oppressive walls of tiny sliders and deeply nested menus from twenty years ago. Alcedo aims for the gentlest possible learning curve: each area has a clear job, and advanced features never get in your way too early. Beginners can get great results by intuition, and professionals no longer have to jump between several applications to build a workflow that should never have been this complicated.
+
+🤖 **Whatever you can do in the window, an agent can do through the CLI**
+
+Most photo command-line tools only apply a preset and export a file. alcedo-cli matches the interface command for command, from culling the library and moving sliders to branching the version history. Bring the agent you already use, such as Claude Code or Codex: it can work beside you in the same live window, or run batch jobs headlessly in the background. Presets become scene-aware skills, and plugins become small scripts that write straight back into the native pipeline with no intermediate TIFFs, so the core application stays lean.
 
 ## A closer look
 
@@ -100,6 +104,10 @@ flowchart LR
 
 Inside each node you will find the usual tone and color controls, a tone curve, lift/gamma/gain color wheels, selective color, and detail tools, with shadows and highlights handled by local tone mapping. Alcedo also ships with [CUBE LUTs built from the spectral responses of real film stocks](https://github.com/JanLohse/spectral_film_lut), along with film grain and halation based on physical models.
 
+### LUTs in any color space
+
+Besides the official film LUT packages, you can use your own 3D CUBE LUTs: put them in the user LUT folder that the LUT browser shows, and they appear under "User". For each LUT, you choose the encoding it expects and the one it produces. Scene encodings include ACES, ARRI LogC3 and LogC4, Fujifilm F-Log, Panasonic V-Log, Nikon N-Log, Apple Log, and DaVinci Intermediate; display encodings include sRGB, BT.1886, PQ, and HLG. When a LUT produces a display encoding, Alcedo brings its output back into the scene with the ACES 2.0 inverse output transform, so the LUT works inside the scene-referred pipeline like any other adjustment. Alcedo can remember the encoding pair of a LUT and apply it each time you use that LUT, and copying adjustments to other photos includes the encodings. The LUT browser filters by category, source, brand, and print stock.
+
 ### Versions and edit history
 
 Every photo can hold several named versions, and you can branch a new version from any point in the history. Each adjustment is recorded in a Git-like history saved inside the project file, so you can undo it forever. You can also copy a whole look, or only the parts you choose, onto other photos. The [edit history design notes](https://zidage.github.io/AlcedoStudio_docs/en/docs/developer/edit-history-architecture) explain how it works.
@@ -114,7 +122,27 @@ It can also connect to an AI provider you already use, through an OpenAI-compati
 
 ### Export
 
-Alcedo exports JPEG, PNG, TIFF, OpenEXR, and Ultra HDR JPEG, at 8, 16, or 32 bits depending on the format. It supports sizing by long edge, dimensions, or print size, embedded ICC profiles, and file names built from the source name, capture date, camera, lens, exposure, rating, and a sequence number, with presets for settings you reuse. Location data, device serial numbers, and edit history are left out of exported files.
+Alcedo exports JPEG, PNG, TIFF, OpenEXR, and Ultra HDR JPEG, at 8, 16, or 32 bits depending on the format. It supports sizing by long edge, dimensions, or print size, embedded ICC profiles, and file names built from the source name, capture date, camera, lens, exposure, rating, and a sequence number. Export presets (Standard, Web, Social Media, Email, Maximum Quality JPEG, 16-bit TIFF, and EXR Archive) set every option except the destination, and you can save your own. You choose whether each export keeps the EXIF metadata, the ICC profile, and the GPS location of the source photo. Camera and lens serial numbers and the edit history are never written to exported files.
+
+### AI agents and alcedo-cli
+
+alcedo-cli is installed next to the application (inside the app bundle on macOS). It gives an agent, a script, or you in a terminal the same reach as the interface:
+
+- **Projects and library**: create, open, and save projects; import folders; list, rate, select, and delete photos; read capture metadata and thumbnails; and search with the same rules as the search dialog, including natural-language search.
+- **Editing**: open a photo, read and set any adjustment the editor offers, set many fields in one step, work with nodes and LUTs, undo and redo, and read the history.
+- **Versions**: create, branch, check out, rename, and remove versions, and copy and paste adjustments between photos.
+- **Output**: render previews for the agent to look at, export with the same options as the export panel, and follow background tasks until they finish.
+
+An agent can work in two ways. A headless session runs without a window, which suits batch jobs. An agent can also take control of the window you are using: while it has control, your edit controls are locked, but you can still pan, zoom, and watch the scopes. The agent session stays at the top of the task island and the Background Tasks dialog with a list of its actions, and Stop ends its control at once. Agent edits are marked in the history and show the agent's note, so you can review or undo each one.
+
+```sh
+alcedo-cli session start --headless --project <project file>
+alcedo-cli call search.query '{"text": "sunset over the sea"}'
+alcedo-cli schema          # the parameters and results of every command
+alcedo-cli session stop
+```
+
+The [alcedo-skills](https://github.com/zidage/alcedo-skills) repository holds the agent skill that teaches an agent how to use alcedo-cli, and the full [command reference](https://github.com/zidage/alcedo-skills/blob/main/skills/alcedo/references/README.md).
 
 ## Screenshots
 
