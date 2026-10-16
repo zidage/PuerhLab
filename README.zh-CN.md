@@ -61,7 +61,7 @@ Alcedo引入了类似Git的分支化版本树：每一次修改都可永久回�
 
 🤖 **界面里能做的，智能体都能通过 CLI 做到**
 
-传统的照片命令行工具只会套用预设、导出文件。alcedo-cli 与图形界面一一对应：从图库筛片、拖动滑块到分支化的版本历史，每个操作都有对应的命令。带上你已经在用的智能体（如 Claude Code 或 Codex），它既可以在同一个窗口里与你协作，也可以在后台无窗口地批量处理。预设从静态的参数快照变成能理解场景的技能；插件变成轻量脚本，直接写回原生管线，无需中间 TIFF，软件核心也因此始终保持轻盈。
+传统的照片命令行工具只会套用预设、导出文件。alcedo-cli 与图形界面一一对应：从图库筛片、拖动滑块到分支化的版本历史，每个操作都有对应的命令。带上你已经在用的智能体（如 Claude Code 或 Codex），它既可以在同一个窗口里与你协作，也可以在后台无窗口地批量处理。预设从静态的参数快照变成能理解场景的技能；插件变成智能体在技能中编写的轻量脚本，直接读写原生管线，无需中间 TIFF，软件核心也因此始终保持轻盈。
 
 ## 功能一览
 
@@ -136,13 +136,13 @@ alcedo-cli 安装在应用程序旁边（macOS 上位于应用包内）。无论
 智能体有两种工作方式。无窗口会话在后台运行，适合批量任务。智能体也可以接管你正在使用的窗口：在它控制期间，你的编辑控件会被锁定，但仍然可以平移、缩放和查看示波器。智能体会话固定在任务岛和后台任务对话框的顶部，并列出它执行的操作；点击 Stop 会立即结束它的控制。智能体的编辑会在历史中标出，并显示它留下的说明，方便你逐条检查或撤销。
 
 ```sh
-alcedo-cli session start --headless --project <项目文件>
+alcedo-cli session start --headless --project <项目>.alcd
 alcedo-cli call search.query '{"text": "海边的日落"}'
 alcedo-cli schema          # 每个命令的参数和结果
 alcedo-cli session stop
 ```
 
-[alcedo-skills](https://github.com/zidage/alcedo-skills) 仓库提供了教智能体使用 alcedo-cli 的技能，以及完整的[命令参考](https://github.com/zidage/alcedo-skills/blob/main/skills/alcedo/references/README.md)（英文）。
+**用技能代替预设，用脚本代替插件。** [alcedo-skills](https://github.com/zidage/alcedo-skills) 仓库中的 `alcedo` 技能会教智能体如何使用 alcedo-cli。安装时，直接对智能体说“Install the skill zidage/alcedo-skills”即可；在 Claude Code 中也可以运行 `/plugin marketplace add zidage/alcedo-skills` 和 `/plugin install alcedo@alcedo-skills`。有了它，智能体会渲染预览、亲自查看，再调整编辑参数，直到照片看起来合适。因此“帮我修一下这些照片”“来点阴郁的氛围”“帮我挑片”都会因场景而异，而不是套用固定的数值。新功能以技能中的小脚本形式提供，而不是编译进应用程序的插件。例如，`contact_sheet.py` 通过一次 `alcedo-cli batch` 调用为数百张照片生成联系表，方便智能体挑出最好的几张并评分；`analyze_preview.py` 则从预览中测量影调、色偏和地平线倾斜。它们的结果会以评分和编辑的形式直接写回项目。完整的[命令参考](https://github.com/zidage/alcedo-skills/blob/main/skills/alcedo/references/README.md)（英文）也在同一个仓库中。
 
 ## 截图
 

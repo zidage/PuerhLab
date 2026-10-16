@@ -61,7 +61,7 @@ Say goodbye to the oppressive walls of tiny sliders and deeply nested menus from
 
 🤖 **Whatever you can do in the window, an agent can do through the CLI**
 
-Most photo command-line tools only apply a preset and export a file. alcedo-cli matches the interface command for command, from culling the library and moving sliders to branching the version history. Bring the agent you already use, such as Claude Code or Codex: it can work beside you in the same live window, or run batch jobs headlessly in the background. Presets become scene-aware skills, and plugins become small scripts that write straight back into the native pipeline with no intermediate TIFFs, so the core application stays lean.
+Most photo command-line tools only apply a preset and export a file. alcedo-cli matches the interface command for command, from culling the library and moving sliders to branching the version history. Bring the agent you already use, such as Claude Code or Codex: it can work beside you in the same live window, or run batch jobs headlessly in the background. Presets become scene-aware skills, and plugins become small scripts that an agent writes inside a skill. They read from and write straight back to the native pipeline, with no intermediate TIFFs, so the core application stays lean.
 
 ## A closer look
 
@@ -136,13 +136,13 @@ alcedo-cli is installed next to the application (inside the app bundle on macOS)
 An agent can work in two ways. A headless session runs without a window, which suits batch jobs. An agent can also take control of the window you are using: while it has control, your edit controls are locked, but you can still pan, zoom, and watch the scopes. The agent session stays at the top of the task island and the Background Tasks dialog with a list of its actions, and Stop ends its control at once. Agent edits are marked in the history and show the agent's note, so you can review or undo each one.
 
 ```sh
-alcedo-cli session start --headless --project <project file>
+alcedo-cli session start --headless --project <project>.alcd
 alcedo-cli call search.query '{"text": "sunset over the sea"}'
 alcedo-cli schema          # the parameters and results of every command
 alcedo-cli session stop
 ```
 
-The [alcedo-skills](https://github.com/zidage/alcedo-skills) repository holds the agent skill that teaches an agent how to use alcedo-cli, and the full [command reference](https://github.com/zidage/alcedo-skills/blob/main/skills/alcedo/references/README.md).
+**Skills instead of presets, scripts instead of plugins.** The `alcedo` skill in the [alcedo-skills](https://github.com/zidage/alcedo-skills) repository teaches an agent how to use alcedo-cli. To install it, ask your agent "Install the skill zidage/alcedo-skills", or in Claude Code run `/plugin marketplace add zidage/alcedo-skills` and `/plugin install alcedo@alcedo-skills`. With it, the agent renders a preview, looks at it, and changes the editor values until the photo looks right, so "fix these photos", "a moody look", or "cull this shoot" adapts to each scene instead of applying fixed numbers. New features come as small scripts in the skill rather than as plugins compiled into the application. For example, `contact_sheet.py` builds contact sheets of hundreds of photos through one `alcedo-cli batch` call so the agent can pick and rate the best frames, and `analyze_preview.py` measures tone, color cast, and horizon tilt from a preview. Their results go straight back into the project as ratings and edits. The full [command reference](https://github.com/zidage/alcedo-skills/blob/main/skills/alcedo/references/README.md) is in the same repository.
 
 ## Screenshots
 
