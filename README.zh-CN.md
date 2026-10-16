@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="https://aoraw.org/zh-cn/">项目网站</a> · <a href="https://aoraw.org/">Project website</a> · <a href="https://zidage.github.io/AlcedoStudio_docs/docs/intro">文档</a> · <a href="https://github.com/zidage/AlcedoStudio/releases/tag/v0.3.1">下载 v0.3.1</a>
+  <a href="https://aoraw.org/zh-cn/">项目网站</a> · <a href="https://aoraw.org/">Project website</a> · <a href="https://zidage.github.io/AlcedoStudio_docs/docs/intro">文档</a> · <a href="https://github.com/zidage/AlcedoStudio/releases/tag/v0.3.3">下载 v0.3.3</a>
 </p>
 
 <p align="right"><a href="./README.md">English</a> | <a href="./README.zh-CN.md"><strong>简体中文</strong></a></p>
@@ -41,7 +41,7 @@ https://github.com/user-attachments/assets/ae0d9773-220e-4901-90f6-1989f58b0462
 
 🎨 **处理流程应尽量透明并且符合行业标准**
 
-Alcedo采用节点式编辑，自由调整编辑顺序，组织蒙版层级，让每一步操作的脉络一目了然；内置ACES流程及可自定义的色彩科学效果，无需纠结厂商配置文件的盘根错节与玄学德味的无尽争论，设备平权自此实现；内置113款可更新的胶片LUT，配合Halation，颗粒，黑柔效果，一键做出电影级的惊人效果。
+Alcedo采用节点式编辑，自由调整编辑顺序，组织蒙版层级，让每一步操作的脉络一目了然；内置ACES流程及可自定义的色彩科学效果，无需纠结厂商配置文件的盘根错节与玄学德味的无尽争论，设备平权自此实现；内置113款可更新的胶片LUT，配合Halation，颗粒，黑柔效果，一键做出电影级的惊人效果；你自己的 3D CUBE LUT 也能直接使用，无论它为哪个色彩空间而做。
 
 🖼 **应该具有手机相册般的易用**
 
@@ -58,6 +58,10 @@ Alcedo引入了类似Git的分支化版本树：每一次修改都可永久回�
 📖 **功能强大所伴随的复杂度不应被用户承担**
 
 告别二十年前满屏细碎滑块与层层嵌套菜单的压迫感。Alcedo追求最为平缓地学习曲线：区域职责清晰，深度功能从不过早打扰，初学者可凭直觉成片，专业用户也无需在多个软件中来回切换来构建本不该如此复杂的工作流程。
+
+🤖 **界面里能做的，智能体都能通过 CLI 做到**
+
+传统的照片命令行工具只会套用预设、导出文件。alcedo-cli 与图形界面一一对应：从图库筛片、拖动滑块到分支化的版本历史，每个操作都有对应的命令。带上你已经在用的智能体（如 Claude Code 或 Codex），它既可以在同一个窗口里与你协作，也可以在后台无窗口地批量处理。预设从静态的参数快照变成能理解场景的技能；插件变成智能体在技能中编写的轻量脚本，直接读写原生管线，无需中间 TIFF，软件核心也因此始终保持轻盈。
 
 ## 功能一览
 
@@ -100,6 +104,10 @@ flowchart LR
 
 每个节点内都有常用的影调和色彩控制、色调曲线、Lift/Gamma/Gain 色轮、可选颜色和细节工具，阴影与高光由局部色调映射处理。Alcedo 还内置了[根据真实胶片光谱响应生成的 CUBE LUT](https://github.com/JanLohse/spectral_film_lut)，以及基于物理模型的胶片颗粒和光晕。
 
+### 任意色彩空间的 LUT
+
+除了官方胶片 LUT 包，你也可以使用自己的 3D CUBE LUT：把它们放进 LUT 浏览器提示的用户 LUT 文件夹，它们就会出现在“User”分类下。你可以为每个 LUT 选择它期望的输入编码和它产生的输出编码。场景编码包括 ACES、ARRI LogC3 和 LogC4、Fujifilm F-Log、Panasonic V-Log、Nikon N-Log、Apple Log 和 DaVinci Intermediate；显示编码包括 sRGB、BT.1886、PQ 和 HLG。当 LUT 输出的是显示编码时，Alcedo 会用 ACES 2.0 逆输出变换把结果带回场景空间，让这个 LUT 像其他调整一样在场景参考管线中工作。Alcedo 可以记住某个 LUT 的编码组合，每次使用时自动应用；把调整复制到其他照片时，也会一并带上这些编码。LUT 浏览器可以按分类、来源、品牌和印片筛选。
+
 ### 版本与编辑历史
 
 每张照片可以保存多个命名版本，你也可以从历史中的任意一步分出新版本。每一次调整都会记录在类似 Git 的历史中，并保存在项目文件里，因此可以永远撤销。你还可以把完整的 Look，或只把其中你选中的部分，复制到其他照片上。实现原理请参阅[编辑历史设计说明](https://zidage.github.io/AlcedoStudio_docs/en/docs/developer/edit-history-architecture)。
@@ -114,7 +122,27 @@ Alcedo 支持三种搜索：按相机、镜头、日期、ISO、焦距和光圈�
 
 ### 导出
 
-Alcedo 可以导出 JPEG、PNG、TIFF、OpenEXR 和 Ultra HDR JPEG，并根据格式支持 8、16 或 32 位。它支持按长边、像素尺寸或打印尺寸设置大小，嵌入 ICC 配置文件，并用源文件名、拍摄日期、相机、镜头、曝光参数、评分和序号组合文件名；常用设置可以保存为预设。导出的文件不包含定位信息、设备序列号和编辑历史。
+Alcedo 可以导出 JPEG、PNG、TIFF、OpenEXR 和 Ultra HDR JPEG，并根据格式支持 8、16 或 32 位。它支持按长边、像素尺寸或打印尺寸设置大小，嵌入 ICC 配置文件，并用源文件名、拍摄日期、相机、镜头、曝光参数、评分和序号组合文件名。导出预设（Standard、Web、Social Media、Email、Maximum Quality JPEG、16-bit TIFF 和 EXR Archive）会设置除目标位置以外的所有选项，你也可以保存自己的预设。每次导出都可以选择是否保留源照片的 EXIF 元数据、ICC 配置文件和 GPS 定位。相机与镜头序列号以及编辑历史永远不会写入导出的文件。
+
+### AI 智能体与 alcedo-cli
+
+alcedo-cli 安装在应用程序旁边（macOS 上位于应用包内）。无论是智能体、脚本，还是在终端里操作的你，都能通过它做到界面能做的事：
+
+- **项目与图库**：创建、打开和保存项目；导入文件夹；列出、评分、选择和删除照片；读取拍摄元数据和缩略图；并按搜索对话框的规则搜索，包括自然语言搜索。
+- **编辑**：打开照片，读取和设置编辑器中的任意调整，一步设置多个字段，操作节点和 LUT，撤销与重做，读取编辑历史。
+- **版本**：创建、分支、切换、重命名和删除版本，在照片之间复制和粘贴调整。
+- **输出**：渲染预览供智能体查看，使用与导出面板相同的选项导出，并跟踪后台任务直到完成。
+
+智能体有两种工作方式。无窗口会话在后台运行，适合批量任务。智能体也可以接管你正在使用的窗口：在它控制期间，你的编辑控件会被锁定，但仍然可以平移、缩放和查看示波器。智能体会话固定在任务岛和后台任务对话框的顶部，并列出它执行的操作；点击 Stop 会立即结束它的控制。智能体的编辑会在历史中标出，并显示它留下的说明，方便你逐条检查或撤销。
+
+```sh
+alcedo-cli session start --headless --project <项目>.alcd
+alcedo-cli call search.query '{"text": "海边的日落"}'
+alcedo-cli schema          # 每个命令的参数和结果
+alcedo-cli session stop
+```
+
+**用技能代替预设，用脚本代替插件。** [alcedo-skills](https://github.com/zidage/alcedo-skills) 仓库中的 `alcedo` 技能会教智能体如何使用 alcedo-cli。安装时，直接对智能体说“Install the skill zidage/alcedo-skills”即可；在 Claude Code 中也可以运行 `/plugin marketplace add zidage/alcedo-skills` 和 `/plugin install alcedo@alcedo-skills`。有了它，智能体会渲染预览、亲自查看，再调整编辑参数，直到照片看起来合适。因此“帮我修一下这些照片”“来点阴郁的氛围”“帮我挑片”都会因场景而异，而不是套用固定的数值。新功能以技能中的小脚本形式提供，而不是编译进应用程序的插件。例如，`contact_sheet.py` 通过一次 `alcedo-cli batch` 调用为数百张照片生成联系表，方便智能体挑出最好的几张并评分；`analyze_preview.py` 则从预览中测量影调、色偏和地平线倾斜。它们的结果会以评分和编辑的形式直接写回项目。完整的[命令参考](https://github.com/zidage/alcedo-skills/blob/main/skills/alcedo/references/README.md)（英文）也在同一个仓库中。
 
 ## 截图
 
