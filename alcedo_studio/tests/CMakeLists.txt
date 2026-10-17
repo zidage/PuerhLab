@@ -57,6 +57,13 @@ add_custom_target(alcedo_tests_ci_automation)
 
 include("${ALCEDO_TEST_ROOT}/cmake/AlcedoTestRegistration.cmake")
 
+# Shared main() of the in-process Qt tests. It starts the Exiv2 XMP toolkit before any import or
+# thumbnail worker reads metadata, as the GUI and headless hosts do, then creates the
+# QCoreApplication. Test targets link this library instead of compiling ui/ui_test_main.cpp.
+add_library(AlcedoInProcessTestMain OBJECT ${ALCEDO_TEST_ROOT}/ui/ui_test_main.cpp)
+target_include_directories(AlcedoInProcessTestMain PRIVATE ${ALCEDO_INCLUDE_DIR})
+target_link_libraries(AlcedoInProcessTestMain PUBLIC Exiv2 GTest::gtest Qt6::Core)
+
 # ==============================================================================
 # Phase 3D test domain manifests
 # ==============================================================================

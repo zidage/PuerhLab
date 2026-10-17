@@ -7,10 +7,10 @@ function(alcedo_add_automation_test target_name)
   cmake_parse_arguments(ARG "" "LABEL" "SOURCES;LIBRARIES;CATEGORIES" ${ARGN})
   add_executable(${target_name}
       ${ARG_SOURCES}
-      ${ALCEDO_TEST_ROOT}/ui/ui_test_main.cpp
   )
   target_include_directories(${target_name} PRIVATE ${ALCEDO_TEST_DIR})
-  target_link_libraries(${target_name} PRIVATE ${ARG_LIBRARIES} GTest::gtest Qt6::Core Qt6::Test)
+  target_link_libraries(${target_name}
+      PRIVATE AlcedoInProcessTestMain ${ARG_LIBRARIES} GTest::gtest Qt6::Core Qt6::Test)
   # gtest_discover_tests keeps only the first entry of a label list (it splits the list into
   # separate properties), so each target has one label: LABEL, or "automation" without it.
   set(_label "automation")

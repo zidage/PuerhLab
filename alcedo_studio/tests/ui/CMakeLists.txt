@@ -96,7 +96,6 @@ endif()
 macro(def_ui_test TARGET_NAME SOURCE_FILE)
     add_executable(${TARGET_NAME}
         ${ALCEDO_TEST_ROOT}/ui/${SOURCE_FILE}
-        ${ALCEDO_TEST_ROOT}/ui/ui_test_main.cpp
     )
     target_include_directories(${TARGET_NAME}
         PUBLIC ${ALCEDO_INCLUDE_DIR}
@@ -104,6 +103,7 @@ macro(def_ui_test TARGET_NAME SOURCE_FILE)
     )
     target_link_libraries(${TARGET_NAME}
         PRIVATE
+            AlcedoInProcessTestMain
             AlbumBackendLib
             GTest::gtest
             Qt6::Test
@@ -863,11 +863,11 @@ alcedo_register_test_target(LutSettingsQmlTest ui)
 # debounce timer deterministically via the event loop).
 add_executable(EditorAdjustmentModelTest
     ${ALCEDO_TEST_ROOT}/ui/editor_adjustment_model_test.cpp
-    ${ALCEDO_TEST_ROOT}/ui/ui_test_main.cpp
 )
 target_include_directories(EditorAdjustmentModelTest PUBLIC ${ALCEDO_INCLUDE_DIR} ${ALCEDO_TEST_DIR})
 target_link_libraries(EditorAdjustmentModelTest
   PRIVATE
+    AlcedoInProcessTestMain
     AlbumBackendLib
     EditorSessionService
     GTest::gtest
@@ -885,7 +885,6 @@ alcedo_register_test_target(EditorAdjustmentModelTest ui)
 # renderer and the live Mini-Git history port; no GPU.
 add_executable(EditorSerialInputBoundaryTest
     ${ALCEDO_TEST_ROOT}/ui/editor_serial_input_boundary_test.cpp
-    ${ALCEDO_TEST_ROOT}/ui/ui_test_main.cpp
 )
 target_include_directories(EditorSerialInputBoundaryTest
     PUBLIC ${ALCEDO_INCLUDE_DIR}
@@ -893,6 +892,7 @@ target_include_directories(EditorSerialInputBoundaryTest
 )
 target_link_libraries(EditorSerialInputBoundaryTest
   PRIVATE
+    AlcedoInProcessTestMain
     AlbumBackendLib
     EditorSessionService
     EditPipeline
@@ -1247,7 +1247,6 @@ alcedo_register_test_target(MaskThumbnailCoordinatorTest ui)
 
 add_executable(ShortcutRegistryTest
     ${ALCEDO_TEST_ROOT}/ui/shortcut_registry_test.cpp
-    ${ALCEDO_TEST_ROOT}/ui/ui_test_main.cpp
 )
 target_include_directories(ShortcutRegistryTest
     PUBLIC ${ALCEDO_INCLUDE_DIR}
@@ -1255,6 +1254,7 @@ target_include_directories(ShortcutRegistryTest
 )
 target_link_libraries(ShortcutRegistryTest
     PRIVATE
+        AlcedoInProcessTestMain
         AlbumBackendLib
         GTest::gtest
         Qt6::Core
@@ -1309,7 +1309,6 @@ alcedo_register_test_target(EditorNodesPanelQmlTest ui)
 # hidden/resume analyzer lifecycle.
 add_executable(EditorScopeControllerTest
     ${ALCEDO_TEST_ROOT}/ui/editor_scope_controller_test.cpp
-    ${ALCEDO_TEST_ROOT}/ui/ui_test_main.cpp
 )
 target_include_directories(EditorScopeControllerTest
     PUBLIC ${ALCEDO_INCLUDE_DIR}
@@ -1317,6 +1316,7 @@ target_include_directories(EditorScopeControllerTest
 )
 target_link_libraries(EditorScopeControllerTest
     PRIVATE
+        AlcedoInProcessTestMain
         AlbumBackendLib
         GTest::gtest
         Qt6::Core
@@ -1541,11 +1541,11 @@ alcedo_register_test_target(EditorDisplayTransformSnapshotQmlTest ui)
 # Phase 6F: shared crop equations and QML-facing lens catalog adapter.
 add_executable(EditorGeometryMathTest
     ${ALCEDO_TEST_ROOT}/ui/editor_geometry_math_test.cpp
-    ${ALCEDO_TEST_ROOT}/ui/ui_test_main.cpp
 )
 target_include_directories(EditorGeometryMathTest PUBLIC ${ALCEDO_INCLUDE_DIR})
 target_link_libraries(EditorGeometryMathTest
   PRIVATE
+    AlcedoInProcessTestMain
     AlbumBackendLib
     GTest::gtest
     JSON
@@ -1622,13 +1622,13 @@ alcedo_register_test_target(EditorRawDecodePanelQmlTest ui)
 
 add_executable(MaskEditGeometryTest
     ${ALCEDO_TEST_ROOT}/ui/mask_edit_geometry_test.cpp
-    ${ALCEDO_TEST_ROOT}/ui/ui_test_main.cpp
 )
 target_include_directories(MaskEditGeometryTest
     PUBLIC ${ALCEDO_INCLUDE_DIR}
 )
 target_link_libraries(MaskEditGeometryTest
     PRIVATE
+        AlcedoInProcessTestMain
         EditorRhiViewport
         EditGeometry
         GTest::gtest
@@ -1744,7 +1744,6 @@ alcedo_register_test_target(EditorViewportSuspensionTest ui)
 
 add_executable(AnalyticMaskCreationTest
     ${ALCEDO_TEST_ROOT}/ui/analytic_mask_creation_test.cpp
-    ${ALCEDO_TEST_ROOT}/ui/ui_test_main.cpp
 )
 target_include_directories(AnalyticMaskCreationTest
     PUBLIC ${ALCEDO_INCLUDE_DIR}
@@ -1752,6 +1751,7 @@ target_include_directories(AnalyticMaskCreationTest
 )
 target_link_libraries(AnalyticMaskCreationTest
     PRIVATE
+        AlcedoInProcessTestMain
         EditorMaskCreationController
         EditorViewerLogic
         EditGraph
@@ -1897,11 +1897,11 @@ alcedo_register_test_target(AdjustmentTransferDialogQmlTest ui)
 # Phase 6B: tone-curve model (pointer-drag behavior + operator params JSON).
 add_executable(EditorToneCurveModelTest
     ${ALCEDO_TEST_ROOT}/ui/editor_tone_curve_model_test.cpp
-    ${ALCEDO_TEST_ROOT}/ui/ui_test_main.cpp
 )
 target_include_directories(EditorToneCurveModelTest PUBLIC ${ALCEDO_INCLUDE_DIR} ${ALCEDO_TEST_DIR})
 target_link_libraries(EditorToneCurveModelTest
   PRIVATE
+    AlcedoInProcessTestMain
     AlbumBackendLib
     GTest::gtest
     JSON
@@ -1918,11 +1918,11 @@ alcedo_register_test_target(EditorToneCurveModelTest ui)
 # Phase 6B: pure tone-curve scene geometry (no QQuickWindow / GPU).
 add_executable(EditorToneCurveGeometryTest
     ${ALCEDO_TEST_ROOT}/ui/editor_tone_curve_geometry_test.cpp
-    ${ALCEDO_TEST_ROOT}/ui/ui_test_main.cpp
 )
 target_include_directories(EditorToneCurveGeometryTest PUBLIC ${ALCEDO_INCLUDE_DIR})
 target_link_libraries(EditorToneCurveGeometryTest
   PRIVATE
+    AlcedoInProcessTestMain
     AlbumBackendLib
     GTest::gtest
     JSON
@@ -1939,11 +1939,11 @@ alcedo_register_test_target(EditorToneCurveGeometryTest ui)
 # Phase 6D: Look panel typed models (WB / HSL / CDL / LUT) — no QML/GPU.
 add_executable(EditorLookModelTest
     ${ALCEDO_TEST_ROOT}/ui/editor_look_model_test.cpp
-    ${ALCEDO_TEST_ROOT}/ui/ui_test_main.cpp
 )
 target_include_directories(EditorLookModelTest PUBLIC ${ALCEDO_INCLUDE_DIR} ${ALCEDO_TEST_DIR})
 target_link_libraries(EditorLookModelTest
   PRIVATE
+    AlcedoInProcessTestMain
     AlbumBackendLib
     GTest::gtest
     JSON
@@ -1987,11 +1987,11 @@ alcedo_register_test_target(LutLibraryModelTest ui)
 # Phase 6D: pure CDL trackball disc geometry (no QQuickWindow / GPU).
 add_executable(EditorCdlTrackballGeometryTest
     ${ALCEDO_TEST_ROOT}/ui/editor_cdl_trackball_geometry_test.cpp
-    ${ALCEDO_TEST_ROOT}/ui/ui_test_main.cpp
 )
 target_include_directories(EditorCdlTrackballGeometryTest PUBLIC ${ALCEDO_INCLUDE_DIR})
 target_link_libraries(EditorCdlTrackballGeometryTest
   PRIVATE
+    AlcedoInProcessTestMain
     AlbumBackendLib
     GTest::gtest
     JSON
@@ -2341,7 +2341,6 @@ endif()
 
 add_executable(LanguageManagerTest
     ${ALCEDO_TEST_ROOT}/ui/language_manager_test.cpp
-    ${ALCEDO_TEST_ROOT}/ui/ui_test_main.cpp
 )
 target_include_directories(LanguageManagerTest
     PUBLIC ${ALCEDO_INCLUDE_DIR}
@@ -2349,6 +2348,7 @@ target_include_directories(LanguageManagerTest
 )
 target_link_libraries(LanguageManagerTest
     PRIVATE
+        AlcedoInProcessTestMain
         UiLocalization
         GTest::gtest
         Qt6::Test
@@ -2363,7 +2363,6 @@ alcedo_register_test_target(LanguageManagerTest ui)
 # packaged catalog translates one QML and one C++ context.
 add_executable(SimplifiedChineseCatalogTest
     ${ALCEDO_TEST_ROOT}/ui/simplified_chinese_catalog_test.cpp
-    ${ALCEDO_TEST_ROOT}/ui/ui_test_main.cpp
 )
 target_include_directories(SimplifiedChineseCatalogTest
     PUBLIC ${ALCEDO_INCLUDE_DIR}
@@ -2371,6 +2370,7 @@ target_include_directories(SimplifiedChineseCatalogTest
 )
 target_link_libraries(SimplifiedChineseCatalogTest
     PRIVATE
+        AlcedoInProcessTestMain
         GTest::gtest
         Qt6::Core
 )

@@ -703,6 +703,13 @@ void ApplicationModuleHost::ShutdownModules() {
 
 ApplicationModuleHost::~ApplicationModuleHost() {
   ShutdownModules();
+  // The session-owner worker calls the observers that EditorSessionController installed, and a
+  // callback it already copied still runs after the controller clears its observer slots. The
+  // Shutdown command that ShutdownModules queued may still be running there, so join the worker
+  // before any module that receives session callbacks is destroyed.
+  if (editor_session_runtime_ && editor_session_runtime_->service) {
+    editor_session_runtime_->service->StopCommandExecutor();
+  }
 
   // Destroy explicitly so the lifecycle observer records the actual object
   // lifetime, including non-QObject infrastructure, and so dependent modules

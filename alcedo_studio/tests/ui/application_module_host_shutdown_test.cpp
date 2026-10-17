@@ -7,7 +7,8 @@
 /// analysis writes released by an export barrier, repacks the project
 /// package only when the user entered the project, and removes the runtime
 /// workspace after the host closes the project database. On Windows a workspace file that
-/// stays locked is reported with the process that holds it.
+/// stays locked is reported with the process that holds it. The editor session worker finishes
+/// its callbacks before the host destroys the controller that receives them.
 
 #include "ui/album_backend_test_fixture.hpp"
 
@@ -20,11 +21,15 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <thread>
 #include <vector>
 
+#include "app/editor_session_service.hpp"
 #include "ui/alcedo_main/album_backend/background_task_controller.hpp"
 #include "ui/welcome_project_test_support.hpp"
 
@@ -142,6 +147,46 @@ TEST_F(ApplicationModuleHostShutdownTests,
   EXPECT_EQ(tasks->RunningCount(), 0);
   EXPECT_FALSE(host.db_write_barrier().IsHeld());
   EXPECT_FALSE(sink->HasPendingWrites());
+}
+
+// Issue 414: ShutdownModules queues the Shutdown command on the session-owner worker and returns.
+// The worker reduces it and calls the result observer that EditorSessionController installed,
+// while the host destructor went on to destroy that controller; a callback the worker had already
+// copied then reached a destroyed QObject. This observer stands in for the controller's: it holds
+// the worker inside the Shutdown result long enough for the destructor to reach the controller,
+// and records whether the controller was destroyed while the callback ran.
+TEST_F(ApplicationModuleHostShutdownTests,
+       SessionWorkerFinishesShutdownResultBeforeControllerIsDestroyed) {
+  using LifecycleEvent                = ApplicationModuleHost::LifecycleEvent;
+  constexpr auto    kCallbackDuration = std::chrono::milliseconds(300);
+  std::atomic<bool> controller_destroyed{false};
+  std::atomic<int>  shutdown_results{0};
+  std::atomic<int>  shutdown_results_after_controller_destroyed{0};
+  {
+    ApplicationModuleHost host(nullptr, [&controller_destroyed](const LifecycleEvent& event) {
+      if (event.kind == LifecycleEvent::Kind::Destroyed &&
+          event.type_name == "EditorSessionController") {
+        controller_destroyed.store(true);
+      }
+    });
+    auto*                 service = host.editor_session_service();
+    ASSERT_NE(service, nullptr);
+    service->SetResultObserver([&](const EditorSessionResult& result) {
+      if (result.kind != EditorSessionResultKind::StateChanged ||
+          result.state != EditorSessionState::ShuttingDown) {
+        return;
+      }
+      std::this_thread::sleep_for(kCallbackDuration);
+      shutdown_results.fetch_add(1);
+      if (controller_destroyed.load()) {
+        shutdown_results_after_controller_destroyed.fetch_add(1);
+      }
+    });
+  }
+
+  EXPECT_TRUE(controller_destroyed.load());
+  EXPECT_EQ(shutdown_results.load(), 1);
+  EXPECT_EQ(shutdown_results_after_controller_destroyed.load(), 0);
 }
 
 TEST_F(ApplicationModuleHostShutdownTests, ShutdownWithUnenteredProjectSkipsRepack) {
