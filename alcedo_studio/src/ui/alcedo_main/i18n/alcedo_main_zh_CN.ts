@@ -6232,6 +6232,121 @@ Create a new layer above it and draw the Mask there?</source>
     </message>
 </context>
 <context>
+    <name>SearchPalette</name>
+    <message>
+        <source>Search photos, cameras, lenses, dates</source>
+        <translation>搜索照片、相机、镜头、日期</translation>
+    </message>
+    <message>
+        <source>Search photos</source>
+        <translation>搜索照片</translation>
+    </message>
+    <message>
+        <source>Natural language</source>
+        <translation>自然语言</translation>
+    </message>
+    <message>
+        <source>Search settings</source>
+        <translation>搜索设置</translation>
+    </message>
+    <message>
+        <source>Esc</source>
+        <translation>Esc</translation>
+    </message>
+    <message>
+        <source>Close search</source>
+        <translation>关闭搜索</translation>
+    </message>
+    <message>
+        <source>Type to search photos</source>
+        <translation>输入内容以搜索照片</translation>
+    </message>
+    <message>
+        <source>Recent searches</source>
+        <translation>最近搜索</translation>
+    </message>
+    <message>
+        <source>Commands</source>
+        <translation>命令</translation>
+    </message>
+    <message>
+        <source>Search photos by meaning for &quot;%1&quot;</source>
+        <translation>按语义搜索“%1”的照片</translation>
+    </message>
+    <message>
+        <source>Search photos for &quot;%1&quot;</source>
+        <translation>搜索“%1”的照片</translation>
+    </message>
+    <message>
+        <source>Enter</source>
+        <translation>Enter</translation>
+    </message>
+    <message>
+        <source>Filters</source>
+        <translation>筛选</translation>
+    </message>
+    <message>
+        <source>Photos</source>
+        <translation>照片</translation>
+    </message>
+    <message>
+        <source>View all</source>
+        <translation>查看全部</translation>
+    </message>
+    <message>
+        <source>Press Enter to search by meaning.</source>
+        <translation>按回车按语义搜索。</translation>
+    </message>
+    <message>
+        <source>No matching photos in this folder</source>
+        <translation>此文件夹中没有匹配的照片</translation>
+    </message>
+    <message>
+        <source>Search in</source>
+        <translation>搜索范围</translation>
+    </message>
+    <message>
+        <source>File name</source>
+        <translation>文件名</translation>
+    </message>
+    <message>
+        <source>EXIF info</source>
+        <translation>EXIF 信息</translation>
+    </message>
+    <message>
+        <source>AI description</source>
+        <translation>AI 描述文本</translation>
+    </message>
+    <message>
+        <source>AI tags</source>
+        <translation>AI 标签</translation>
+    </message>
+    <message>
+        <source>Natural language search</source>
+        <translation>自然语言搜索</translation>
+    </message>
+    <message>
+        <source>Search by meaning with the semantic model. Press Enter to run it.</source>
+        <translation>使用语义模型按含义搜索。按回车运行。</translation>
+    </message>
+    <message>
+        <source>Search</source>
+        <translation>搜索</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>关闭</translation>
+    </message>
+    <message>
+        <source>Source file is unavailable</source>
+        <translation>源文件不可用</translation>
+    </message>
+    <message>
+        <source>Preview image failed to load</source>
+        <translation>预览图像加载失败</translation>
+    </message>
+</context>
+<context>
     <name>SearchableAdjustmentCombo</name>
     <message>
         <location filename="../qml/SearchableAdjustmentCombo.qml" line="+36"/>

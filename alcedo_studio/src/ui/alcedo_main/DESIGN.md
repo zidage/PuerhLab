@@ -10,7 +10,7 @@ Shared components: `IconActionButton.qml`, `CollapsibleSection.qml`,
 `DialogActionButton.qml`, `IconButton.qml`, `SegmentedCardSwitcher.qml`,
 `SlidingIconNav.qml`, `DateFilterSection.qml`, `DateCommitGraph.qml`,
 `AdjustmentSlider.qml`, `ThemedProgressBar.qml`, `ThemeCheckBox.qml`,
-`SkeletonBlock.qml`, `AlertBadge.qml`
+`ThemeSwitch.qml`, `SkeletonBlock.qml`, `AlertBadge.qml`
 
 Per-file decisions: `docs/VI/README.md`. That catalog specializes this global
 system for individual QML files and is updated with each approved visual change.
@@ -497,6 +497,17 @@ the two side columns read as one family.
 | `editorLutTileIconSize` | 36 | LUT tile cube placeholder icon |
 | `editorAdjustmentHeaderMinHeight` | 58 | Node-name / EXIF header under the scope: EXIF caption line, `spaceXs` gap, compact Mask-tool row |
 | `collectionsSidebarWidth` | 276 | Persistent left collections column |
+
+### Search palette
+
+`SearchPalette.qml` is the global search launcher (see `docs/VI/README.md`).
+
+| Token | px | Use |
+| --- | --- | --- |
+| `searchPaletteMaxWidth` | 960 | Widest main column of the palette (settings panel closed) |
+| `searchSettingsPanelWidth` | 260 | Settings side panel width, added at the right side when open |
+| `searchPaletteWindowMarginX` | 28 | Smallest left and right gap between the palette and the window |
+| `searchPaletteWindowMarginY` | 36 | Smallest top and bottom gap between the palette and the window |
 
 **Editor close confirm:** `EditorCloseConfirmDialog` uses the same blur +
 `overlayColor` modal shell and `DialogActionButton` actions (Cancel / Discard /
@@ -1035,6 +1046,7 @@ row delegate and arrow affordance automatically.
 | `AdjustmentSlider.qml` | Shared numeric slider + field bound to `EditorAdjustmentValueModel` |
 | `ThemedProgressBar.qml` | Shared determinate / indeterminate progress track (Background Tasks + Export) |
 | `ThemeCheckBox.qml` | Monochrome check row (Adjustment Transfer / Export): selected well + check, muted label when off |
+| `ThemeSwitch.qml` | Monochrome switch row (search settings): label + track; on = selected well + ink knob, off = sunken track + muted knob |
 | `AppContextMenu.qml` | Shared dark popup menu shell (`Menu` + `AppMenuItem` delegate, fade transition, `openAt`) |
 | `AppMenuItem.qml` | Shared dark menu row (state gutter, wrapping label, sub-menu arrow, hover wash) |
 | `AppMenuSeparator.qml` | Shared 1 px menu group divider |

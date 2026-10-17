@@ -364,12 +364,11 @@ Item {
         onClosed: appModules.projectLaunch.StartPendingLaunch()
     }
 
-    GlobalSearchDialog {
+    SearchPalette {
         id: globalSearchDialogObj
         objectName: "globalSearchDialog"
         searchController: appModules.search
         interactionPolicyController: appModules.interactionPolicy
-        theme: host
         blurSource: root.blurSource
         cornerRadius: host.windowCornerRadius
     }

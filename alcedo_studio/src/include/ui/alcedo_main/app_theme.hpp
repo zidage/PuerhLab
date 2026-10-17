@@ -96,6 +96,11 @@ class AppTheme final : public QObject {
   Q_PROPERTY(int editorLutTileIconSize READ editorLutTileIconSize CONSTANT)
   // Persistent left collections column in the application shell (see DESIGN.md).
   Q_PROPERTY(int collectionsSidebarWidth READ collectionsSidebarWidth CONSTANT)
+  // Search palette geometry (see DESIGN.md "Search palette").
+  Q_PROPERTY(int searchPaletteMaxWidth READ searchPaletteMaxWidth CONSTANT)
+  Q_PROPERTY(int searchSettingsPanelWidth READ searchSettingsPanelWidth CONSTANT)
+  Q_PROPERTY(int searchPaletteWindowMarginX READ searchPaletteWindowMarginX CONSTANT)
+  Q_PROPERTY(int searchPaletteWindowMarginY READ searchPaletteWindowMarginY CONSTANT)
   // Welcome surface card geometry and the skeleton placeholder cycle (see DESIGN.md
   // "Welcome surface").
   Q_PROPERTY(int welcomeCardWidth READ welcomeCardWidth CONSTANT)
@@ -342,6 +347,10 @@ class AppTheme final : public QObject {
   auto        editorLutTileCompactWidth() const -> int;
   auto        editorLutTileIconSize() const -> int;
   auto        collectionsSidebarWidth() const -> int;
+  auto        searchPaletteMaxWidth() const -> int;
+  auto        searchSettingsPanelWidth() const -> int;
+  auto        searchPaletteWindowMarginX() const -> int;
+  auto        searchPaletteWindowMarginY() const -> int;
   auto        welcomeCardWidth() const -> int;
   auto        welcomeCardHeight() const -> int;
   auto        welcomeSidebarWidth() const -> int;
