@@ -191,7 +191,7 @@ class FilmstripLibrary final : public QObject {
   }
 
  signals:
-  void thumbnailUpdated(int elementId, QString dataUrl, bool loading, bool missingSource,
+  void thumbnailUpdated(int elementId, QString thumbUrl, bool loading, bool missingSource,
                         QString errorText);
 
  private:

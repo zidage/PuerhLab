@@ -183,35 +183,36 @@ auto AlbumBrowseService::ElementStoreForRead(std::string_view operation) const -
   return storage->GetElementStore();
 }
 
-auto AlbumBrowseService::ReadAlbumQuery(sl_element_id_t                  folder_id,
-                                        const std::optional<FilterNode>& filter,
-                                        const AlbumQueryOptions&         options,
-                                        const std::string&               active_semantic_model_key,
-                                        const AlbumQueryRead& read) const -> AlbumQueryResult {
+auto AlbumBrowseService::ReadAlbumQuery(
+    sl_element_id_t folder_id, const std::optional<FilterNode>& filter,
+    const AlbumQueryOptions& options, const std::string& active_semantic_model_key,
+    const AlbumQueryRead& read, const std::optional<duckorm::SqlFragment>& relevance_select) const
+    -> AlbumQueryResult {
   auto& store = ElementStoreForRead("ReadAlbumQuery");
   return store.ReadAlbumQuery(folder_id, CompileFilterPredicate(filter), options,
-                              active_semantic_model_key, read);
+                              active_semantic_model_key, read, relevance_select);
 }
 
 auto AlbumBrowseService::ReadAlbumFilePosition(
     sl_element_id_t folder_id, const std::optional<FilterNode>& filter,
     const AlbumQueryOptions& options, const std::string& active_semantic_model_key,
-    sl_element_id_t file_id, const std::optional<AlbumGroupKey>& preferred_group) const
+    sl_element_id_t file_id, const std::optional<AlbumGroupKey>& preferred_group,
+    const std::optional<duckorm::SqlFragment>& relevance_select) const
     -> std::optional<AlbumFilePosition> {
   auto& store = ElementStoreForRead("ReadAlbumFilePosition");
   return store.ReadAlbumFilePosition(folder_id, CompileFilterPredicate(filter), options,
-                                     active_semantic_model_key, file_id, preferred_group);
+                                     active_semantic_model_key, file_id, preferred_group,
+                                     relevance_select);
 }
 
-auto AlbumBrowseService::ReadAlbumFileIds(sl_element_id_t                  folder_id,
-                                          const std::optional<FilterNode>& filter,
-                                          const AlbumQueryOptions&         options,
-                                          const std::string& active_semantic_model_key,
-                                          int64_t begin, int64_t end) const
+auto AlbumBrowseService::ReadAlbumFileIds(
+    sl_element_id_t folder_id, const std::optional<FilterNode>& filter,
+    const AlbumQueryOptions& options, const std::string& active_semantic_model_key, int64_t begin,
+    int64_t end, const std::optional<duckorm::SqlFragment>& relevance_select) const
     -> std::vector<sl_element_id_t> {
   auto& store = ElementStoreForRead("ReadAlbumFileIds");
   return store.ReadAlbumFileIds(folder_id, CompileFilterPredicate(filter), options,
-                                active_semantic_model_key, begin, end);
+                                active_semantic_model_key, begin, end, relevance_select);
 }
 
 auto AlbumBrowseService::ReadAlbumFileRows(std::span<const sl_element_id_t> file_ids) const

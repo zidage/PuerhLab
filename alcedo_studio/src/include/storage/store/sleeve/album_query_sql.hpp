@@ -82,8 +82,12 @@ inline constexpr const char* kMatchSetTable = "SearchMatchSet";
 /**
  * @brief The one comparison definition of page, position, and id reads: group key, selected
  *        photo sort, the date group's full timestamp when it is not already the sort, file id.
+ *
+ * @param has_relevance The match set holds the relevance of a natural-language search (column
+ *        `s.relevance`). Without a selected photo sort the photo order is then the relevance
+ *        descending and the file id ascending, also inside a date group.
  */
-[[nodiscard]] auto OccurrenceOrderTerms(const AlbumQueryOptions& options)
+[[nodiscard]] auto OccurrenceOrderTerms(const AlbumQueryOptions& options, bool has_relevance)
     -> std::vector<duckorm::OrderTerm>;
 
 }  // namespace alcedo::album_query_sql

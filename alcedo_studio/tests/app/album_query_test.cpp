@@ -12,7 +12,9 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <array>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -20,6 +22,7 @@
 #include <filesystem>
 #include <functional>
 #include <future>
+#include <initializer_list>
 #include <iostream>
 #include <map>
 #include <memory>
@@ -40,6 +43,10 @@
 #include "sleeve/sleeve_filter/filter_combo.hpp"
 #include "sleeve/sleeve_filter/filter_factory.hpp"
 #include "storage/mapper/sleeve/element/element_mapper.hpp"
+#include "storage/store/semantic/semantic_embedding_store.hpp"
+#include "storage/store/semantic/semantic_model_registry.hpp"
+#include "storage/store/semantic/semantic_records.hpp"
+#include "storage/store/semantic/semantic_vector_search.hpp"
 #include "storage/store/sleeve/element_store.hpp"
 #include "support/non_raw_import_files.hpp"
 #include "utils/clock/time_provider.hpp"
@@ -1257,6 +1264,235 @@ TEST_F(AlbumQueryTest, LargeLibraryPagesStayBoundedAndRecordTimings) {
                                "NULLS LAST, s.file_id ASC NULLS LAST LIMIT 1000 OFFSET " +
                                    std::to_string(kFiles - 1000),
                                1);
+}
+
+// Natural-language search in the library reads (global_search_redesign_plan.md, Phase GS2):
+// the relevance select of SemanticVectorSearch joins the match set of each read.
+
+constexpr const char*          kRelevanceModel = "relevance-test-model";
+
+/// Query similarity of each fixture photo (a to h). The neutral similarity is 0, so the
+/// relevance equals it. The scope has fewer than 30 files: a file is kept when its similarity is
+/// at least SemanticVectorSearch::kMinQuerySimilarity, so d and g are not kept.
+constexpr std::array<float, 8> kFixtureQuerySimilarity{0.30F, 0.50F, 0.25F, 0.05F,
+                                                       0.40F, 0.60F, 0.02F, 0.45F};
+
+/// Unit vector with cosine similarity @p similarity to axis 0. Axis 1 + @p index holds the rest,
+/// so no file vector has a part on the neutral axis.
+auto FileEmbeddingWithQuerySimilarity(size_t index, float similarity) -> std::vector<float> {
+  std::vector<float> embedding(kSemanticEmbeddingDim, 0.0F);
+  embedding.at(0)         = similarity;
+  embedding.at(1 + index) = std::sqrt(1.0F - (similarity * similarity));
+  return embedding;
+}
+
+auto AxisVector(size_t axis) -> std::vector<float> {
+  std::vector<float> vector(kSemanticEmbeddingDim, 0.0F);
+  vector.at(axis) = 1.0F;
+  return vector;
+}
+
+class AlbumQueryRelevanceTest : public AlbumQueryTest {
+ protected:
+  /// Register the model, store one embedding per fixture photo, and return the relevance
+  /// select of the root scope for the query on axis 0.
+  auto BuildFixtureRelevanceSelect(ProjectService& project) -> duckorm::SqlFragment {
+    auto&       storage = *project.GetStorage();
+    std::string error;
+    EXPECT_TRUE(storage.GetSemanticModelRegistry().UpsertModel(
+        SemanticModelRecord{.model_key_     = kRelevanceModel,
+                            .model_id_      = kRelevanceModel,
+                            .revision_      = "test-rev",
+                            .embedding_dim_ = kSemanticEmbeddingDim},
+        &error))
+        << error;
+    for (const auto& row : Store(project).ListFilesInFolder(0)) {
+      const auto index = index_of_.at(row.file_id_);
+      EXPECT_TRUE(storage.GetSemanticEmbeddingStore().UpsertImageEmbedding(
+          SemanticImageEmbeddingRecord{.file_id_   = row.file_id_,
+                                       .image_id_  = row.image_id_,
+                                       .model_key_ = kRelevanceModel,
+                                       .embedding_ = FileEmbeddingWithQuerySimilarity(
+                                           index, kFixtureQuerySimilarity.at(index))},
+          &error))
+          << error;
+    }
+    return storage.GetSemanticVectorSearch().BuildRelevanceSelect(
+        0, SemanticQueryEmbedding{.model_key_ = kRelevanceModel,
+                                  .dimension_ = kSemanticEmbeddingDim,
+                                  .query_     = AxisVector(0),
+                                  .neutral_   = AxisVector(kSemanticEmbeddingDim - 1)});
+  }
+
+  /// Fixture ids of photos named by their fixture index (a = 0 ... h = 7).
+  auto IdsOf(std::initializer_list<size_t> indices) const -> std::vector<sl_element_id_t> {
+    std::vector<sl_element_id_t> ids;
+    for (const auto index : indices) {
+      ids.push_back(ids_.at(index));
+    }
+    return ids;
+  }
+
+  auto ReadAllWithRelevance(ProjectService& project, const AlbumQueryOptions& options,
+                            const duckorm::SqlFragment&                relevance,
+                            const std::optional<duckorm::SqlFragment>& filter = std::nullopt)
+      -> AlbumQueryResult {
+    return Store(project).ReadAlbumQuery(
+        0, filter, options, kActiveModel,
+        AlbumQueryRead{
+            .offset_ = 0, .limit_ = 1000, .read_groups_ = true, .read_statistics_ = true},
+        relevance);
+  }
+};
+
+auto GroupCounts(const AlbumQueryResult& result) -> std::vector<std::pair<std::string, int64_t>> {
+  std::vector<std::pair<std::string, int64_t>> counts;
+  for (const auto& group : result.groups_) {
+    counts.emplace_back(KeyText(group.key_), group.photo_count_);
+  }
+  return counts;
+}
+
+auto BucketCounts(const std::vector<StorageStatsBucket>& buckets)
+    -> std::vector<std::pair<std::string, int>> {
+  std::vector<std::pair<std::string, int>> counts;
+  for (const auto& bucket : buckets) {
+    counts.emplace_back(bucket.label_, bucket.count_);
+  }
+  return counts;
+}
+
+TEST_F(AlbumQueryRelevanceTest, SemanticResultShowsKeptFilesInRelevanceOrderOnEveryPage) {
+  ProjectService project(db_path_, meta_path_);
+  BuildFixture(project);
+  const auto relevance = BuildFixtureRelevanceSelect(project);
+
+  // f 0.60, b 0.50, h 0.45, e 0.40, a 0.30, c 0.25; d and g are below the similarity limit.
+  const auto expected  = IdsOf({5, 1, 7, 4, 0, 2});
+  const auto result    = ReadAllWithRelevance(project, AlbumQueryOptions{}, relevance);
+  EXPECT_EQ(RowIds(result), expected);
+  EXPECT_EQ(result.unique_file_count_, 6);
+  EXPECT_EQ(result.occurrence_count_, 6);
+
+  // Pages of 4 read the same order, with no repeated and no missing file.
+  std::vector<sl_element_id_t> paged;
+  for (int64_t offset = 0; offset < 8; offset += 4) {
+    const auto page =
+        Store(project).ReadAlbumQuery(0, std::nullopt, AlbumQueryOptions{}, kActiveModel,
+                                      AlbumQueryRead{.offset_ = offset, .limit_ = 4}, relevance);
+    EXPECT_EQ(page.unique_file_count_, 6);
+    for (const auto& row : page.rows_) {
+      paged.push_back(row.photo_.file_id_);
+    }
+  }
+  EXPECT_EQ(paged, expected);
+
+  // Without the relevance select the same read has every file in file id order.
+  auto all_ids = ids_;
+  std::sort(all_ids.begin(), all_ids.end());
+  EXPECT_EQ(RowIds(ReadAll(project, AlbumQueryOptions{})), all_ids);
+}
+
+TEST_F(AlbumQueryRelevanceTest, SelectedSortReplacesRelevanceOrder) {
+  ProjectService project(db_path_, meta_path_);
+  BuildFixture(project);
+  const auto relevance = BuildFixtureRelevanceSelect(project);
+  const auto photo     = [this](sl_element_id_t id) -> const FixturePhoto& { return Photo(id); };
+  const auto kept      = IdsOf({5, 1, 7, 4, 0, 2});
+
+  for (const auto direction : {SortDirection::kAscending, SortDirection::kDescending}) {
+    const AlbumQueryOptions options{.sort_field_     = AlbumSortField::kCaptureTime,
+                                    .sort_direction_ = direction};
+    const auto              result = ReadAllWithRelevance(project, options, relevance);
+    EXPECT_EQ(RowIds(result),
+              ExpectedFlatOrder(kept, photo, AlbumSortField::kCaptureTime, direction))
+        << "direction " << static_cast<int>(direction);
+    EXPECT_EQ(result.unique_file_count_, 6);
+  }
+  // Ascending capture time: f, e, a, then b and c (same time, file id), then h (unknown).
+  EXPECT_EQ(
+      RowIds(ReadAllWithRelevance(
+          project, AlbumQueryOptions{.sort_field_ = AlbumSortField::kCaptureTime}, relevance)),
+      IdsOf({5, 4, 0, 1, 2, 7}));
+}
+
+TEST_F(AlbumQueryRelevanceTest, GroupedSemanticResultKeepsGroupOrderAndRanksInsideGroups) {
+  ProjectService project(db_path_, meta_path_);
+  BuildFixture(project);
+  const auto relevance = BuildFixtureRelevanceSelect(project);
+
+  // Camera groups keep their key order (unknown last); inside each group, relevance order.
+  const auto cameras   = ReadAllWithRelevance(
+      project, AlbumQueryOptions{.group_field_ = AlbumGroupField::kCameraModel}, relevance);
+  EXPECT_EQ(GroupCounts(cameras),
+            (std::vector<std::pair<std::string, int64_t>>{
+                {"Canon R5", 2}, {"Nikon Z8", 2}, {"Sony A7", 1}, {"<unknown>", 1}}));
+  EXPECT_EQ(RowIds(cameras), IdsOf({1, 0, 4, 2, 5, 7}));
+
+  // Capture days keep the newest day first. Inside 2026-06-07 the relevance order (b, a, c)
+  // replaces the timestamp order (b, c, a).
+  const auto days = ReadAllWithRelevance(
+      project, AlbumQueryOptions{.group_field_ = AlbumGroupField::kCaptureDay}, relevance);
+  EXPECT_EQ(GroupCounts(days),
+            (std::vector<std::pair<std::string, int64_t>>{
+                {"2026-06-07", 3}, {"2026-06-06", 1}, {"2026-06-05", 1}, {"<unknown>", 1}}));
+  EXPECT_EQ(RowIds(days), IdsOf({1, 0, 2, 4, 5, 7}));
+}
+
+TEST_F(AlbumQueryRelevanceTest, SemanticStatsCountOnlyKeptFiles) {
+  ProjectService project(db_path_, meta_path_);
+  BuildFixture(project);
+  const auto relevance = BuildFixtureRelevanceSelect(project);
+
+  const auto result    = ReadAllWithRelevance(project, AlbumQueryOptions{}, relevance);
+  ASSERT_TRUE(result.statistics_.has_value());
+  EXPECT_EQ(result.statistics_->total_photo_count_, 6);
+  EXPECT_EQ(BucketCounts(result.statistics_->camera_stats_),
+            (std::vector<std::pair<std::string, int>>{
+                {"Canon R5", 2}, {"Nikon Z8", 2}, {"(unknown)", 1}, {"Sony A7", 1}}));
+  EXPECT_EQ(BucketCounts(result.statistics_->rating_stats_),
+            (std::vector<std::pair<std::string, int>>{{"5", 2}, {"3", 3}, {"1", 1}}));
+
+  const auto stats = Store(project).BuildFolderStats(0, std::nullopt, kActiveModel, relevance);
+  EXPECT_EQ(stats.total_photo_count_, 6);
+  EXPECT_EQ(BucketCounts(stats.camera_stats_), BucketCounts(result.statistics_->camera_stats_));
+
+  // An Inspector filter combines with the kept set: rating 3 or above removes f (rating 1).
+  FilterNode rating_filter{
+      FilterNode::Type::Condition,
+      {},
+      {},
+      FieldCondition{
+          .field_ = FilterField::Rating, .op_ = CompareOp::GREATER_EQUAL, .value_ = int64_t{3}},
+      std::nullopt};
+  const auto filtered =
+      ReadAllWithRelevance(project, AlbumQueryOptions{}, relevance, CompileFilter(rating_filter));
+  EXPECT_EQ(RowIds(filtered), IdsOf({1, 7, 4, 0, 2}));
+  ASSERT_TRUE(filtered.statistics_.has_value());
+  EXPECT_EQ(filtered.statistics_->total_photo_count_, 5);
+  EXPECT_EQ(BucketCounts(filtered.statistics_->camera_stats_),
+            (std::vector<std::pair<std::string, int>>{
+                {"Canon R5", 2}, {"Nikon Z8", 2}, {"(unknown)", 1}}));
+}
+
+TEST_F(AlbumQueryRelevanceTest, SemanticSelectAllReturnsTheKeptSet) {
+  ProjectService project(db_path_, meta_path_);
+  BuildFixture(project);
+  const auto relevance = BuildFixtureRelevanceSelect(project);
+  auto&      store     = Store(project);
+
+  EXPECT_EQ(store.ReadAlbumFileIds(0, std::nullopt, AlbumQueryOptions{}, kActiveModel, 0, 1000,
+                                   relevance),
+            IdsOf({5, 1, 7, 4, 0, 2}));
+  // The file position uses the same kept set and order.
+  const auto position_of_h = store.ReadAlbumFilePosition(
+      0, std::nullopt, AlbumQueryOptions{}, kActiveModel, ids_.at(7), std::nullopt, relevance);
+  ASSERT_TRUE(position_of_h.has_value());
+  EXPECT_EQ(position_of_h->occurrence_index_, 2);
+  EXPECT_FALSE(store
+                   .ReadAlbumFilePosition(0, std::nullopt, AlbumQueryOptions{}, kActiveModel,
+                                          ids_.at(3), std::nullopt, relevance)
+                   .has_value());
 }
 
 }  // namespace

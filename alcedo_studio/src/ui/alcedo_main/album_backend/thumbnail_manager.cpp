@@ -147,7 +147,7 @@ void ThumbnailManager::SetThumbnailVisible(sl_element_id_t elementId, image_id_t
       if (pin.image_id_ == imageId) {
         pin.ref_count_++;
         const auto* item = library_.FindAlbumItem(elementId);
-        if (item != nullptr && item->thumb_data_url.isEmpty() && !item->thumb_loading &&
+        if (item != nullptr && item->thumb_url.isEmpty() && !item->thumb_loading &&
             item->thumb_error_text.isEmpty()) {
           RequestThumbnail(elementId, imageId, maxEdge);
         }
@@ -265,8 +265,8 @@ void ThumbnailManager::RequestThumbnail(sl_element_id_t elementId, image_id_t im
   const auto key = MakeThumbnailKey(elementId, maxEdge);
 
   const auto* item = library_.FindAlbumItem(elementId);
-  const QString existing_data_url = item != nullptr ? item->thumb_data_url : QString{};
-  UpdateThumbnailState(elementId, existing_data_url, true, false);
+  const QString existing_thumb_url = item != nullptr ? item->thumb_url : QString{};
+  UpdateThumbnailState(elementId, existing_thumb_url, true, false);
 
   // Strategy B: create active flag for this request key.
   // When this key is unpinned, the flag is set to false,
@@ -467,7 +467,7 @@ bool ThumbnailManager::RefreshCurrentThumbnail(sl_element_id_t elementId, image_
   return !pinned_keys.empty();
 }
 
-void ThumbnailManager::UpdateThumbnailState(sl_element_id_t elementId, const QString& dataUrl,
+void ThumbnailManager::UpdateThumbnailState(sl_element_id_t elementId, const QString& thumbUrl,
                                             bool loading, bool missingSource,
                                             const QString& errorText) {
   auto* item = library_.FindAlbumItem(elementId);
@@ -475,21 +475,20 @@ void ThumbnailManager::UpdateThumbnailState(sl_element_id_t elementId, const QSt
     return;
   }
 
-  if (item->thumb_data_url == dataUrl && item->thumb_loading == loading &&
+  if (item->thumb_url == thumbUrl && item->thumb_loading == loading &&
       item->thumb_missing_source == missingSource && item->thumb_error_text == errorText) {
     return;
   }
 
-  item->thumb_data_url        = dataUrl;
+  item->thumb_url             = thumbUrl;
   item->thumb_loading         = loading;
   item->thumb_missing_source  = missingSource;
   item->thumb_error_text      = errorText;
 
-  library_.model().updateThumbnailState(elementId, dataUrl, loading, missingSource,
-                                                  errorText);
+  library_.model().updateThumbnailState(elementId, thumbUrl, loading, missingSource, errorText);
 
-  library_.EmitThumbnailUpdated(static_cast<uint>(elementId), dataUrl, loading, missingSource,
-                                 errorText);
+  library_.EmitThumbnailUpdated(static_cast<uint>(elementId), thumbUrl, loading, missingSource,
+                                errorText);
 }
 
 bool ThumbnailManager::IsThumbnailPinned(sl_element_id_t elementId) const {
@@ -603,7 +602,7 @@ void ThumbnailManager::ReleaseVisibleThumbnailPins() {
   for (const auto& key : pinned_keys) {
     auto* item = library_.FindAlbumItem(key.element_id);
     if (item) {
-      item->thumb_data_url.clear();
+      item->thumb_url.clear();
       item->thumb_loading = false;
     }
 

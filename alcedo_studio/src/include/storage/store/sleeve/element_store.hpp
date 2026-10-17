@@ -46,12 +46,15 @@ struct FolderStatsView {
  * @brief Shared FROM/JOIN/WHERE scope for album file queries.
  *
  * @details @c from_where_ is the SQL text after SELECT columns (starts with FROM).
- * @c binds_ holds prepared-statement values for any `?` placeholders in that text
- * (extra filter predicates only; folder scope ids stay embedded as trusted integers).
+ * @c binds_ holds prepared-statement values for any `?` placeholders in that text (the
+ * relevance select first, then the extra filter predicates; folder scope ids stay embedded as
+ * trusted integers).
  */
 struct ScopedFileQuery {
   std::string          from_where_;
   duckorm::SqlFragment binds_{};
+  /// True when the scope joins a relevance select (alias `rel`, column `rel.relevance`).
+  bool                 joins_relevance_ = false;
 };
 
 /// Build the shared scope query fragment (FROM ... JOIN ... WHERE) for file-in-folder queries.
@@ -61,9 +64,15 @@ struct ScopedFileQuery {
 /// Aliases: `e` Element, `fi` FileImage, `i` Image (with its search columns). Predicates on
 /// other tables (AI search text, semantic labels, BM25 documents) are subqueries on `e.id`,
 /// so the scope never joins them.
-auto BuildScopedFileQuery(sl_element_id_t                            folder_id,
-                          const std::optional<duckorm::SqlFragment>& extra_filter = std::nullopt)
-    -> ScopedFileQuery;
+///
+/// @param relevance_select When set, a SELECT of `file_id, image_id, relevance` (see
+///        SemanticVectorSearch::BuildRelevanceSelect) built for the same @p folder_id. The scope
+///        then joins it as `rel` on the file and image ids, so only its files match, and AND-s
+///        it with @p extra_filter. Without it the scope joins nothing more.
+auto BuildScopedFileQuery(
+    sl_element_id_t                            folder_id,
+    const std::optional<duckorm::SqlFragment>& extra_filter     = std::nullopt,
+    const std::optional<duckorm::SqlFragment>& relevance_select = std::nullopt) -> ScopedFileQuery;
 
 struct FileListEntry {
   sl_element_id_t file_id_  = 0;
@@ -218,12 +227,15 @@ class ElementStore {
                                      const sl_element_id_t              folder_id)
       -> std::vector<sl_element_id_t>;
   /// Total, date, camera, lens, semantic label (when @p active_semantic_model_key is set), and
-  /// rating buckets of the files that match @p extra_filter. The filter is evaluated once: the
+  /// rating buckets of the files that match @p extra_filter (and, when set, are kept by
+  /// @p relevance_select; see BuildScopedFileQuery). The filter is evaluated once: the
   /// matching rows go into a temporary table on this store's connection and every bucket is
   /// read from it. Throws std::runtime_error when a statement fails.
   auto BuildFolderStats(sl_element_id_t                            folder_id,
                         const std::optional<duckorm::SqlFragment>& extra_filter = std::nullopt,
-                        const std::string& active_semantic_model_key = {}) const -> FolderStatsView;
+                        const std::string&                         active_semantic_model_key = {},
+                        const std::optional<duckorm::SqlFragment>& relevance_select =
+                            std::nullopt) const -> FolderStatsView;
   /// One page of the files that match @p extra_filter (ordered by element id; @p limit 0
   /// returns every row), the total, and the BuildFolderStats buckets, from one evaluation of
   /// the filter. Throws std::runtime_error when a statement fails.
@@ -282,15 +294,21 @@ class ElementStore {
    * set is dropped before the connection is released. The label group and the label sort use
    * the canonical labels of @p active_semantic_model_key only.
    *
+   * With @p relevance_select (see BuildScopedFileQuery), the match set holds only the files
+   * that the select keeps, with their relevance, and the select runs once for the call. Without
+   * a selected photo sort the photos then order by relevance descending, then file id (see
+   * AlbumQueryOptions).
+   *
    * @throws std::invalid_argument for invalid options or page bounds (a limit above
    *         kMaxAlbumQueryPageRows or a negative offset).
    * @throws std::runtime_error with the DuckDB message when a statement fails.
    */
-  auto ReadAlbumQuery(sl_element_id_t                            folder_id,
-                      const std::optional<duckorm::SqlFragment>& extra_filter,
-                      const AlbumQueryOptions&                   options,
-                      const std::string&                         active_semantic_model_key,
-                      const AlbumQueryRead&                      read) const -> AlbumQueryResult;
+  auto ReadAlbumQuery(
+      sl_element_id_t folder_id, const std::optional<duckorm::SqlFragment>& extra_filter,
+      const AlbumQueryOptions& options, const std::string& active_semantic_model_key,
+      const AlbumQueryRead&                      read,
+      const std::optional<duckorm::SqlFragment>& relevance_select = std::nullopt) const
+      -> AlbumQueryResult;
 
   /**
    * @brief Position of @p file_id in the ordered occurrence stream of the same query.
@@ -300,11 +318,11 @@ class ElementStore {
    * @return std::nullopt when the file does not match.
    * @throws Same as ReadAlbumQuery.
    */
-  auto ReadAlbumFilePosition(sl_element_id_t                            folder_id,
-                             const std::optional<duckorm::SqlFragment>& extra_filter,
-                             const AlbumQueryOptions&                   options,
-                             const std::string& active_semantic_model_key, sl_element_id_t file_id,
-                             const std::optional<AlbumGroupKey>& preferred_group) const
+  auto ReadAlbumFilePosition(
+      sl_element_id_t folder_id, const std::optional<duckorm::SqlFragment>& extra_filter,
+      const AlbumQueryOptions& options, const std::string& active_semantic_model_key,
+      sl_element_id_t file_id, const std::optional<AlbumGroupKey>& preferred_group,
+      const std::optional<duckorm::SqlFragment>& relevance_select = std::nullopt) const
       -> std::optional<AlbumFilePosition>;
 
   /**
@@ -312,11 +330,12 @@ class ElementStore {
    *        the order of each file's first occurrence in that range. Reads no photo metadata.
    * @throws Same as ReadAlbumQuery; std::invalid_argument for an invalid range.
    */
-  auto               ReadAlbumFileIds(sl_element_id_t                            folder_id,
-                                      const std::optional<duckorm::SqlFragment>& extra_filter,
-                                      const AlbumQueryOptions&                   options,
-                                      const std::string& active_semantic_model_key, int64_t occurrence_begin,
-                                      int64_t occurrence_end) const -> std::vector<sl_element_id_t>;
+  auto ReadAlbumFileIds(
+      sl_element_id_t folder_id, const std::optional<duckorm::SqlFragment>& extra_filter,
+      const AlbumQueryOptions& options, const std::string& active_semantic_model_key,
+      int64_t occurrence_begin, int64_t occurrence_end,
+      const std::optional<duckorm::SqlFragment>& relevance_select = std::nullopt) const
+      -> std::vector<sl_element_id_t>;
 
   void EnsureChildrenLoaded(sl_element_id_t folder_id);
 

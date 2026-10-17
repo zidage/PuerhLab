@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <limits>
+#include <optional>
 #include <stdexcept>
 #include <unordered_set>
 #include <utility>
@@ -21,6 +22,7 @@
 #include "image/image.hpp"
 #include "sleeve/sleeve_filter/filter_combo.hpp"
 #include "sleeve/storage.hpp"
+#include "storage/mapper/duckorm/duckdb_expr.hpp"
 #include "ui/alcedo_main/album_backend/folder_controller.hpp"
 #include "ui/alcedo_main/album_backend/path_utils.hpp"
 #include "ui/alcedo_main/album_backend/project_module.hpp"
@@ -41,6 +43,20 @@ constexpr size_t kAlbumMetadataPageSize  = 1000;
 constexpr size_t kSearchMetadataPageSize = 120;
 /// Occurrence pages that a grouped view keeps loaded near its viewport.
 constexpr size_t kMaxRetainedSectionPages = 3;
+
+/// The relevance select of @p semantic_query for the folder of @p input, or empty without a
+/// natural-language search. Calls no provider. Runs on the thread of the read.
+auto             RelevanceSelectOf(const LibraryQueryInput&                     input,
+                                   const std::optional<SemanticQueryEmbedding>& semantic_query)
+    -> std::optional<duckorm::SqlFragment> {
+  if (!semantic_query.has_value()) {
+    return std::nullopt;
+  }
+  if (!input.filter_service_) {
+    throw std::runtime_error("Search requires the project filter service.");
+  }
+  return input.filter_service_->BuildSemanticRelevanceSelect(input.folder_id_, *semantic_query);
+}
 
 auto FormatCacheSize(size_t bytes) -> QString {
   if (bytes == 0) {
@@ -102,12 +118,11 @@ void LibraryModule::NotifyThumbnailsChanged() {
 
 void LibraryModule::NotifyCountsChanged() { emit CountsChanged(); }
 
-void LibraryModule::EmitThumbnailUpdated(uint elementId, const QString& dataUrl, bool loading,
+void LibraryModule::EmitThumbnailUpdated(uint elementId, const QString& thumbUrl, bool loading,
                                          bool missingSource, const QString& errorText) {
-  emit ThumbnailUpdated(elementId, dataUrl, loading, missingSource, errorText);
-  emit thumbnailUpdated(elementId, dataUrl, loading, missingSource, errorText);
+  emit ThumbnailUpdated(elementId, thumbUrl, loading, missingSource, errorText);
+  emit thumbnailUpdated(elementId, thumbUrl, loading, missingSource, errorText);
 }
-
 
 auto LibraryModule::FilterInfo() const -> QString {
   return stats_->FormatPhotoInfo(ShownCount(), TotalCount());
@@ -225,7 +240,8 @@ void LibraryModule::SelectAllInCurrentView() {
     try {
       const auto filter = MergeFilterNodes(input->stats_filter_, input->search_.filter_);
       const auto ids    = input->browse_->ReadAlbumFileIds(
-          input->folder_id_, filter, input->options_, input->active_model_key_, 0, occurrence_end);
+          input->folder_id_, filter, input->options_, input->active_model_key_, 0, occurrence_end,
+          RelevanceSelectOf(*input, input->search_.semantic_query_));
       // Ids and names from typed columns, no thumbnail metadata.
       const auto rows = input->browse_->ReadAlbumFileRows(ids);
       images.reserve(rows.size());
@@ -270,7 +286,7 @@ int LibraryModule::IndexOfElementInCurrentView(uint elementId) {
     const auto position = input->browse_->ReadAlbumFilePosition(
         input->folder_id_, MergeFilterNodes(input->stats_filter_, input->search_.filter_),
         input->options_, input->active_model_key_, static_cast<sl_element_id_t>(elementId),
-        std::nullopt);
+        std::nullopt, RelevanceSelectOf(*input, input->search_.semantic_query_));
     if (!position.has_value()) {
       return -1;
     }
@@ -447,7 +463,8 @@ void ReadRowDisplayValues(const LibraryQueryInput& input, LibraryQueryOutput& ou
 auto RunLibraryQuery(const LibraryQueryInput& input) -> LibraryQueryOutput {
   LibraryQueryOutput output;
   try {
-    output.search_filter_ = input.search_.filter_;
+    output.search_filter_  = input.search_.filter_;
+    output.semantic_query_ = input.search_.semantic_query_;
     if (input.search_.pending_text_.has_value()) {
       if (!input.filter_service_) {
         throw std::runtime_error("Search requires the project filter service.");
@@ -455,9 +472,19 @@ auto RunLibraryQuery(const LibraryQueryInput& input) -> LibraryQueryOutput {
       output.search_filter_ = input.filter_service_->BuildFuzzySearchWhere(
           *input.search_.pending_text_, input.search_.field_mask_);
     }
+    if (input.search_.semantic_text_.has_value()) {
+      // The only library path that reaches the semantic provider. A failure is the error of
+      // this read: the search does not change to field search.
+      if (!input.filter_service_) {
+        throw std::runtime_error("Search requires the project filter service.");
+      }
+      output.semantic_query_ =
+          input.filter_service_->EmbedSemanticQuery(*input.search_.semantic_text_);
+    }
     output.result_ = input.browse_->ReadAlbumQuery(
         input.folder_id_, MergeFilterNodes(input.stats_filter_, output.search_filter_),
-        input.options_, input.active_model_key_, input.read_);
+        input.options_, input.active_model_key_, input.read_,
+        RelevanceSelectOf(input, output.semantic_query_));
     ReadRowDisplayValues(input, output);
   } catch (const std::exception& e) {
     output.error_ = QString::fromUtf8(e.what());
@@ -592,10 +619,11 @@ void LibraryModule::SubmitPendingRefresh() {
   input->options_                       = RequestedOptions();
   input->options_.local_day_time_zone_  = CurrentLocalDayTimeZone();
   input->active_model_key_              = stats_->ActiveSemanticModelKey();
-  input->page_size_ = static_cast<int64_t>(input->search_.pending_text_.has_value() ||
-                                                   input->search_.filter_.has_value()
-                                               ? kSearchMetadataPageSize
-                                               : kAlbumMetadataPageSize);
+  input->page_size_                     = static_cast<int64_t>(
+      input->search_.pending_text_.has_value() || input->search_.semantic_text_.has_value() ||
+              input->search_.filter_.has_value() || input->search_.semantic_query_.has_value()
+          ? kSearchMetadataPageSize
+          : kAlbumMetadataPageSize);
   input->read_      = AlbumQueryRead{
            .offset_ = 0, .limit_ = input->page_size_, .read_groups_ = true, .read_statistics_ = true};
   input->browse_         = std::move(browse);
@@ -696,17 +724,19 @@ void LibraryModule::PublishRefresh(const LibraryQueryInput& input, LibraryQueryO
   if (pending_options_.has_value() && SamePresentation(*pending_options_, input.options_)) {
     pending_options_.reset();
   }
-  accepted_input_           = std::make_shared<const LibraryQueryInput>(LibraryQueryInput{
-                .folder_id_        = input.folder_id_,
-                .stats_filter_     = input.stats_filter_,
-                .search_           = LibrarySearchInput{.display_query_ = input.search_.display_query_,
-                                                        .filter_        = output.search_filter_,
-                                                        .pending_       = false,
-                                                        .field_mask_    = input.search_.field_mask_},
-                .options_          = input.options_,
-                .active_model_key_ = input.active_model_key_,
-                .page_size_        = input.page_size_});
-  const bool search_changed = search_->AcceptLibrarySearch(input.search_, output.search_filter_);
+  accepted_input_ = std::make_shared<const LibraryQueryInput>(LibraryQueryInput{
+      .folder_id_        = input.folder_id_,
+      .stats_filter_     = input.stats_filter_,
+      .search_           = LibrarySearchInput{.display_query_  = input.search_.display_query_,
+                                              .filter_         = output.search_filter_,
+                                              .semantic_query_ = output.semantic_query_,
+                                              .pending_        = false,
+                                              .field_mask_     = input.search_.field_mask_},
+      .options_          = input.options_,
+      .active_model_key_ = input.active_model_key_,
+      .page_size_        = input.page_size_});
+  const bool search_changed =
+      search_->AcceptLibrarySearch(input.search_, output.search_filter_, output.semantic_query_);
   if (result.statistics_.has_value()) {
     stats_->ApplyFolderStats(ToAlbumStatsView(*result.statistics_), false);
   }
@@ -903,10 +933,11 @@ auto LibraryModule::RequestOrderedFileIds(const QVariantList& ranges) -> qulongl
           std::unordered_set<sl_element_id_t> seen;
           std::vector<sl_element_id_t>        ordered;
           const auto filter = MergeFilterNodes(input->stats_filter_, input->search_.filter_);
+          const auto relevance = RelevanceSelectOf(*input, input->search_.semantic_query_);
           for (const auto& [begin, end] : occurrence_ranges) {
-            for (const auto id :
-                 input->browse_->ReadAlbumFileIds(input->folder_id_, filter, input->options_,
-                                                  input->active_model_key_, begin, end)) {
+            for (const auto id : input->browse_->ReadAlbumFileIds(
+                     input->folder_id_, filter, input->options_, input->active_model_key_, begin,
+                     end, relevance)) {
               if (seen.insert(id).second) {
                 ordered.push_back(id);
               }
@@ -966,7 +997,7 @@ void LibraryModule::RequestFocusPosition(uint fileId, const QString& preferredGr
       position = input->browse_->ReadAlbumFilePosition(
           input->folder_id_, MergeFilterNodes(input->stats_filter_, input->search_.filter_),
           input->options_, input->active_model_key_, static_cast<sl_element_id_t>(fileId),
-          preferred);
+          preferred, RelevanceSelectOf(*input, input->search_.semantic_query_));
     } catch (const std::exception& e) {
       error = QString::fromUtf8(e.what());
     }

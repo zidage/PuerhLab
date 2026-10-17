@@ -62,6 +62,11 @@ enum class SortDirection : uint8_t { kAscending, kDescending };
  * selected sort is not that timestamp), then the file id ascending. Without a selected sort a
  * date group orders its photos by that timestamp newest first; other groups and the flat mode
  * order by file id ascending.
+ *
+ * A natural-language search (a relevance select passed to the read, see
+ * ElementStore::ReadAlbumQuery) changes only the order without a selected sort: the photos of
+ * the flat mode and of each group then order by relevance descending, then by file id
+ * ascending. The group order does not change. A selected sort replaces the relevance order.
  */
 struct AlbumQueryOptions {
   AlbumSortField  sort_field_     = AlbumSortField::kNone;

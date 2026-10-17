@@ -37,7 +37,7 @@ struct AlbumItem {
   bool                  is_hdr = false;
   QString               tags{};
   QString               accent{};
-  QString               thumb_data_url{};
+  QString               thumb_url{};
   bool                  thumb_loading        = false;
   bool                  thumb_missing_source = false;
   QString               thumb_error_text{};

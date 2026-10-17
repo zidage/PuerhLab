@@ -207,6 +207,14 @@ class SleeveFilterService {
   /// @throws std::runtime_error when no provider is set, the query is empty, or the provider
   ///         fails.
   [[nodiscard]] auto EmbedSemanticQuery(const std::wstring& query) const -> SemanticQueryEmbedding;
+  /// The SELECT of the files of @p parent_id that the relevance rule keeps for @p embedding
+  /// (SemanticVectorSearch::BuildRelevanceSelect), for the library reads of a natural-language
+  /// search. Calls no provider. The fragment is valid for one statement on this project.
+  /// @throws std::runtime_error when the storage is missing, the model is not registered, or
+  ///         the embedding does not have the model dimension.
+  [[nodiscard]] auto BuildSemanticRelevanceSelect(sl_element_id_t               parent_id,
+                                                  const SemanticQueryEmbedding& embedding) const
+      -> duckorm::SqlFragment;
   /// One page of the files kept by the relevance rule, in relevance order, and the number of
   /// kept files. Empty when no provider is set or the query is empty.
   /// @throws std::runtime_error when the embedding or the ranking fails.

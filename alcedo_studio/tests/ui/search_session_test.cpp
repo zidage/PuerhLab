@@ -2,8 +2,8 @@
 //  SPDX-License-Identifier: GPL-3.0-only
 //  Additional permission under GPLv3 section 7 applies; see the LICENSE file.
 
-// SearchSession rules that GlobalSearchDialog.qml had: routing, the match of a response to the
-// active request, and the result window of 48 rows.
+// SearchSession rules: routing, the match of a response to the active request, the field
+// preview of three rows, and the search.query page of at most 48 rows.
 
 #include "ui/alcedo_main/album_backend/search_session.hpp"
 
@@ -109,48 +109,47 @@ TEST(SearchSessionTest, ResponseWithOldRequestIdIsIgnored) {
   EXPECT_TRUE(session.Results().isEmpty());
 }
 
-TEST(SearchSessionTest, AppendBeyondCapacityDropsLeadingRows) {
+TEST(SearchSessionTest, PreviewRequestsThreeRowsForFieldQuery) {
   FakeSearch    search;
   SearchSession session(search.Port());
   session.Preview(QStringLiteral("canon"));
-  session.ApplyResponse(1, QStringLiteral("replace"), Response(0, 24, 100));
-  session.LoadMore();
-  ASSERT_EQ(search.requests_.size(), 2u);
-  EXPECT_EQ(search.requests_[1].offset, 24);
-  EXPECT_EQ(search.requests_[1].limit, SearchSession::kPageSize);
-  EXPECT_EQ(search.requests_[1].mode, QStringLiteral("append"));
-  session.ApplyResponse(2, QStringLiteral("append"), Response(24, 24, 100));
-  EXPECT_EQ(session.Results().size(), 48);
-  EXPECT_EQ(session.WindowStart(), 0);
+  ASSERT_EQ(search.requests_.size(), 1u);
+  EXPECT_EQ(search.requests_[0].query, QStringLiteral("canon"));
+  EXPECT_EQ(search.requests_[0].offset, 0);
+  EXPECT_EQ(search.requests_[0].limit, SearchSession::kPreviewRows);
+  EXPECT_EQ(SearchSession::kPreviewRows, 3);
+  EXPECT_FALSE(search.requests_[0].submit);
 
-  QSignalSpy applied(&session, &SearchSession::ResponseApplied);
-  session.LoadMore();
-  EXPECT_EQ(search.requests_[2].offset, 48);
-  session.ApplyResponse(3, QStringLiteral("append"), Response(48, 24, 100));
-  ASSERT_EQ(session.Results().size(), SearchSession::kWindowCapacity);
-  EXPECT_EQ(session.WindowStart(), 24);
-  EXPECT_EQ(FirstElementId(session), 25);
-  EXPECT_TRUE(session.HasPrevious());
-  EXPECT_TRUE(session.HasMore());
-  ASSERT_EQ(applied.count(), 1);
-  EXPECT_EQ(applied.at(0).at(2).toInt(), 24);
-
-  // The page before the window comes back in front, and the trailing rows leave.
-  session.LoadPrevious();
-  EXPECT_EQ(search.requests_[3].offset, 0);
-  EXPECT_EQ(search.requests_[3].limit, 24);
-  EXPECT_EQ(search.requests_[3].mode, QStringLiteral("prepend"));
-  session.ApplyResponse(4, QStringLiteral("prepend"), Response(0, 24, 100));
-  ASSERT_EQ(session.Results().size(), SearchSession::kWindowCapacity);
-  EXPECT_EQ(session.WindowStart(), 0);
+  session.ApplyResponse(1, QStringLiteral("replace"), Response(0, 3, 30));
+  EXPECT_EQ(session.Results().size(), 3);
   EXPECT_EQ(FirstElementId(session), 1);
-  EXPECT_FALSE(session.HasPrevious());
+  EXPECT_EQ(session.Total(), 30);
+  EXPECT_TRUE(session.HasMore());
 
-  // A replace page larger than the window keeps its last rows.
+  // A new preview replaces the rows; it does not add to them.
+  session.Preview(QStringLiteral("nikon"));
+  EXPECT_TRUE(session.Results().isEmpty());
+  ASSERT_EQ(search.requests_.size(), 2u);
+  EXPECT_EQ(search.requests_[1].limit, SearchSession::kPreviewRows);
+  session.ApplyResponse(2, QStringLiteral("replace"), Response(0, 2, 2));
+  EXPECT_EQ(session.Results().size(), 2);
+  EXPECT_FALSE(session.HasMore());
+}
+
+TEST(SearchSessionTest, ReplacePageIsLimitedToMaxPageRowsAndKeepsItsOffset) {
+  FakeSearch    search;
+  SearchSession session(search.Port());
   session.Replace(QStringLiteral("canon"), 10, 60, true, false);
-  session.ApplyResponse(5, QStringLiteral("replace"), Response(10, 60, 100));
-  EXPECT_EQ(session.Results().size(), SearchSession::kWindowCapacity);
-  EXPECT_EQ(session.WindowStart(), 22);
+  ASSERT_EQ(search.requests_.size(), 1u);
+  EXPECT_EQ(search.requests_[0].offset, 10);
+  EXPECT_EQ(search.requests_[0].limit, SearchSession::kMaxPageRows);
+
+  session.ApplyResponse(1, QStringLiteral("replace"), Response(10, 48, 100));
+  EXPECT_EQ(session.Results().size(), SearchSession::kMaxPageRows);
+  EXPECT_EQ(session.Offset(), 10);
+  EXPECT_EQ(FirstElementId(session), 11);
+  EXPECT_EQ(session.Total(), 100);
+  EXPECT_TRUE(session.HasMore());
 }
 
 TEST(SearchSessionTest, SemanticQueryWaitsForSubmitWhenNaturalLanguageSearchIsOn) {
@@ -168,7 +167,8 @@ TEST(SearchSessionTest, SemanticQueryWaitsForSubmitWhenNaturalLanguageSearchIsOn
   EXPECT_EQ(session.Route(), QStringLiteral("semantic"));
   EXPECT_FALSE(session.Loading());
 
-  session.SubmitSemantic(QStringLiteral("sunset over hills"));
+  // search.query submits a natural-language page through Replace.
+  session.Replace(QStringLiteral("sunset over hills"), 0, 24, true, true);
   ASSERT_EQ(search.requests_.size(), 1u);
   EXPECT_TRUE(search.requests_[0].submit);
   EXPECT_TRUE(search.requests_[0].allow_semantic);

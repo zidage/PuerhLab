@@ -1180,6 +1180,11 @@ auto AppTheme::editorLutTileMinWidth() const -> int { return 128; }
 auto AppTheme::editorLutTileCompactWidth() const -> int { return 88; }
 auto AppTheme::editorLutTileIconSize() const -> int { return 36; }
 auto AppTheme::collectionsSidebarWidth() const -> int { return 276; }
+// Search palette (DESIGN.md "Search palette"): main column, settings side panel, window inset.
+auto AppTheme::searchPaletteMaxWidth() const -> int { return 960; }
+auto AppTheme::searchSettingsPanelWidth() const -> int { return 260; }
+auto AppTheme::searchPaletteWindowMarginX() const -> int { return 28; }
+auto AppTheme::searchPaletteWindowMarginY() const -> int { return 36; }
 // Welcome surface (DESIGN.md "Welcome surface"): card, columns, and cover block.
 auto AppTheme::welcomeCardWidth() const -> int { return 1040; }
 auto AppTheme::welcomeCardHeight() const -> int { return 600; }
