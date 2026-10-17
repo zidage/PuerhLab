@@ -541,38 +541,32 @@ auto LookupNikonLensModelById(const libraw_lensinfo_t& lens) -> std::string {
     return {};
   }
 
-  const uint64_t numeric_candidates[] = {
-      static_cast<uint64_t>(lens.nikon.LensIDNumber),
-      static_cast<uint64_t>(lens.makernotes.LensID),
-  };
-  for (const uint64_t id : numeric_candidates) {
-    if (id == 0) {
-      continue;
-    }
+  const auto id = static_cast<uint64_t>(lens.makernotes.LensID);
+  if (id == 0) {
+    return {};
+  }
+
+  // LibRaw stores the 16-bit Z-mount lens ID in makernotes.LensID for a native Z lens, and the
+  // 8-byte F-mount composite ID otherwise. The two ID spaces overlap: F-mount LensIDNumber 1 is
+  // the AF Nikkor 50mm f/1.8, and Z-mount ID 1 is the Nikkor Z 24-70mm f/4 S.
+  if (lens.makernotes.LensMount == LIBRAW_MOUNT_Nikon_Z) {
     const auto it = db.numeric_id_map.find(id);
     if (it != db.numeric_id_map.end() && !it->second.empty()) {
       return it->second;
     }
+    return {};
   }
 
-  const uint64_t hex_candidates[] = {
-      static_cast<uint64_t>(lens.makernotes.LensID),
-  };
-  for (const uint64_t id : hex_candidates) {
-    if (id == 0) {
-      continue;
-    }
-    const std::string key_be = UInt64ToHexIdKey(id, false);
-    auto              it     = db.hex_id_map.find(key_be);
-    if (it != db.hex_id_map.end() && !it->second.empty()) {
-      return it->second;
-    }
+  const std::string key_be = UInt64ToHexIdKey(id, false);
+  auto              it     = db.hex_id_map.find(key_be);
+  if (it != db.hex_id_map.end() && !it->second.empty()) {
+    return it->second;
+  }
 
-    const std::string key_le = UInt64ToHexIdKey(id, true);
-    it                       = db.hex_id_map.find(key_le);
-    if (it != db.hex_id_map.end() && !it->second.empty()) {
-      return it->second;
-    }
+  const std::string key_le = UInt64ToHexIdKey(id, true);
+  it                       = db.hex_id_map.find(key_le);
+  if (it != db.hex_id_map.end() && !it->second.empty()) {
+    return it->second;
   }
 
   return {};
