@@ -17,6 +17,7 @@
 
 #include "app/sleeve_filter_service.hpp"
 #include "app/thumbnail_types.hpp"
+#include "storage/store/semantic/semantic_records.hpp"
 #include "storage/store/sleeve/element_store.hpp"
 #include "ui/alcedo_main/album_backend/search_request_worker.hpp"
 #include "ui/alcedo_main/album_backend/search_session.hpp"
@@ -31,21 +32,29 @@ class StatsEngine;
 /**
  * @brief Search part of one library refresh, read on the UI thread by LibraryModule.
  *
- * @details The accepted search filter, or the pending applied search that the refresh must
- * install when it succeeds: query text that the worker parses with the field mask, or the
- * filter of one exact file. Values only; the worker never reads SearchController.
+ * @details The accepted search, or the pending applied search that the refresh must install
+ * when it succeeds: field-search text that the worker parses with the field mask
+ * (pending_text_), natural-language text that the worker embeds (semantic_text_), or the
+ * filter of one exact file (filter_). These three are mutually exclusive. semantic_query_ is
+ * the embedding of the accepted natural-language search: reads of an accepted search build its
+ * relevance select from it and call no provider. Values only; the worker never reads
+ * SearchController.
  */
 struct LibrarySearchInput {
-  QString                     display_query_{};
-  std::optional<std::wstring> pending_text_{};
-  std::optional<FilterNode>   filter_{};
-  bool                        pending_    = false;
-  SearchFieldMask             field_mask_ = kAllSearchFields;
+  QString                               display_query_{};
+  std::optional<std::wstring>           pending_text_{};
+  std::optional<std::wstring>           semantic_text_{};
+  std::optional<FilterNode>             filter_{};
+  std::optional<SemanticQueryEmbedding> semantic_query_{};
+  bool                                  pending_    = false;
+  SearchFieldMask                       field_mask_ = kAllSearchFields;
 };
 
 class SearchController final : public QObject {
   Q_OBJECT
   Q_PROPERTY(QString activeSearchQuery READ active_search_query NOTIFY SearchStateChanged)
+  /// True when the active search is a natural-language search (the Inspector search card).
+  Q_PROPERTY(bool activeSearchIsSemantic READ active_search_is_semantic NOTIFY SearchStateChanged)
   Q_PROPERTY(bool naturalLanguageSearchEnabled READ natural_language_search_enabled
                  NOTIFY SearchStateChanged)
   Q_PROPERTY(bool searchFieldFilenameEnabled READ SearchFieldFilenameEnabled WRITE
@@ -64,6 +73,9 @@ class SearchController final : public QObject {
   ~SearchController() override;
 
   [[nodiscard]] const QString& active_search_query() const { return active_search_query_; }
+  [[nodiscard]] bool           active_search_is_semantic() const {
+    return accepted_semantic_query_.has_value();
+  }
   [[nodiscard]] bool           natural_language_search_enabled() const {
     return natural_language_search_enabled_;
   }
@@ -102,6 +114,19 @@ class SearchController final : public QObject {
   Q_INVOKABLE void         ApplyFuzzySearch(const QString& query);
   /// Same as ApplyFuzzySearch with a filter that matches one file.
   Q_INVOKABLE void         ApplyExactSearch(uint elementId);
+  /**
+   * @brief Apply a natural-language search to the library: the library worker embeds the
+   *        query, and the library shows the kept files of the current folder in relevance
+   *        order (without a selected sort). Inspector filters stay.
+   *
+   * @details Checks, in this order, and returns the reason without any change: an empty query
+   * returns "" and does nothing; a query whose route is not `semantic` (SearchSession::RouteFor)
+   * is rejected; a query that is too long is rejected; a project without a semantic search
+   * provider or without an active semantic model is rejected. Otherwise the search becomes the pending search, a library refresh is
+   * requested, and "" is returned. An embedding or ranking failure of that refresh shows the
+   * library query error and keeps the accepted content and search. GUI thread only.
+   */
+  Q_INVOKABLE QString      ApplySemanticSearch(const QString& query);
   /// Remove the active search (and drop an apply that is still on the worker).
   Q_INVOKABLE void         ClearFuzzySearch();
   Q_INVOKABLE void SetSearchPreviewThumbnailVisible(uint elementId, uint imageId, bool visible,
@@ -117,10 +142,11 @@ class SearchController final : public QObject {
   [[nodiscard]] auto       LibrarySearch() const -> LibrarySearchInput;
   /// Install the search of an accepted library refresh without emitting. @p used is the input
   /// that refresh read; @p filter is the filter it built (empty: the query has no terms, so
-  /// no search is active). Returns true when the search state changed; the caller emits
-  /// SearchStateChanged after every owner of the result is installed.
-  auto AcceptLibrarySearch(const LibrarySearchInput& used, const std::optional<FilterNode>& filter)
-      -> bool;
+  /// no search is active); @p semantic_query is the embedding of a natural-language search,
+  /// kept for the later reads of that search. Returns true when the search state changed; the
+  /// caller emits SearchStateChanged after every owner of the result is installed.
+  auto AcceptLibrarySearch(const LibrarySearchInput& used, const std::optional<FilterNode>& filter,
+                           const std::optional<SemanticQueryEmbedding>& semantic_query) -> bool;
 
  signals:
   void SearchStateChanged();
@@ -150,6 +176,10 @@ class SearchController final : public QObject {
 
   QString                   active_search_query_{};
   std::optional<FilterNode> active_search_filter_node_{};
+  /// Embedding of the active natural-language search; empty for a field or exact search. An
+  /// operation result (global_search_redesign_plan.md, Section 5.2), released when the search
+  /// is cleared or replaced.
+  std::optional<SemanticQueryEmbedding>                accepted_semantic_query_{};
   /// Applied search that waits for its library refresh; the change description only.
   std::optional<LibrarySearchInput> pending_search_{};
   bool                      natural_language_search_enabled_  = false;

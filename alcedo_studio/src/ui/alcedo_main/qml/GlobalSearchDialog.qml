@@ -10,31 +10,24 @@ Dialog {
 
     property var searchController: null
     property var interactionPolicyController: null
-    // Gate driven by InteractionPolicyController: when natural-language search is
+    // Admission rule of InteractionPolicyController: when natural-language search is
     // on, the field-filter checkboxes are disabled (mutual exclusion). Defaults
     // to enabled when the controller is unavailable (e.g. in isolated tests).
     readonly property bool searchFieldFiltersEnabled: interactionPolicyController
         ? interactionPolicyController.canChangeSearchFieldFilters
         : true
     property var theme
-    // Routing, request matching, and the result window are in SearchSession (C++). The
-    // dialog keeps the presentation, the typing debounce, and the list position.
+    // Routing, request matching, and the preview rows are in SearchSession (C++). The dialog
+    // keeps the presentation and the typing debounce.
     readonly property var searchSession: searchController ? searchController.session : null
     property var recommendations: []
     readonly property var results: searchSession ? searchSession.results : []
     property var previewThumbs: ({})
     readonly property string lastQuery: searchSession ? searchSession.query : ""
-    readonly property int resultPageSize: searchSession ? searchSession.pageSize : 24
-    readonly property int resultWindowStart: searchSession ? searchSession.windowStart : 0
-    readonly property int searchTotal: searchSession ? searchSession.total : 0
-    readonly property bool searchHasMore: searchSession ? searchSession.hasMore : false
-    readonly property bool searchHasPrevious: searchSession ? searchSession.hasPrevious : false
     readonly property var activeSearchRequestId: searchSession ? searchSession.activeRequestId : 0
-    // True from a window change that dropped or added leading rows until the list position
-    // follows it, so that no page request starts from the old position.
-    property bool scrollAdjustPending: false
-    readonly property bool searchLoading: (searchSession ? searchSession.loading : false)
-                                          || scrollAdjustPending
+    readonly property bool searchLoading: searchSession ? searchSession.loading : false
+    // Reason text of a natural-language search that Enter could not apply to the library.
+    property string semanticApplyError: ""
     property bool previewSyncForcePending: false
     readonly property bool naturalLanguagePreviewActive: searchSession
                                                          ? searchSession.semanticActive : false
@@ -42,6 +35,9 @@ Dialog {
     readonly property string naturalLanguageStatusText: {
         if (!searchSession) {
             return ""
+        }
+        if (semanticApplyError.length > 0) {
+            return semanticApplyError
         }
         if (searchSession.tooLong) {
             return qsTr("Query is too long for natural language search")
@@ -52,7 +48,7 @@ Dialog {
                     : qsTr("Natural language search is not available yet")
         }
         if (searchSession.awaitingSubmit) {
-            return qsTr("Press Enter or click Search for natural language search")
+            return qsTr("Press Enter to search by meaning.")
         }
         return ""
     }
@@ -100,7 +96,7 @@ Dialog {
 
     function resetPreviewState() {
         previewTimer.stop()
-        scrollAdjustPending = false
+        semanticApplyError = ""
         if (searchController) {
             searchController.CancelSearchPreviewThumbnails()
         }
@@ -114,7 +110,7 @@ Dialog {
         resetPreviewState()
         searchField.text = ""
         recommendations = searchController ? searchController.SearchRecommendations(12) : []
-        // Re-sync the interaction-policy NL gate to the persisted SearchController
+        // Re-sync the interaction-policy NL switch to the persisted SearchController
         // state BEFORE opening. The policy controller's naturalLanguageSearchEnabled
         // copy is only pushed imperatively (on toggle below), so after a restart it
         // lags the persisted value and the field-filter checkboxes would wrongly
@@ -178,24 +174,11 @@ Dialog {
         previewSyncTimer.restart()
     }
 
-    function resultCountText() {
-        if (searchTotal <= 0) {
-            return qsTr("%1 matches").arg(results.length)
-        }
-        if (results.length === 0) {
-            return qsTr("0 of %1 matches").arg(searchTotal)
-        }
-        const first = resultWindowStart + 1
-        const last = resultWindowStart + results.length
-        return qsTr("%1-%2 of %3 matches").arg(first).arg(last).arg(searchTotal)
-    }
-
     function clearPreviewThumbs() {
         if (searchController) {
             searchController.CancelSearchPreviewThumbnails()
         }
         previewThumbs = ({})
-        scrollAdjustPending = false
     }
 
     function refreshPreview() {
@@ -204,6 +187,7 @@ Dialog {
         }
         const query = searchField.text.trim()
         clearPreviewThumbs()
+        semanticApplyError = ""
         // An empty query shows the recommendations. A semantic query only waits for Enter or
         // the Search button, so typing does not reach the semantic provider.
         searchSession.Preview(query)
@@ -225,57 +209,23 @@ Dialog {
         // submit request and its response is not applied.
         previewTimer.stop()
         if (searchSession.RouteFor(query) === "semantic") {
-            runSemanticSubmit()
+            applySemanticSearch()
         } else {
             applyBroadSearch()
         }
     }
 
-    function runSemanticSubmit() {
-        if (!searchSession) {
+    // Enter on a natural-language query applies it to the library. A rejected query keeps the
+    // dialog open and shows the reason.
+    function applySemanticSearch() {
+        if (!searchController) {
             return
         }
-        const query = searchField.text.trim()
-        if (query.length === 0) {
-            return
+        const error = searchController.ApplySemanticSearch(searchField.text)
+        semanticApplyError = error ? String(error) : ""
+        if (semanticApplyError.length === 0) {
+            close()
         }
-        previewTimer.stop()
-        clearPreviewThumbs()
-        searchSession.SubmitSemantic(query)
-    }
-
-    function followWindowChange(mode, droppedCount, prependedCount) {
-        prunePreviewThumbs()
-        scheduleVisiblePreviewSync(true)
-        if (mode === "append" && droppedCount > 0) {
-            const droppedHeight = droppedCount * 82
-            scrollAdjustPending = true
-            Qt.callLater(function() {
-                resultList.contentY = Math.max(0, resultList.contentY - droppedHeight)
-                dialog.scrollAdjustPending = false
-            })
-        } else if (mode === "prepend" && prependedCount > 0) {
-            const prependedHeight = prependedCount * 82
-            scrollAdjustPending = true
-            Qt.callLater(function() {
-                resultList.contentY = resultList.contentY + prependedHeight
-                dialog.scrollAdjustPending = false
-            })
-        }
-    }
-
-    function loadMorePreview() {
-        if (!searchSession || searchLoading || searchField.text.trim() !== lastQuery) {
-            return
-        }
-        searchSession.LoadMore()
-    }
-
-    function loadPreviousPreview() {
-        if (!searchSession || searchLoading || searchField.text.trim() !== lastQuery) {
-            return
-        }
-        searchSession.LoadPrevious()
     }
 
     function applyBroadSearch() {
@@ -304,7 +254,7 @@ Dialog {
 
     onOpened: {
         recommendations = searchController ? searchController.SearchRecommendations(12) : []
-        // Re-sync the interaction-policy NL gate to the persisted SearchController
+        // Re-sync the interaction-policy NL switch to the persisted SearchController
         // state. The policy controller's naturalLanguageSearchEnabled copy is only
         // pushed imperatively (on toggle below), so after a restart it lags the
         // persisted value and the field-filter checkboxes would wrongly enable.
@@ -339,8 +289,9 @@ Dialog {
     Connections {
         target: dialog.searchSession
 
-        function onResponseApplied(requestId, mode, droppedCount, prependedCount) {
-            dialog.followWindowChange(mode, droppedCount, prependedCount)
+        function onResponseApplied(requestId, mode) {
+            dialog.prunePreviewThumbs()
+            dialog.scheduleVisiblePreviewSync(true)
         }
     }
 
@@ -737,15 +688,6 @@ Dialog {
                             font.weight: 760
                         }
 
-                        Label {
-                            visible: searchField.text.trim().length > 0
-                            text: dialog.resultCountText()
-                            color: dialog.withAlpha(dialog.textColor, 0.42)
-                            font.family: dialog.dataFontFamily
-                            font.pixelSize: 12
-                            font.weight: 600
-                        }
-
                         BusyIndicator {
                             Layout.preferredWidth: 18
                             Layout.preferredHeight: 18
@@ -819,46 +761,9 @@ Dialog {
 
                         ScrollIndicator.vertical: ScrollIndicator {}
 
-                        onContentYChanged: {
-                            dialog.scheduleVisiblePreviewSync(false)
-                            if (dialog.searchHasMore
-                                    && contentY + height >= contentHeight - 160) {
-                                dialog.loadMorePreview()
-                            }
-                        }
-                        onMovementEnded: {
-                            dialog.scheduleVisiblePreviewSync(false)
-                            if (dialog.searchHasPrevious
-                                    && contentY <= originY + 120) {
-                                dialog.loadPreviousPreview()
-                            }
-                            if (dialog.searchHasMore
-                                    && contentY + height >= contentHeight - 160) {
-                                dialog.loadMorePreview()
-                            }
-                        }
+                        onContentYChanged: dialog.scheduleVisiblePreviewSync(false)
+                        onMovementEnded: dialog.scheduleVisiblePreviewSync(false)
                         onCountChanged: dialog.scheduleVisiblePreviewSync(true)
-
-                        header: Item {
-                            width: resultList.width
-                            height: dialog.searchHasPrevious ? 54 : 10
-
-                            BusyIndicator {
-                                anchors.centerIn: parent
-                                width: 24
-                                height: 24
-                                running: visible
-                                visible: dialog.searchHasPrevious && dialog.searchLoading
-                            }
-
-                            Button {
-                                anchors.centerIn: parent
-                                visible: dialog.searchHasPrevious && !dialog.searchLoading
-                                enabled: !dialog.searchLoading
-                                text: qsTr("Load previous")
-                                onClicked: dialog.loadPreviousPreview()
-                            }
-                        }
 
                         delegate: SearchRow {
                             required property var modelData
@@ -920,27 +825,6 @@ Dialog {
                             running: visible
                             visible: dialog.searchLoading && resultList.count === 0
                                      && searchField.text.trim().length > 0
-                        }
-
-                        footer: Item {
-                            width: resultList.width
-                            height: dialog.searchHasMore ? 54 : 10
-
-                            BusyIndicator {
-                                anchors.centerIn: parent
-                                width: 24
-                                height: 24
-                                running: visible
-                                visible: dialog.searchHasMore && dialog.searchLoading
-                            }
-
-                            Button {
-                                anchors.centerIn: parent
-                                visible: dialog.searchHasMore && !dialog.searchLoading
-                                enabled: !dialog.searchLoading
-                                text: qsTr("Load more")
-                                onClicked: dialog.loadMorePreview()
-                            }
                         }
                     }
                 }

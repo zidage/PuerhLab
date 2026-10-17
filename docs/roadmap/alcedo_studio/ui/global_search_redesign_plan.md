@@ -2,7 +2,8 @@
 
 Date: 2026-10-17
 
-Status: Phase GS1 complete (2026-10-17, completion record in Phase GS1). GS2 to GS5 planned.
+Status: Phases GS1 and GS2 complete (2026-10-17, completion records in each phase). GS3 to GS5
+planned.
 
 Source revision of the audit: `main` at `ada6f002c`.
 
@@ -257,8 +258,12 @@ read gives the same order. A different page size does not change the kept set.
 - The Inspector search filter card shows the query text. For a natural-language search it also
   shows the line "Natural language" below the query, as a separate label. The existing clear
   button clears the search.
-- A change of the current folder keeps the active search and evaluates it for the new folder.
-  This is the current behavior for field search.
+- Selecting a folder clears the active search and the Inspector filters, for field search and
+  for natural-language search alike (`FolderController::SelectFolder`, current behavior). A
+  folder change that keeps the search (Delete Folder moves the selection to the parent folder)
+  evaluates it for the new folder from the accepted embedding, with no new embedding. Decision
+  of 2026-10-17: the source audit of this plan had the folder rule wrong, and the current clear
+  stays.
 - If the embedding or the ranking fails, the Library keeps its accepted content. It shows the
   existing error row "Library query failed: <reason>" with Retry. The search does not become
   active.
@@ -477,7 +482,7 @@ Read `AGENTS.md` and the applicable skills again before each phase. These rules 
 | Phase | Result | Main modules | Dependency | Expected diff | Status |
 | --- | --- | --- | --- | ---: | --- |
 | GS1 | Calibrated relevance over the folder scope; query embedding cache; no HNSW | `SemanticVectorSearch`, provider, cache, package backend | none | 900–1400 | complete (2026-10-17) |
-| GS2 | Natural-language results in the Library in relevance order; simpler `SearchSession` | `ElementStore`, `LibraryModule`, `SearchController`, `SearchSession`, Inspector card | GS1 | 1100–1700 | planned |
+| GS2 | Natural-language results in the Library in relevance order; simpler `SearchSession` | `ElementStore`, `LibraryModule`, `SearchController`, `SearchSession`, Inspector card | GS1 | 1100–1700 | complete (2026-10-17) |
 | GS3 | Recent searches, recommendation apply, and `thumbUrl` in `SearchController` | `SearchController` | GS2 | 400–700 | planned |
 | GS4 | New search palette with previews and the settings side panel | `SearchPalette.qml`, `AppDialogs.qml` | GS3 | 900–1300 | planned |
 | GS5 | Remove the old search dialog | `GlobalSearchDialog.qml`, CMake | GS4 | about 1250 removed lines (file deletion) | planned |
@@ -922,12 +927,12 @@ they are not built.
 
 **Exit criteria**
 
-- [ ] All named tests pass.
+- [x] All named tests pass.
 - [ ] Manual check in `alcedo_main`: a natural-language Enter shows the kept photos in
       relevance order, the Inspector card shows "Natural language", and clear restores the
-      folder.
-- [ ] `SearchSession` has no window code and no `LoadMore` or `LoadPrevious`.
-- [ ] `search.query` response fields are unchanged.
+      folder. Not done in this phase (see the completion record).
+- [x] `SearchSession` has no window code and no `LoadMore` or `LoadPrevious`.
+- [x] `search.query` response fields are unchanged.
 
 **Expected diff**
 
@@ -937,7 +942,132 @@ tests 350–550).
 **Completion record**
 
 ```text
-(empty — fill when the phase is complete; use Section 13)
+Phase / date / status: GS2 / 2026-10-17 / complete, except the manual check in alcedo_main.
+Source revision and branch: fix/semantic-search-calibrated-relevance at 7b5b652f0 (GS1, not
+  yet merged); branch feature/semantic-search-library-results, stacked on it.
+Actual changed modules: ElementStore (BuildScopedFileQuery, MatchSetTable, ReadMatchSet,
+  ReadAlbumQuery, ReadAlbumFilePosition, ReadAlbumFileIds, BuildFolderStats); album_query
+  (OccurrenceOrderTerms, AlbumQueryOptions documentation); AlbumBrowseService (three reads);
+  SleeveFilterService::BuildSemanticRelevanceSelect (new); LibraryModule (RunLibraryQuery,
+  RelevanceSelectOf, select all, ids, position, accepted input); SearchController
+  (ApplySemanticSearch, activeSearchIsSemantic, accepted_semantic_query_, AcceptLibrarySearch);
+  SearchSession (no window); search_commands.cpp; GlobalSearchDialog.qml (minimal);
+  AlbumInspectorPanel.qml; alcedo_main_zh_CN.ts (new strings, edited by hand, no lupdate).
+Implemented behavior:
+  - Enter on a natural-language query calls SearchController::ApplySemanticSearch. It checks,
+    in this order: empty text (returns "" and does nothing), route not semantic, too long, no
+    semantic search provider, no active semantic model; a rejection returns the reason and
+    changes nothing. Else the search becomes the pending search and the library refreshes.
+  - The query worker embeds the text once (EmbedSemanticQuery), builds the relevance select
+    for the current folder, and passes it to the library read. The match set joins it
+    (`JOIN (<select>) rel ON rel.file_id = e.id AND rel.image_id = fi.image_id`) and stores
+    `relevance DOUBLE` (NULL without a select). The Inspector filters combine with AND. The
+    select runs once for each ElementStore operation.
+  - Without a selected sort the photos order by relevance DESC, file id ASC in the flat mode
+    and inside each group (it replaces the date-group timestamp order); the group order does
+    not change. A selected sort replaces the relevance order; the kept set stays.
+  - The accepted embedding is kept in SearchController and in the accepted library input.
+    Pages, select all, ids, positions, and later refreshes (Inspector filters, sort, group,
+    RefreshStats) build the select from it and call no provider. Clear, a new field or exact
+    search, and a folder selection release it.
+  - The Inspector search card shows "Natural language" below the query (activeSearchIsSemantic).
+  - SearchSession: no window; Preview requests kPreviewRows (3) rows for a field query and
+    nothing for a semantic query; Replace serves search.query with at most kMaxPageRows (48)
+    rows; Offset/Total/HasMore are C++ accessors; ResponseApplied(requestId, mode).
+  - GlobalSearchDialog.qml: Load more / Load previous, the window scroll code, and the result
+    count text are removed; Enter on a semantic query calls ApplySemanticSearch and closes the
+    dialog, or shows the returned reason.
+Differences from the phase text (recorded, not hidden):
+  - Folder change: Section 2.6 is corrected. SelectFolder clears the search (current behavior,
+    decision of 2026-10-17). FolderChangeReevaluatesActiveSemanticSearch tests the folder
+    change that keeps the search (Delete Folder of the current folder) and then the clear.
+  - Step 7 needs no StatsEngine change: StatsEngine::RefreshStats only requests a library
+    refresh, and that read already passes the relevance select of the accepted search.
+  - ApplySemanticSearch also rejects a project without an active semantic model (Section 2.3
+    lists this error; step 5 did not).
+  - The ElementStore tests are in AlbumQueryTest (new fixture AlbumQueryRelevanceTest), the
+    test target of ElementStore::ReadAlbumQuery.
+  - Tests added beyond the table: SemanticResultShowsKeptFilesInRelevanceOrderOnEveryPage,
+    NonsenseSemanticQueryShowsNoPhotos, ReplacePageIsLimitedToMaxPageRowsAndKeepsItsOffset.
+  - GlobalSearchDialogQmlTest: ScrolledSearchResultsRenderPreviewThumbnailsAndReopenStillWorks
+    becomes PreviewThumbnailsRenderAfterReopen (3 preview rows, no second page);
+    SemanticSubmitSurvivesPendingTypingDebounceAndLeavesAwaitingSubmit becomes
+    SemanticEnterSurvivesPendingTypingDebounceAndShowsRejection; the test of the switch sync on
+    dialog open is renamed NaturalLanguageSwitchIsSyncedOnDialogOpen (AGENTS.md terminology
+    rule for touched files).
+  - search.query keeps its semantic route through SearchFolderSemanticRows (GS1).
+Explicitly unimplemented items: GS3 to GS5. The synchronous position read of
+  LibraryModule::IndexOfElementInCurrentView (editor restore, current behavior) builds the
+  relevance select on the GUI thread; it calls no provider.
+Primary success call chain:
+  GlobalSearchDialog Enter -> SearchController::ApplySemanticSearch(query)        [GUI thread]
+       route / length / provider / active model checks -> "" ; pending_search_ =
+       {display_query_, semantic_text_} ; LibraryModule::RequestLibraryRefresh
+    -> SubmitPendingRefresh -> SearchRequestWorker kApply -> RunLibraryQuery     [query worker]
+       SleeveFilterService::EmbedSemanticQuery -> SemanticSearchProvider::EmbedQuery (cache)
+       RelevanceSelectOf -> SleeveFilterService::BuildSemanticRelevanceSelect
+         -> SemanticVectorSearch::BuildRelevanceSelect(folder, embedding)
+       AlbumBrowseService::ReadAlbumQuery(..., relevance) -> ElementStore::ReadAlbumQuery
+         -> BuildScopedFileQuery(folder, filter, relevance) -> MatchSetTable (relevance column)
+         -> ReadAlbumQueryFromMatchSet(has_relevance) -> OccurrenceOrderTerms (relevance DESC)
+    -> LibraryModule::PublishRefresh                                              [GUI thread]
+       accepted_input_.search_.semantic_query_ = output.semantic_query_
+       SearchController::AcceptLibrarySearch(used, filter, semantic_query) stores the embedding
+       -> SearchStateChanged (activeSearchQuery, activeSearchIsSemantic); grid, sections,
+          Inspector statistics from the same match set.
+  Later reads (page, select all, ids, position, refresh) -> RelevanceSelectOf(accepted
+    embedding) -> the same ElementStore reads; no provider call.
+Primary failure and restore call chain:
+  RunLibraryQuery: EmbedQuery throws (runtime start, model mismatch, invalid vector) or the
+    relevance SQL fails -> output.error_ = message
+    -> PublishRefresh: SetQueryError(message); accepted content, accepted search, and the
+       Inspector state stay; pending_search_ stays for Retry; AcceptLibrarySearch is not called
+    -> LibraryWorkspace shows "Library query failed: <message>" with Retry
+    -> RetryLibraryQuery runs the pending natural-language search again.
+  ApplySemanticSearch rejection -> returned reason; no pending search, no refresh; the dialog
+    stays open and shows the reason.
+Build and test commands with exit codes:
+  cmd /c scripts\msvc_env.cmd --build --preset win_debug --parallel 4 --target AlbumQueryTest
+    SearchSessionTest AlbumBackendSearchWorkerTest GlobalSearchDialogQmlTest
+    LibrarySearchColumnsTest LibrarySearchRecallTest SemanticStorageControllerTest
+    FilterServiceTest AlbumBackendLibraryQueryTest alcedo_main alcedo_cli
+    AutomationSearchE2ETest                                                   -> 0
+  ctest --test-dir build/debug -R "^(AlbumQueryTest|SearchSessionTest|AlbumBackendSearchWorkerTest|
+    GlobalSearchDialogQmlTest|LibrarySearchColumnsTest|LibrarySearchRecallTest|
+    SemanticStorageControllerTest|FilterServiceTest|AlbumBackendLibraryQueryTest|
+    AutomationSearchE2ETest)\." --output-on-failure                          -> 0
+Discovered / passed / failed / skipped counts: 167 discovered; 165 passed; 0 failed;
+  1 skipped (AlbumQueryTest.LargeLibraryPagesStayBoundedAndRecordTimings, a timing record
+  that skips in ctest); 1 disabled (LibrarySearchRecallTest.NikonFolderImportsRawOnlyAndSearch
+  FindsFileNames). The full suite was not run (AGENTS.md).
+  Named tests, all passed: SemanticApplyShowsKeptFilesInRelevanceOrder,
+  SemanticApplyKeepsInspectorFilters, SemanticPageReadsDoNotCallTheProvider (321 files, 121
+  kept: two pages, select all, a position, and a refresh with one EmbedQuery call),
+  SemanticApplyFailureKeepsAcceptedContentAndReportsError (also Retry),
+  ApplySemanticSearchRejectsTooLongQueryWithoutRefresh, FolderChangeReevaluatesActiveSemanticSearch,
+  ClearSearchRemovesSemanticOrder, NonsenseSemanticQueryShowsNoPhotos
+  (AlbumBackendSearchWorkerTest, fake provider); SemanticResultShowsKeptFilesInRelevanceOrder
+  OnEveryPage, SelectedSortReplacesRelevanceOrder, GroupedSemanticResultKeepsGroupOrderAndRanks
+  InsideGroups, SemanticStatsCountOnlyKeptFiles, SemanticSelectAllReturnsTheKeptSet
+  (AlbumQueryTest); PreviewRequestsThreeRowsForFieldQuery, ReplacePageIsLimitedToMaxPageRows
+  AndKeepsItsOffset, SemanticQueryWaitsForSubmitWhenNaturalLanguageSearchIsOn (updated)
+  (SearchSessionTest); FuzzySearchFindsImportedFileName (AutomationSearchE2ETest). Removed:
+  AppendBeyondCapacityDropsLeadingRows.
+  GlobalSearchDialogQmlTest (offscreen QML): 6 of 6 passed.
+Manual verification: not done. The check needs alcedo_main with a project that has semantic
+  embeddings and a running sidecar; no automation command applies a search to the Library
+  (Section 3.2). The Library behavior is covered by the AlbumBackendSearchWorkerTest cases
+  above through ApplicationModuleHost with a fake provider.
+Performance or resource evidence: no new benchmark. The relevance join runs only when the
+  select is present; without it BuildScopedFileQuery and the match set projection add only
+  `CAST(NULL AS DOUBLE) AS relevance` (Section 12, field-search cost).
+Evidence path: build/tmp/global_search_gs2/ (removed after the phase).
+Changed lines: about 1750 (production about 700, tests about 1000), below the 2000-line limit.
+Remaining defects or unavailable platforms:
+  - Manual check in alcedo_main not done.
+  - macOS not built or tested in this phase.
+  - Cold sidecar start on Enter blocks the query worker, not the GUI thread (Section 12; the
+    residency plan owns it).
 ```
 
 ### Phase GS3 — Palette data in SearchController
@@ -1113,7 +1243,7 @@ semantic Enter -> ApplySemanticSearch returns "Natural language search is not av
 | `RecommendationRowAppliesStatsFilterAndCloses` | A click on a camera row sets the camera stats filter and closes the palette. |
 | `RejectedSemanticEnterKeepsPaletteOpen` | With no provider, Enter shows the error text and the palette stays open. |
 | `SettingsPanelStatePersists` | The panel is open on reopen after it was open. |
-| `PreviewThumbnailsRenderAfterReopen` (renamed from `ScrolledSearchResultsRenderPreviewThumbnailsAndReopenStillWorks`) | Thumbnails show after close and reopen. |
+| `PreviewThumbnailsRenderAfterReopen` (renamed in GS2 from `ScrolledSearchResultsRenderPreviewThumbnailsAndReopenStillWorks`; GS2 tests the old dialog with it) | Thumbnails show after close and reopen. |
 | `NaturalLanguageSwitchStateIsReadOnOpen` (renamed from the current test of the switch sync on open) | The check boxes are disabled on open when the persisted switch is on. |
 
 QML tests can fail for offscreen input reasons. Record such a failure with its cause. Do not
@@ -1200,7 +1330,8 @@ It is separate from GS4 so that GS4 stays below 2000 changed lines.
 | Repeat the same natural-language query | No sidecar call for the embedding. | GS1 |
 | Runtime start failure on Enter | Library shows the error row with Retry; earlier content stays. | GS2 |
 | Too-long query on Enter | Palette shows the error; Library does not change. | GS2, GS4 |
-| Change folder with an active natural-language search | New folder shows its kept photos in relevance order. | GS2 |
+| Select a folder with an active natural-language search | The search is cleared, as for field search. | GS2 |
+| Delete the current folder with an active natural-language search | The parent folder shows its kept photos in relevance order; no new embedding. | GS2 |
 | Select a sort with an active natural-language search | Same photos in the selected order. | GS2 |
 | Field query in the palette | Up to 3 previews; Enter applies the field search. | GS4 |
 | Recent search with the switch off | A stored natural-language entry still runs a natural-language search. | GS3 |

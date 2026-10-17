@@ -993,6 +993,10 @@
         <translation>按搜索筛选</translation>
     </message>
     <message>
+        <source>Natural language</source>
+        <translation>自然语言</translation>
+    </message>
+    <message>
         <source>capture time</source>
         <translation>拍摄时间</translation>
     </message>
@@ -1553,6 +1557,22 @@ Alcedo 将改用 %1。</translation>
     <message>
         <source>%1 images</source>
         <translation>%1 张图像</translation>
+    </message>
+    <message>
+        <source>This query uses field search.</source>
+        <translation>此查询使用字段搜索。</translation>
+    </message>
+    <message>
+        <source>Query is too long for natural language search.</source>
+        <translation>自然语言搜索的查询过长。</translation>
+    </message>
+    <message>
+        <source>Natural language search is not available for this project.</source>
+        <translation>此项目无法使用自然语言搜索。</translation>
+    </message>
+    <message>
+        <source>No semantic model is active.</source>
+        <translation>没有已激活的语义模型。</translation>
     </message>
 </context>
 <context>
@@ -5148,6 +5168,10 @@ Refresh the library afterwards; they are listed under the User category. Import 
         <location line="+159"/>
         <source>Press Enter or click Search for natural language search</source>
         <translation>按回车或点击搜索按钮以执行自然语言搜索</translation>
+    </message>
+    <message>
+        <source>Press Enter to search by meaning.</source>
+        <translation>按回车按语义搜索。</translation>
     </message>
 </context>
 <context>

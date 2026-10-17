@@ -276,7 +276,8 @@ auto DateGroupTimestampOf(AlbumGroupField field) -> std::optional<DateGroupTimes
 
 }  // namespace
 
-auto OccurrenceOrderTerms(const AlbumQueryOptions& options) -> std::vector<OrderTerm> {
+auto OccurrenceOrderTerms(const AlbumQueryOptions& options, bool has_relevance)
+    -> std::vector<OrderTerm> {
   std::vector<OrderTerm> terms;
   if (options.group_field_ != AlbumGroupField::kNone) {
     terms.push_back(GroupOrderTerm(options));
@@ -287,6 +288,12 @@ auto OccurrenceOrderTerms(const AlbumQueryOptions& options) -> std::vector<Order
                          ? OrderDirection::kDescending
                          : OrderDirection::kAscending,
                      NullPlacement::kLast});
+  } else if (has_relevance) {
+    // A natural-language search without a selected sort: best match first, in the flat mode
+    // and inside each group. It replaces the date group's timestamp order.
+    terms.push_back({expr::col("s.relevance"), OrderDirection::kDescending, NullPlacement::kLast});
+    terms.push_back({expr::col("s.file_id"), OrderDirection::kAscending, NullPlacement::kLast});
+    return terms;
   }
   if (const auto timestamp = DateGroupTimestampOf(options.group_field_);
       timestamp.has_value() && options.sort_field_ != timestamp->same_sort_field_) {

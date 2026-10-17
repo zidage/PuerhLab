@@ -41,8 +41,8 @@ auto Matches(const SearchSession& session) -> QJsonArray {
 /// available: no matches.
 auto PageResult(const SearchSession& session, int limit) -> QJsonObject {
   QJsonObject result{
-      {"route", session.Route()}, {"offset", session.WindowStart()}, {"limit", limit},
-      {"total", session.Total()}, {"has_more", session.HasMore()},   {"matches", Matches(session)}};
+      {"route", session.Route()}, {"offset", session.Offset()},    {"limit", limit},
+      {"total", session.Total()}, {"has_more", session.HasMore()}, {"matches", Matches(session)}};
   if (session.TooLong()) {
     result.insert("too_long", true);
   }
@@ -82,7 +82,7 @@ auto RegisterAutomationSearchCommands(AutomationCommandRegistry& registry,
                                  {"description", "The first match to return. Default 0."}}},
           {"limit", QJsonObject{{"type", "integer"},
                                 {"minimum", 1},
-                                {"maximum", SearchSession::kWindowCapacity},
+                                {"maximum", SearchSession::kMaxPageRows},
                                 {"description", "The number of matches to return. Default 24."}}},
           {"mode", QJsonObject{{"type", "string"},
                                {"enum", QJsonArray{"auto", "fuzzy"}},
@@ -125,7 +125,7 @@ auto RegisterAutomationSearchCommands(AutomationCommandRegistry& registry,
     // call, so the connections below exist when it arrives.
     auto                            request_id = std::make_shared<qulonglong>(0);
     QObject::connect(session, &SearchSession::ResponseApplied, wait.data(),
-                     [wait, session, request_id, limit](qulonglong id, const QString&, int, int) {
+                     [wait, session, request_id, limit](qulonglong id, const QString&) {
                        if (wait == nullptr || id != *request_id) {
                          return;
                        }

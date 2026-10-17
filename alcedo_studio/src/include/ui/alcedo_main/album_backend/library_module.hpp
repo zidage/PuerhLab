@@ -21,6 +21,7 @@
 #include "sleeve/album_query.hpp"
 #include "sleeve/storage.hpp"
 #include "storage/store/semantic/semantic_label_config.hpp"
+#include "storage/store/semantic/semantic_records.hpp"
 #include "storage/store/sleeve/element_store.hpp"
 #include "ui/alcedo_main/album_backend/album_catalog.hpp"
 #include "ui/alcedo_main/album_backend/album_section_model.hpp"
@@ -70,6 +71,9 @@ struct LibraryQueryOutput {
   AlbumQueryResult          result_{};
   /// Search filter the read used (built on the worker for a pending query text).
   std::optional<FilterNode> search_filter_{};
+  /// Embedding of the natural-language search the read used: made on the worker for a pending
+  /// natural-language text, else the accepted embedding of the input. Empty for other searches.
+  std::optional<SemanticQueryEmbedding> semantic_query_{};
   QString                   error_{};
   /// Display values of result_.rows_ (same order) that SQL does not return: extension, ISO,
   /// aperture, focal length, HDR flag (from the image pool) and the semantic label text. The

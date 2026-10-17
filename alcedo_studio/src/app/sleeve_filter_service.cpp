@@ -605,6 +605,16 @@ auto SleeveFilterService::EmbedSemanticQuery(const std::wstring& query) const
   return semantic_search_provider_->EmbedQuery(text);
 }
 
+auto SleeveFilterService::BuildSemanticRelevanceSelect(
+    sl_element_id_t parent_id, const SemanticQueryEmbedding& embedding) const
+    -> duckorm::SqlFragment {
+  NotifyQueryThreadObserver("BuildSemanticRelevanceSelect");
+  if (!storage_) {
+    throw std::runtime_error("Semantic search requires the project storage.");
+  }
+  return storage_->GetSemanticVectorSearch().BuildRelevanceSelect(parent_id, embedding);
+}
+
 auto SleeveFilterService::SearchFolderSemantic(sl_element_id_t parent_id, const std::wstring& query,
                                                size_t offset, size_t limit) const
     -> SemanticRankedPage {

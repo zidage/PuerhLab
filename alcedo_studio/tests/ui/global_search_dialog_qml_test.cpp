@@ -28,6 +28,7 @@
 #include "ui/album_backend_populated_project_fixture.hpp"
 #include "ui/album_backend_test_fixture.hpp"
 #include "ui/alcedo_main/album_backend/search_controller.hpp"
+#include "ui/alcedo_main/album_backend/search_session.hpp"
 #include "ui/alcedo_main/app_theme.hpp"
 
 namespace alcedo::ui::test {
@@ -255,15 +256,6 @@ auto BusyOrReadyRowCount(QObject* root, int minOrdinalInclusive = 0) -> int {
   return count;
 }
 
-auto HasVisibleRowAtOrAfter(QObject* root, int minOrdinalInclusive) -> bool {
-  for (QObject* row : CollectSearchRows(root)) {
-    if (RowMatchesMinOrdinal(row, minOrdinalInclusive)) {
-      return true;
-    }
-  }
-  return false;
-}
-
 auto ReadyRowCount(QObject* root, int minOrdinalInclusive = 0) -> int {
   int readyCount = 0;
   for (QObject* row : CollectSearchRows(root)) {
@@ -381,8 +373,7 @@ auto CurrentRowSummary(QObject* root) -> std::string {
 
 }  // namespace
 
-TEST_F(GlobalSearchDialogQmlTests,
-       ScrolledSearchResultsRenderPreviewThumbnailsAndReopenStillWorks) {
+TEST_F(GlobalSearchDialogQmlTests, PreviewThumbnailsRenderAfterReopen) {
   auto* app = qobject_cast<QApplication*>(QCoreApplication::instance());
   ASSERT_NE(app, nullptr);
 
@@ -395,7 +386,7 @@ TEST_F(GlobalSearchDialogQmlTests,
 
   const auto searchDataset = MakeSearchDataset(temp_dir_, kSearchItemCount);
   ASSERT_EQ(searchDataset.size(), static_cast<size_t>(kSearchItemCount))
-      << "Need at least 30 searchable RAW files to exercise page 2 thumbnail loading.";
+      << "Need at least 30 searchable RAW files.";
 
   backend.import_export()->StartImport(PathsToQStringList(searchDataset));
   WaitForImportFinished(backend, 180000);
@@ -444,13 +435,15 @@ TEST_F(GlobalSearchDialogQmlTests,
   searchField->setProperty("text", QStringLiteral("scroll_search"));
   ASSERT_TRUE(QMetaObject::invokeMethod(dialog, "refreshPreview"));
 
-  ASSERT_TRUE(WaitUntil([&]() {
-    return dialog->property("searchTotal").toInt() >= kSearchItemCount &&
-           dialog->property("results").toList().size() == kPageSize;
-  }, 20000))
-      << "Search preview did not return the expected first page. total="
-      << dialog->property("searchTotal").toInt()
-      << " rows=" << dialog->property("results").toList().size();
+  // The field preview holds SearchSession::kPreviewRows rows, not a page.
+  ASSERT_TRUE(WaitUntil(
+      [&]() {
+        return dialog->property("results").toList().size() == SearchSession::kPreviewRows &&
+               !dialog->property("searchLoading").toBool();
+      },
+      20000))
+      << "Search preview did not return the expected preview rows. rows="
+      << dialog->property("results").toList().size();
 
   QObject* resultList = nullptr;
   ASSERT_TRUE(WaitUntil([&]() {
@@ -480,41 +473,6 @@ TEST_F(GlobalSearchDialogQmlTests,
   EXPECT_FALSE(ResolveThumbUrlImage(backend, firstPageUrl).isNull())
       << "First rendered preview did not resolve as an image.";
 
-  ASSERT_TRUE(QMetaObject::invokeMethod(dialog, "loadMorePreview"));
-
-  ASSERT_TRUE(WaitUntil([&]() {
-    return dialog->property("results").toList().size() >= kSearchItemCount &&
-           !dialog->property("searchLoading").toBool();
-  }, 30000))
-      << "Scrolling near the end did not append the second search page. rows="
-      << dialog->property("results").toList().size()
-      << " loading=" << dialog->property("searchLoading").toBool();
-
-  ASSERT_TRUE(QMetaObject::invokeMethod(resultList, "positionViewAtEnd"));
-
-  ASSERT_TRUE(WaitUntil([&]() { return HasVisibleRowAtOrAfter(resultContent, kPageSize); }, 10000))
-      << "Second-page delegates never entered the visible QML tree. rows="
-      << CurrentRowSummary(resultContent);
-
-  ASSERT_TRUE(WaitUntil([&]() { return BusyOrReadyRowCount(resultContent, kPageSize) > 0; },
-                        10000))
-      << "Second-page rows never entered loading/ready state after scroll. signals="
-      << previewSpy.count() << " readySignals="
-      << SearchPreviewReadySignalCount(previewSpy)
-      << " previewThumbs=" << VariantToJsonString(dialog->property("previewThumbs"))
-      << " rows=" << CurrentRowSummary(resultContent);
-
-  ASSERT_TRUE(WaitUntil([&]() { return ReadyRowCount(resultContent, kPageSize) > 0; }, 60000))
-      << "Second-page rows never rendered a preview thumbnail after scroll. rows="
-      << CurrentRowSummary(resultContent);
-
-  const QString secondPageUrl = FirstReadyDataUrl(resultContent, kPageSize);
-  ASSERT_FALSE(secondPageUrl.isEmpty());
-  EXPECT_TRUE(secondPageUrl.startsWith(QStringLiteral("image://alcedo-thumb/")))
-      << secondPageUrl.toStdString();
-  EXPECT_FALSE(ResolveThumbUrlImage(backend, secondPageUrl).isNull())
-      << "Second-page rendered preview did not resolve as an image.";
-
   ASSERT_TRUE(QMetaObject::invokeMethod(dialog, "close"));
   ASSERT_TRUE(WaitUntil([&]() { return !dialog->property("visible").toBool(); }, 5000));
 
@@ -528,11 +486,13 @@ TEST_F(GlobalSearchDialogQmlTests,
   searchField->setProperty("text", QStringLiteral("scroll_search"));
   ASSERT_TRUE(QMetaObject::invokeMethod(dialog, "refreshPreview"));
 
-  ASSERT_TRUE(WaitUntil([&]() {
-    return dialog->property("searchTotal").toInt() >= kSearchItemCount &&
-           dialog->property("results").toList().size() == kPageSize;
-  }, 20000))
-      << "Reopened dialog did not rebuild the first search page.";
+  ASSERT_TRUE(WaitUntil(
+      [&]() {
+        return dialog->property("results").toList().size() == SearchSession::kPreviewRows &&
+               !dialog->property("searchLoading").toBool();
+      },
+      20000))
+      << "Reopened dialog did not rebuild the preview rows.";
 
   resultList = FindVisibleListView(windowRoot);
   ASSERT_NE(resultList, nullptr);
@@ -711,11 +671,11 @@ TEST_F(GlobalSearchDialogQmlTests, SemanticTypingShowsAwaitingSubmitAndLabelUses
   ASSERT_TRUE(QMetaObject::invokeMethod(dialog, "close"));
 }
 
-TEST_F(GlobalSearchDialogQmlTests,
-       SemanticSubmitSurvivesPendingTypingDebounceAndLeavesAwaitingSubmit) {
-  // Regression: typing arms previewTimer (140ms). Enter/Search must stop that
-  // timer and run RequestSubmitSearch; otherwise a late refreshPreview replaces
-  // the active search request and drops the sidecar SearchResponseReady payload.
+TEST_F(GlobalSearchDialogQmlTests, SemanticEnterSurvivesPendingTypingDebounceAndShowsRejection) {
+  // Regression: typing arms previewTimer (140ms). Enter must stop that timer before it applies
+  // the natural-language search; otherwise a late refreshPreview clears the reason text of a
+  // rejected apply. The test project has no active semantic model, so the apply is rejected
+  // and the dialog stays open with the reason.
   auto* app = qobject_cast<QApplication*>(QCoreApplication::instance());
   ASSERT_NE(app, nullptr);
 
@@ -763,28 +723,21 @@ TEST_F(GlobalSearchDialogQmlTests,
   const QString query = QStringLiteral("sunset over the mountains");
   // Setting text restarts previewTimer via onTextChanged (instant-search debounce).
   searchField->setProperty("text", query);
-  // Submit immediately while the typing debounce is still armed.
+  // Enter immediately while the typing debounce is still armed.
   ASSERT_TRUE(QMetaObject::invokeMethod(dialog, "handleSearchSubmit"));
-  EXPECT_TRUE(dialog->property("naturalLanguagePreviewActive").toBool())
-      << "Enter/Search must enter the semantic submit path, not stay on typing preview.";
+  // Longer than the debounce interval.
+  ProcessEvents(400);
 
-  ASSERT_TRUE(WaitUntil(
-      [&]() {
-        return responseSpy.count() > 0 && !dialog->property("searchLoading").toBool();
-      },
-      10000))
-      << "Semantic submit must deliver SearchResponseReady without being cancelled by "
-         "a pending previewTimer refreshPreview.";
-
-  EXPECT_TRUE(dialog->property("naturalLanguagePreviewActive").toBool());
-  EXPECT_EQ(dialog->property("currentRoute").toString().toStdString(), "semantic");
+  EXPECT_TRUE(dialog->property("visible").toBool())
+      << "A rejected natural-language apply must keep the dialog open.";
   const auto status = dialog->property("naturalLanguageStatusText").toString();
+  EXPECT_FALSE(status.isEmpty());
   EXPECT_FALSE(status.contains(QStringLiteral("Press Enter")))
-      << "After submit, UI must not remain on the awaiting-submit typing hint; status='"
-      << status.toStdString() << "'";
-  // Without an active model the provider surfaces unavailable — still proves submit ran.
-  EXPECT_TRUE(status.contains(QStringLiteral("not available")) ||
-              status.contains(QStringLiteral("unavailable")) || !status.isEmpty());
+      << "The pending typing preview replaced the rejection text; status='" << status.toStdString()
+      << "'";
+  // Enter applies the search to the library; the dialog sends no page request.
+  EXPECT_EQ(responseSpy.count(), 0);
+  EXPECT_TRUE(searchController->active_search_query().isEmpty());
 
   ASSERT_TRUE(QMetaObject::invokeMethod(dialog, "close"));
   searchController->SetNaturalLanguageSearchEnabled(false);
@@ -797,7 +750,7 @@ TEST_F(GlobalSearchDialogQmlTests,
 // checkboxes would wrongly enable. The dialog's onOpened re-syncs the policy
 // controller to SearchController's state so the drawer shows the correct disabled
 // state on the first open after restart.
-TEST_F(GlobalSearchDialogQmlTests, NaturalLanguageSearchGate_SyncedOnDialogOpen) {
+TEST_F(GlobalSearchDialogQmlTests, NaturalLanguageSwitchIsSyncedOnDialogOpen) {
   auto* app = qobject_cast<QApplication*>(QCoreApplication::instance());
   ASSERT_NE(app, nullptr);
 
@@ -818,7 +771,7 @@ TEST_F(GlobalSearchDialogQmlTests, NaturalLanguageSearchGate_SyncedOnDialogOpen)
   ASSERT_NE(backend.interaction_policy(), nullptr);
 
   // Persist NL enabled (what a restart would restore). SearchController knows it
-  // now; the policy controller does NOT — the gate is still open.
+  // now; the policy controller does NOT — field filters are still allowed.
   searchController->SetNaturalLanguageSearchEnabled(true);
   ASSERT_TRUE(searchController->natural_language_search_enabled());
   EXPECT_TRUE(backend.interaction_policy()
@@ -834,7 +787,7 @@ TEST_F(GlobalSearchDialogQmlTests, NaturalLanguageSearchGate_SyncedOnDialogOpen)
   engine.rootContext()->setContextProperty(QStringLiteral("dialogSourceUrl"),
                                            GlobalSearchDialogFileUrl());
   engine.loadData(QByteArray{kHarnessQml},
-                  QUrl(QStringLiteral("file:///GlobalSearchDialogGateSyncHarness.qml")));
+                  QUrl(QStringLiteral("file:///GlobalSearchDialogSwitchSyncHarness.qml")));
 
   ASSERT_FALSE(engine.rootObjects().empty()) << "QML harness failed to load.";
   QObject* windowRoot = engine.rootObjects().front();
@@ -850,10 +803,8 @@ TEST_F(GlobalSearchDialogQmlTests, NaturalLanguageSearchGate_SyncedOnDialogOpen)
   ASSERT_TRUE(QMetaObject::invokeMethod(dialog, "openFromCollection"));
   ASSERT_TRUE(WaitUntil([&]() { return dialog->property("visible").toBool(); }, 5000));
 
-  EXPECT_FALSE(backend.interaction_policy()
-                   ->property("canChangeSearchFieldFilters")
-                   .toBool())
-      << "Opening the dialog must sync the NL gate so field filters are disabled.";
+  EXPECT_FALSE(backend.interaction_policy()->property("canChangeSearchFieldFilters").toBool())
+      << "Opening the dialog must sync the NL switch so field filters are disabled.";
 
   ASSERT_TRUE(QMetaObject::invokeMethod(dialog, "close"));
 
@@ -947,7 +898,6 @@ TEST_F(GlobalSearchDialogQmlTests, TypingTwentyCharactersQuicklyAppliesOnlyTheLa
   const auto rows = dialog->property("results").toList();
   ASSERT_EQ(rows.size(), 1);
   EXPECT_EQ(rows.front().toMap().value("fileName").toString(), query);
-  EXPECT_EQ(dialog->property("searchTotal").toInt(), 1);
   EXPECT_EQ(dialog->property("lastQuery").toString(), query);
 
   ASSERT_TRUE(QMetaObject::invokeMethod(dialog, "close"));

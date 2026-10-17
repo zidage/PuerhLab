@@ -435,26 +435,63 @@ void SearchController::ApplyExactSearch(uint elementId) {
   library_->RequestLibraryRefresh();
 }
 
+auto SearchController::ApplySemanticSearch(const QString& query) -> QString {
+  const QString trimmed = query.trimmed();
+  if (trimmed.isEmpty()) {
+    return {};
+  }
+  if (session_->RouteFor(trimmed) != QStringLiteral("semantic")) {
+    return SEARCH_TEXT("This query uses field search.").Render();
+  }
+  if (ClassifySearchQuery(trimmed.toStdWString(), true).too_long_) {
+    return SEARCH_TEXT("Query is too long for natural language search.").Render();
+  }
+  auto proj           = project_->handler().project();
+  auto filter_service = proj ? proj->GetSleeveFilterService() : nullptr;
+  if (!filter_service || !filter_service->HasSemanticSearchProvider()) {
+    return SEARCH_TEXT("Natural language search is not available for this project.").Render();
+  }
+  if (stats_->ActiveSemanticModelKey().empty()) {
+    return SEARCH_TEXT("No semantic model is active.").Render();
+  }
+  pending_search_ = LibrarySearchInput{.display_query_ = trimmed,
+                                       .semantic_text_ = trimmed.toStdWString(),
+                                       .pending_       = true,
+                                       .field_mask_    = BuildSearchFieldMask()};
+  library_->RequestLibraryRefresh();
+  return {};
+}
+
 auto SearchController::LibrarySearch() const -> LibrarySearchInput {
   if (pending_search_.has_value()) {
     return *pending_search_;
   }
-  return LibrarySearchInput{.display_query_ = active_search_query_,
-                            .filter_        = active_search_filter_node_,
-                            .pending_       = false,
-                            .field_mask_    = BuildSearchFieldMask()};
+  return LibrarySearchInput{.display_query_  = active_search_query_,
+                            .filter_         = active_search_filter_node_,
+                            .semantic_query_ = accepted_semantic_query_,
+                            .pending_        = false,
+                            .field_mask_     = BuildSearchFieldMask()};
 }
 
-auto SearchController::AcceptLibrarySearch(const LibrarySearchInput&        used,
-                                           const std::optional<FilterNode>& filter) -> bool {
+auto SearchController::AcceptLibrarySearch(
+    const LibrarySearchInput& used, const std::optional<FilterNode>& filter,
+    const std::optional<SemanticQueryEmbedding>& semantic_query) -> bool {
   if (!used.pending_) {
     return false;
   }
   // A search applied after this refresh was submitted stays pending for its own refresh.
   if (pending_search_.has_value() && pending_search_->display_query_ == used.display_query_ &&
-      pending_search_->pending_text_ == used.pending_text_) {
+      pending_search_->pending_text_ == used.pending_text_ &&
+      pending_search_->semantic_text_ == used.semantic_text_) {
     pending_search_.reset();
   }
+  if (used.semantic_text_.has_value() && semantic_query.has_value()) {
+    active_search_query_ = used.display_query_;
+    active_search_filter_node_.reset();
+    accepted_semantic_query_ = semantic_query;
+    return true;
+  }
+  accepted_semantic_query_.reset();
   if (!filter.has_value()) {
     // The query parsed to no terms: no search is active.
     const bool changed = !active_search_query_.isEmpty() || active_search_filter_node_.has_value();
@@ -469,7 +506,8 @@ auto SearchController::AcceptLibrarySearch(const LibrarySearchInput&        used
 
 void SearchController::ClearFuzzySearch() {
   const bool had_search = pending_search_.has_value() || !active_search_query_.isEmpty() ||
-                          active_search_filter_node_.has_value();
+                          active_search_filter_node_.has_value() ||
+                          accepted_semantic_query_.has_value();
   if (!had_search) {
     return;
   }
@@ -761,6 +799,7 @@ void SearchController::ClearSearchState(bool emitSignal) {
   pending_search_.reset();
   active_search_query_.clear();
   active_search_filter_node_.reset();
+  accepted_semantic_query_.reset();
   if (emitSignal) {
     emit SearchStateChanged();
   }

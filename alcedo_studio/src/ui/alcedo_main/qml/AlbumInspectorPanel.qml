@@ -308,6 +308,17 @@ ScrollView {
                                     font.weight: 500
                                     wrapMode: Text.Wrap
                                 }
+
+                                Label {
+                                    Layout.fillWidth: true
+                                    visible: appModules.search.activeSearchIsSemantic
+                                    text: qsTr("Natural language")
+                                    color: root.mutedTextColor
+                                    font.family: appTheme.uiFontFamily
+                                    font.pixelSize: 11
+                                    font.weight: 500
+                                    wrapMode: Text.Wrap
+                                }
                             }
 
                             ToolButton {

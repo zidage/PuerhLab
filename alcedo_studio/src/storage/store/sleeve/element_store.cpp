@@ -35,23 +35,33 @@
 namespace alcedo {
 
 auto BuildScopedFileQuery(sl_element_id_t                            folder_id,
-                          const std::optional<duckorm::SqlFragment>& extra_filter)
+                          const std::optional<duckorm::SqlFragment>& extra_filter,
+                          const std::optional<duckorm::SqlFragment>& relevance_select)
     -> ScopedFileQuery {
   ScopedFileQuery scope;
-  std::string     extra_where;
+  std::string     relevance_join;
+  if (relevance_select.has_value()) {
+    // The join comes before the WHERE text, so its binds come before the filter binds.
+    relevance_join = " JOIN (" + relevance_select->sql_ +
+                     ") rel ON rel.file_id = e.id AND rel.image_id = fi.image_id";
+    scope.binds_.binds_    = relevance_select->binds_;
+    scope.joins_relevance_ = true;
+  }
+  std::string extra_where;
   if (extra_filter.has_value() && !extra_filter->empty()) {
-    extra_where         = " AND (" + extra_filter->sql_ + ")";
-    scope.binds_.sql_   = extra_filter->sql_;
-    scope.binds_.binds_ = extra_filter->binds_;
+    extra_where       = " AND (" + extra_filter->sql_ + ")";
+    scope.binds_.sql_ = extra_filter->sql_;
+    scope.binds_.binds_.insert(scope.binds_.binds_.end(), extra_filter->binds_.begin(),
+                               extra_filter->binds_.end());
   }
 
   if (folder_id == 0) {
     scope.from_where_ = std::format(
         "FROM Element e "
         "JOIN FileImage fi ON fi.file_id = e.id "
-        "JOIN Image i ON i.id = fi.image_id "
+        "JOIN Image i ON i.id = fi.image_id{} "
         "WHERE e.type = {}{}",
-        static_cast<uint32_t>(ElementType::FILE), extra_where);
+        relevance_join, static_cast<uint32_t>(ElementType::FILE), extra_where);
     return scope;
   }
 
@@ -59,9 +69,9 @@ auto BuildScopedFileQuery(sl_element_id_t                            folder_id,
       "FROM FolderContent fc "
       "JOIN Element e ON fc.element_id = e.id "
       "JOIN FileImage fi ON fi.file_id = e.id "
-      "JOIN Image i ON i.id = fi.image_id "
+      "JOIN Image i ON i.id = fi.image_id{} "
       "WHERE fc.folder_id = {} AND e.type = {}{}",
-      folder_id, static_cast<uint32_t>(ElementType::FILE), extra_where);
+      relevance_join, folder_id, static_cast<uint32_t>(ElementType::FILE), extra_where);
   return scope;
 }
 
@@ -141,6 +151,8 @@ void ExecuteQueryOrThrow(duckdb_connection conn, const std::string& sql,
 class MatchSetTable {
  public:
   /// @param import_day_time_zone IANA zone of the import_day column; empty stores NULL there.
+  /// The relevance column holds `rel.relevance` when @p scope joins a relevance select, else
+  /// NULL; the relevance select therefore runs once for the whole read.
   MatchSetTable(duckdb_connection conn, const ScopedFileQuery& scope,
                 const std::string& import_day_time_zone = {})
       : conn_(conn) {
@@ -148,7 +160,10 @@ class MatchSetTable {
     const std::vector<duckorm::SqlFragment> projection{
         expr::raw("e.id AS file_id, fi.image_id, i.file_name, i.camera_model, i.lens, "
                   "i.capture_date, i.capture_at, i.rating, e.added_time"),
-        duckorm::clause::as(album_sql::ImportDayColumn(import_day_time_zone), "import_day")};
+        duckorm::clause::as(album_sql::ImportDayColumn(import_day_time_zone), "import_day"),
+        duckorm::clause::as(expr::raw(scope.joins_relevance_ ? "CAST(rel.relevance AS DOUBLE)"
+                                                             : "CAST(NULL AS DOUBLE)"),
+                            "relevance")};
     auto statement = expr::raw(std::format("CREATE OR REPLACE TEMP TABLE {} AS ", kMatchSetTable));
     statement.append(duckorm::clause::select_query(
         projection, duckorm::SqlFragment{scope.from_where_, scope.binds_.binds_}));
@@ -266,9 +281,12 @@ auto ReadMatchSetLabelBuckets(duckdb_connection conn, const std::string& active_
 auto ReadMatchSet(duckdb_connection conn, sl_element_id_t folder_id,
                   const std::optional<duckorm::SqlFragment>& extra_filter,
                   const std::string& active_semantic_model_key, SearchResultPage* page,
-                  size_t offset, size_t limit) -> FolderStatsView {
+                  size_t offset, size_t limit,
+                  const std::optional<duckorm::SqlFragment>& relevance_select = std::nullopt)
+    -> FolderStatsView {
   // The only statement that evaluates the filter; every read below uses its rows.
-  const MatchSetTable match_set(conn, BuildScopedFileQuery(folder_id, extra_filter));
+  const MatchSetTable match_set(conn,
+                                BuildScopedFileQuery(folder_id, extra_filter, relevance_select));
 
   FolderStatsView     out;
   ReadMatchSetBuckets(conn, out, false);
@@ -327,17 +345,21 @@ auto GroupKeyProjection(AlbumGroupField field) -> duckorm::SqlFragment {
 }
 
 /// `ROW_NUMBER() OVER (ORDER BY <occurrence order>) - 1`: the 0-based occurrence position.
-auto OccurrencePosition(const AlbumQueryOptions& options) -> duckorm::SqlFragment {
+auto OccurrencePosition(const AlbumQueryOptions& options, bool has_relevance)
+    -> duckorm::SqlFragment {
   auto position = duckorm::expr::raw("ROW_NUMBER() OVER (");
-  position.append(duckorm::clause::order_by(album_sql::OccurrenceOrderTerms(options)));
+  position.append(
+      duckorm::clause::order_by(album_sql::OccurrenceOrderTerms(options, has_relevance)));
   position.sql_.append(") - 1");
   return position;
 }
 
 /// Read one bounded page, the counts, the groups, and the statistics from the match set.
+/// @p has_relevance: the match set holds the relevance of a relevance select.
 auto ReadAlbumQueryFromMatchSet(duckdb_connection conn, const AlbumQueryOptions& options,
                                 const std::string&    active_semantic_model_key,
-                                const AlbumQueryRead& read) -> AlbumQueryResult {
+                                const AlbumQueryRead& read, bool has_relevance)
+    -> AlbumQueryResult {
   namespace expr = duckorm::expr;
   AlbumQueryResult out;
   out.first_occurrence_  = read.offset_;
@@ -388,7 +410,8 @@ auto ReadAlbumQueryFromMatchSet(duckdb_connection conn, const AlbumQueryOptions&
     query.append(duckorm::clause::select_query(
         std::vector{expr::raw(kMatchSetResultColumns), GroupKeyProjection(options.group_field_)},
         source));
-    query.append(duckorm::clause::order_by(album_sql::OccurrenceOrderTerms(options)));
+    query.append(
+        duckorm::clause::order_by(album_sql::OccurrenceOrderTerms(options, has_relevance)));
     query.append(duckorm::clause::limit_offset(read.limit_, read.offset_, kMaxAlbumQueryPageRows));
     duckdb_result result;
     ExecuteQueryOrThrow(conn, query.sql_, query, &result);
@@ -779,14 +802,14 @@ auto ElementStore::GetElementIdsInFolderByFilter(const std::shared_ptr<FilterCom
   return ListFilteredFileIds(folder_id, where);
 }
 
-auto ElementStore::BuildFolderStats(sl_element_id_t                            folder_id,
-                                    const std::optional<duckorm::SqlFragment>& extra_filter,
-                                    const std::string& active_semantic_model_key) const
-    -> FolderStatsView {
+auto ElementStore::BuildFolderStats(
+    sl_element_id_t folder_id, const std::optional<duckorm::SqlFragment>& extra_filter,
+    const std::string&                         active_semantic_model_key,
+    const std::optional<duckorm::SqlFragment>& relevance_select) const -> FolderStatsView {
   auto guard   = database_.GetConnectionGuard();
   auto db_lock = guard.Lock();
   return ReadMatchSet(guard.conn_, folder_id, extra_filter, active_semantic_model_key, nullptr, 0,
-                      0);
+                      0, relevance_select);
 }
 
 auto ElementStore::ListSearchResultPageWithStats(
@@ -805,28 +828,31 @@ auto ElementStore::ReadAlbumQuery(sl_element_id_t                            fol
                                   const std::optional<duckorm::SqlFragment>& extra_filter,
                                   const AlbumQueryOptions&                   options,
                                   const std::string&    active_semantic_model_key,
-                                  const AlbumQueryRead& read) const -> AlbumQueryResult {
+                                  const AlbumQueryRead& read,
+                                  const std::optional<duckorm::SqlFragment>& relevance_select) const
+    -> AlbumQueryResult {
   ValidateAlbumQueryRead(options, read);
   auto                 guard   = database_.GetConnectionGuard();
   auto                 db_lock = guard.Lock();
   duckorm::Transaction transaction(guard.conn_);
   AlbumQueryResult     out;
   {
-    // The only statement that evaluates the filter; every read below uses its rows.
-    const MatchSetTable match_set(guard.conn_, BuildScopedFileQuery(folder_id, extra_filter),
-                                  options.local_day_time_zone_);
-    out = ReadAlbumQueryFromMatchSet(guard.conn_, options, active_semantic_model_key, read);
+    // The only statement that evaluates the filter and the relevance select; every read below
+    // uses its rows.
+    const auto          scope = BuildScopedFileQuery(folder_id, extra_filter, relevance_select);
+    const MatchSetTable match_set(guard.conn_, scope, options.local_day_time_zone_);
+    out = ReadAlbumQueryFromMatchSet(guard.conn_, options, active_semantic_model_key, read,
+                                     scope.joins_relevance_);
   }
   transaction.commit();
   return out;
 }
 
-auto ElementStore::ReadAlbumFilePosition(sl_element_id_t                            folder_id,
-                                         const std::optional<duckorm::SqlFragment>& extra_filter,
-                                         const AlbumQueryOptions&                   options,
-                                         const std::string& active_semantic_model_key,
-                                         sl_element_id_t    file_id,
-                                         const std::optional<AlbumGroupKey>& preferred_group) const
+auto ElementStore::ReadAlbumFilePosition(
+    sl_element_id_t folder_id, const std::optional<duckorm::SqlFragment>& extra_filter,
+    const AlbumQueryOptions& options, const std::string& active_semantic_model_key,
+    sl_element_id_t file_id, const std::optional<AlbumGroupKey>& preferred_group,
+    const std::optional<duckorm::SqlFragment>& relevance_select) const
     -> std::optional<AlbumFilePosition> {
   namespace expr = duckorm::expr;
   ValidateAlbumQueryOptions(options);
@@ -835,14 +861,15 @@ auto ElementStore::ReadAlbumFilePosition(sl_element_id_t                        
   duckorm::Transaction             transaction(guard.conn_);
   std::optional<AlbumFilePosition> out;
   {
-    const MatchSetTable match_set(guard.conn_, BuildScopedFileQuery(folder_id, extra_filter),
-                                  options.local_day_time_zone_);
+    const auto          scope = BuildScopedFileQuery(folder_id, extra_filter, relevance_select);
+    const MatchSetTable match_set(guard.conn_, scope, options.local_day_time_zone_);
     auto                query = album_sql::RelationsPrefix(options, active_semantic_model_key);
     query.sql_.append("SELECT position, group_key FROM (");
     query.append(duckorm::clause::select_query(
-        std::vector{expr::raw("s.file_id AS occurrence_file_id"),
-                    duckorm::clause::as(GroupKeyProjection(options.group_field_), "group_key"),
-                    duckorm::clause::as(OccurrencePosition(options), "position")},
+        std::vector{
+            expr::raw("s.file_id AS occurrence_file_id"),
+            duckorm::clause::as(GroupKeyProjection(options.group_field_), "group_key"),
+            duckorm::clause::as(OccurrencePosition(options, scope.joins_relevance_), "position")},
         album_sql::OccurrenceSource(options)));
     query.sql_.append(") WHERE occurrence_file_id = ");
     query.append(expr::param(static_cast<int64_t>(file_id)));
@@ -881,11 +908,11 @@ auto ElementStore::ReadAlbumFilePosition(sl_element_id_t                        
   return out;
 }
 
-auto ElementStore::ReadAlbumFileIds(sl_element_id_t                            folder_id,
-                                    const std::optional<duckorm::SqlFragment>& extra_filter,
-                                    const AlbumQueryOptions&                   options,
-                                    const std::string& active_semantic_model_key,
-                                    int64_t occurrence_begin, int64_t occurrence_end) const
+auto ElementStore::ReadAlbumFileIds(
+    sl_element_id_t folder_id, const std::optional<duckorm::SqlFragment>& extra_filter,
+    const AlbumQueryOptions& options, const std::string& active_semantic_model_key,
+    int64_t occurrence_begin, int64_t occurrence_end,
+    const std::optional<duckorm::SqlFragment>& relevance_select) const
     -> std::vector<sl_element_id_t> {
   namespace expr = duckorm::expr;
   ValidateAlbumQueryOptions(options);
@@ -900,13 +927,14 @@ auto ElementStore::ReadAlbumFileIds(sl_element_id_t                            f
   auto                 db_lock = guard.Lock();
   duckorm::Transaction transaction(guard.conn_);
   {
-    const MatchSetTable match_set(guard.conn_, BuildScopedFileQuery(folder_id, extra_filter),
-                                  options.local_day_time_zone_);
+    const auto          scope = BuildScopedFileQuery(folder_id, extra_filter, relevance_select);
+    const MatchSetTable match_set(guard.conn_, scope, options.local_day_time_zone_);
     auto                query = album_sql::RelationsPrefix(options, active_semantic_model_key);
     query.sql_.append("SELECT occurrence_file_id FROM (");
     query.append(duckorm::clause::select_query(
-        std::vector{expr::raw("s.file_id AS occurrence_file_id"),
-                    duckorm::clause::as(OccurrencePosition(options), "position")},
+        std::vector{
+            expr::raw("s.file_id AS occurrence_file_id"),
+            duckorm::clause::as(OccurrencePosition(options, scope.joins_relevance_), "position")},
         album_sql::OccurrenceSource(options)));
     query.sql_.append(") WHERE position >= ");
     query.append(expr::param(occurrence_begin));
