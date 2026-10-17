@@ -164,14 +164,11 @@ auto RunSearchPageRequest(const SearchPageRequest& request) -> SearchPageResult 
     return result;
   }
   try {
-    result.rows = request.filter_service->SearchFolderSemanticRows(
+    auto page = request.filter_service->SearchFolderSemanticRows(
         request.folder_id.value(), request.query_w, safe_offset, safe_limit);
-    const bool has_more = result.rows.size() == safe_limit;
-    // The provider does not count its matches; report one row past the page when it may
-    // have more.
-    result.response["total"] =
-        ClampToInt(safe_offset + result.rows.size() + (has_more ? size_t{1} : size_t{0}));
-    result.response["hasMore"] = has_more;
+    result.response["total"]   = ClampToInt(page.total_);
+    result.response["hasMore"] = safe_offset + page.rows_.size() < page.total_;
+    result.rows                = std::move(page.rows_);
   } catch (const std::exception& e) {
     result.response["semanticUnavailable"] = true;
     result.response["semanticErrorText"]   = QString::fromUtf8(e.what());

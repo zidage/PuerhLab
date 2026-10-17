@@ -15,6 +15,7 @@
 
 #include "sleeve/sleeve_filter/filter_combo.hpp"
 #include "sleeve/storage.hpp"
+#include "storage/store/semantic/semantic_records.hpp"
 #include "storage/store/sleeve/element_store.hpp"
 #include "type/type.hpp"
 #include "utils/cache/lru_cache.hpp"
@@ -98,13 +99,20 @@ struct FuzzySearchMatch {
   std::string     file_name_{};
 };
 
+/// Embeds natural-language query text for the active semantic model of the project.
 class SemanticSearchProvider {
  public:
   virtual ~SemanticSearchProvider() = default;
 
-  [[nodiscard]] virtual auto Search(sl_element_id_t folder_id, const std::wstring& query,
-                                    size_t offset, size_t limit) const
-      -> std::vector<FuzzySearchMatch> = 0;
+  /**
+   * @brief The embeddings of @p query and of SemanticVectorSearch::kNeutralText.
+   *
+   * @p query is the trimmed query text. Both vectors are validated against the active model
+   * dimension. May start the semantic sidecar and block until it embeds the text.
+   * @throws std::runtime_error when no model is active, the sidecar fails to start or to
+   *         embed, or a returned vector is invalid.
+   */
+  [[nodiscard]] virtual auto EmbedQuery(const std::wstring& query) -> SemanticQueryEmbedding = 0;
 };
 
 /// Threading: the const query methods (search, count, stats, WHERE build) read storage under
@@ -184,18 +192,27 @@ class SleeveFilterService {
                                                    const std::optional<FilterNode>& filter,
                                                    size_t offset, size_t limit) const
       -> SearchResultPageAndStats;
-  /// Semantic (CLIP) search: the provider ranks the files, then one SQL statement reads their
-  /// display columns. Rows keep the provider order. Empty when no provider is set.
+  /// Semantic (CLIP) search: one page of the files kept by the relevance rule of
+  /// SemanticVectorSearch, with their display columns, in relevance order, and the number of
+  /// kept files. Empty when no provider is set or the query is empty.
+  /// @throws std::runtime_error when the embedding or the ranking fails.
   [[nodiscard]] auto SearchFolderSemanticRows(sl_element_id_t parent_id, const std::wstring& query,
                                               size_t offset, size_t limit) const
-      -> std::vector<SearchResultRow>;
+      -> SearchResultPage;
   /// Install or clear (empty function) the query thread observer. Thread-safe.
   void               SetQueryThreadObserver(QueryThreadObserver observer);
   void               SetSemanticSearchProvider(std::shared_ptr<SemanticSearchProvider> provider);
   [[nodiscard]] auto HasSemanticSearchProvider() const -> bool;
+  /// The embeddings of the trimmed @p query through the provider.
+  /// @throws std::runtime_error when no provider is set, the query is empty, or the provider
+  ///         fails.
+  [[nodiscard]] auto EmbedSemanticQuery(const std::wstring& query) const -> SemanticQueryEmbedding;
+  /// One page of the files kept by the relevance rule, in relevance order, and the number of
+  /// kept files. Empty when no provider is set or the query is empty.
+  /// @throws std::runtime_error when the embedding or the ranking fails.
   [[nodiscard]] auto SearchFolderSemantic(sl_element_id_t parent_id, const std::wstring& query,
                                           size_t offset = 0, size_t limit = 48) const
-      -> std::vector<FuzzySearchMatch>;
+      -> SemanticRankedPage;
   [[nodiscard]] auto CountSearchResults(sl_element_id_t parent_id, const std::wstring& query,
                                         SearchFieldMask mask = kAllSearchFields) const
       -> size_t;

@@ -24,7 +24,9 @@
 #include "app/model_asset_catalog.hpp"
 #include "app/project_package_backend.hpp"
 #include "app/project_package_service.hpp"
+#include "app/semantic_query_embedding_cache.hpp"
 #include "sidecar_client/dto/semantic_embedding.hpp"
+#include "storage/store/semantic/semantic_vector_search.hpp"
 #include "utils/diagnostics/app_logging.hpp"
 #include "utils/string/convert.hpp"
 #include "uuid.h"
@@ -158,30 +160,30 @@ auto ValidateSearchEmbedding(const SemanticEmbeddingResult& result, const std::s
   return std::nullopt;
 }
 
-auto MakeSemanticSearchRequestId(sl_element_id_t folder_id, const std::wstring& query)
+auto MakeSemanticTextRequestId(const std::string& model_key, const std::string& text)
     -> std::string {
-  const auto hash = std::hash<std::wstring>{}(query);
-  return "semantic-search-" + std::to_string(folder_id) + "-" + std::to_string(hash);
+  const auto hash = std::hash<std::string>{}(model_key + '\n' + text);
+  return "semantic-text-" + std::to_string(hash);
 }
 
+/**
+ * Embeds natural-language query text for the active model of the project. Each text is
+ * embedded once per model: the vectors stay in a SemanticQueryEmbeddingCache, so a repeated
+ * query and the neutral text take no sidecar lease. A cache miss takes the sidecar lease only
+ * while it starts the runtime (when needed) and embeds the text.
+ */
 class ProjectSemanticSearchProvider final : public SemanticSearchProvider {
  public:
   ProjectSemanticSearchProvider(
-      std::shared_ptr<Storage>                           storage_service,
+      std::shared_ptr<Storage>                                  storage_service,
       std::function<std::shared_ptr<AiSidecarRuntimeService>()> runtime_factory)
-      : storage_(std::move(storage_service)),
-        runtime_factory_(std::move(runtime_factory)) {}
+      : storage_(std::move(storage_service)), runtime_factory_(std::move(runtime_factory)) {}
 
-  [[nodiscard]] auto Search(sl_element_id_t folder_id, const std::wstring& query, size_t offset,
-                            size_t limit) const -> std::vector<FuzzySearchMatch> override {
-    diag::TraceScope trace(diag::semanticLog(), QStringLiteral("semantic.search.provider"),
-                           QStringLiteral("folder_id=%1 query_chars=%2 offset=%3 limit=%4")
-                               .arg(static_cast<qulonglong>(folder_id))
-                               .arg(static_cast<qulonglong>(query.size()))
-                               .arg(static_cast<qulonglong>(offset))
-                               .arg(static_cast<qulonglong>(limit)));
-    if (query.empty() || limit == 0) {
-      return {};
+  [[nodiscard]] auto EmbedQuery(const std::wstring& query) -> SemanticQueryEmbedding override {
+    diag::TraceScope trace(diag::semanticLog(), QStringLiteral("semantic.search.embed_query"),
+                           QStringLiteral("query_chars=%1").arg(static_cast<qulonglong>(query.size())));
+    if (query.empty()) {
+      throw std::runtime_error("Semantic search query is empty.");
     }
     if (!storage_) {
       throw std::runtime_error("Semantic storage service is unavailable.");
@@ -193,12 +195,30 @@ class ProjectSemanticSearchProvider final : public SemanticSearchProvider {
       throw std::runtime_error(error.empty() ? "No active semantic model is registered." : error);
     }
 
+    const auto query_text   = conv::ToBytes(query);
+    const auto neutral_text = std::string(SemanticVectorSearch::kNeutralText);
+    SemanticQueryEmbedding embedding{.model_key_ = active_model->model_key_,
+                                     .dimension_ = active_model->embedding_dim_};
+    embedding.query_ = cache_.GetOrEmbed(active_model->model_key_, query_text, [&] {
+      return EncodeText(*active_model, query_text);
+    });
+    embedding.neutral_ = cache_.GetOrEmbed(active_model->model_key_, neutral_text, [&] {
+      return EncodeText(*active_model, neutral_text);
+    });
+    return embedding;
+  }
+
+ private:
+  /// Starts the runtime when needed, checks that it serves @p model, and embeds @p text.
+  /// @throws std::runtime_error on a start failure, a model mismatch, or an invalid vector.
+  [[nodiscard]] auto EncodeText(const SemanticModelRecord& model, const std::string& text) const
+      -> std::vector<float> {
     auto runtime = runtime_factory_ ? runtime_factory_() : nullptr;
     if (!runtime) {
       throw std::runtime_error("Semantic runtime service is unavailable.");
     }
 
-    const auto runtime_options = RuntimeOptionsForSemanticModel(*active_model);
+    const auto runtime_options = RuntimeOptionsForSemanticModel(model);
     auto       sidecar_lease   = runtime->AcquireLease();
     if (!sidecar_lease) {
       throw std::runtime_error("Semantic runtime service is unavailable.");
@@ -222,56 +242,37 @@ class ProjectSemanticSearchProvider final : public SemanticSearchProvider {
     }
 
     const auto& info = *runtime_status.model_info;
-    if (SemanticModelKeyFromInfo(info) != active_model->model_key_) {
+    if (SemanticModelKeyFromInfo(info) != model.model_key_) {
       throw std::runtime_error("Semantic runtime model does not match the active project model.");
     }
-    if (static_cast<int>(info.embedding_dimension) != active_model->embedding_dim_) {
+    if (static_cast<int>(info.embedding_dimension) != model.embedding_dim_) {
       throw std::runtime_error("Semantic runtime embedding dimension does not match storage.");
     }
-    if (static_cast<int>(info.image_size) != active_model->image_size_) {
+    if (static_cast<int>(info.image_size) != model.image_size_) {
       throw std::runtime_error("Semantic runtime image size does not match storage.");
     }
 
-    const auto request_id = MakeSemanticSearchRequestId(folder_id, query);
-    const auto text       = conv::ToBytes(query);
+    const auto request_id = MakeSemanticTextRequestId(model.model_key_, text);
     qCInfo(diag::semanticLog).noquote()
         << QStringLiteral("semantic.search.embedding.request request_id=%1 model_key=%2")
-               .arg(QString::fromStdString(request_id),
-                    QString::fromStdString(active_model->model_key_));
+               .arg(QString::fromStdString(request_id), QString::fromStdString(model.model_key_));
     const auto client_session = runtime->ClientSession();
     if (!client_session) {
       throw std::runtime_error("Semantic runtime client session is unavailable.");
     }
-    const auto embedding = client_session->semantic().EmbedText(
-        request_id, text, EmbeddingTimeoutForModel(*active_model));
+    auto embedding = client_session->semantic().EmbedText(request_id, text,
+                                                          EmbeddingTimeoutForModel(model));
     if (const auto validation =
-            ValidateSearchEmbedding(embedding, request_id, active_model->embedding_dim_);
+            ValidateSearchEmbedding(embedding, request_id, model.embedding_dim_);
         validation.has_value()) {
       throw std::runtime_error(*validation);
     }
-
-    const auto ranked = storage_->GetSemanticVectorSearch().SearchImageEmbeddings(
-        folder_id, active_model->model_key_, embedding.embedding, offset, limit, &error);
-    if (!error.empty()) {
-      throw std::runtime_error(error);
-    }
-
-    std::vector<FuzzySearchMatch> out;
-    out.reserve(ranked.size());
-    for (const auto& row : ranked) {
-      out.push_back(FuzzySearchMatch{
-          .file_id_ = row.file_id_, .image_id_ = row.image_id_, .file_name_ = row.file_name_});
-    }
-    qCInfo(diag::semanticLog).noquote()
-        << QStringLiteral("semantic.search.provider.result request_id=%1 count=%2")
-               .arg(QString::fromStdString(request_id))
-               .arg(static_cast<qulonglong>(out.size()));
-    return out;
+    return std::move(embedding.embedding);
   }
 
- private:
-  std::shared_ptr<Storage>                           storage_;
+  std::shared_ptr<Storage>                                  storage_;
   std::function<std::shared_ptr<AiSidecarRuntimeService>()> runtime_factory_;
+  SemanticQueryEmbeddingCache                               cache_;
 };
 
 auto ParseSemVer(std::string_view version, std::array<int, 3>* out) -> bool {
@@ -592,22 +593,16 @@ void ProjectService::LoadProject(const std::filesystem::path& meta_path) {
 
   storage_ = std::make_shared<Storage>(db_path_);
 
-  // Best-effort: load the DuckDB vss extension when the project DB already has
-  // HNSW indexes (semantic embedding tables). Without this, every semantic-
-  // generation embedding persist fails with "unknown index type 'HNSW'" on a
-  // normal project open — snapshot import already loads vss, but LoadProject did
-  // not, so the semantic task reported "0 generated, 24 failed" while the
-  // concurrent LLM image-analysis task succeeded (and got blamed for it). Non-
-  // fatal: a missing vss extension only breaks semantic embedding writes, not
-  // image analysis / editing / browsing.
+  // Older projects have HNSW indexes on the semantic embedding tables. Search no
+  // longer uses them, and while one exists every embedding write needs the vss
+  // extension. Drop them; when that fails, the project does not open.
   {
-    auto guard   = storage_->GetDatabase().GetConnectionGuard();
-    auto db_lock = guard.Lock();
-    QString vss_error;
-    if (!project_pack::EnsureVssExtensionForExistingHnswIndexes(guard.conn_, &vss_error)) {
-      qCWarning(diag::semanticLog).noquote()
-          << QStringLiteral("project.open.vss_extension_load_failed error=%1")
-                 .arg(vss_error);
+    auto    guard   = storage_->GetDatabase().GetConnectionGuard();
+    auto    db_lock = guard.Lock();
+    QString drop_error;
+    if (!project_pack::DropHnswIndexesOfOlderProject(guard.conn_, &drop_error)) {
+      throw std::runtime_error("Unable to drop the HNSW index of an older project: " +
+                               drop_error.toStdString());
     }
   }
 

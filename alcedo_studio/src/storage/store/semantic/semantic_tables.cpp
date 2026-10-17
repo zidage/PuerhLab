@@ -25,11 +25,6 @@ auto LabelPrototypeTable(int dim) -> const char* {
   return dim == kSemanticEmbeddingDim768 ? "SemanticLabelPrototype768" : "SemanticLabelPrototype";
 }
 
-auto ImageEmbeddingIndex(int dim) -> const char* {
-  return dim == kSemanticEmbeddingDim768 ? "idx_semantic_image_embedding768_hnsw"
-                                         : "idx_semantic_image_embedding_hnsw";
-}
-
 auto Column(const char* name, duckorm::DuckDBType type) -> duckorm::DuckFieldDesc {
   return duckorm::DuckFieldDesc{name, type, 0};
 }

@@ -20,6 +20,7 @@
 #include <limits>
 #include <optional>
 #include <sstream>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -464,9 +465,8 @@ auto QueryHasHnswIndex(duckdb_connection conn, bool* hasHnswIndexOut,
   return true;
 }
 
-// Renamed from LoadVssExtensionForSnapshot: the vss extension load is now used
-// both by the snapshot import path and by EnsureVssExtensionForExistingHnswIndexes
-// (normal project open), so the "ForSnapshot" suffix was misleading.
+// Loads the packaged vss extension, which DuckDB needs to bind or drop an
+// existing HNSW index (snapshot creation and DropHnswIndexesOfOlderProject).
 auto LoadVssExtension(duckdb_connection conn, QString* errorOut) -> bool {
   std::string load_error;
   if (LoadPackagedDuckDbExtension(conn, "vss", &load_error)) {
@@ -479,15 +479,7 @@ auto LoadVssExtension(duckdb_connection conn, QString* errorOut) -> bool {
   return false;
 }
 
-auto EnsureVssExtensionForExistingHnswIndexes(duckdb_connection conn, QString* errorOut) -> bool {
-  // Normal project open: if the DB already has an HNSW index (the semantic
-  // embedding tables use HNSW), the vss extension must be LOADed before any write
-  // to those tables, or DuckDB fails with "Cannot bind index '...', unknown index
-  // type 'HNSW'". Snapshot import already loads vss; this wrapper covers the
-  // regular LoadProject path so semantic-generation embedding persists don't
-  // silently fail. Returns true when no HNSW index is present (nothing to do) or
-  // vss loaded successfully; false only when an HNSW index exists but vss could
-  // not be loaded — non-fatal, callers should log a warning and continue.
+auto DropHnswIndexesOfOlderProject(duckdb_connection conn, QString* errorOut) -> bool {
   bool has_hnsw = false;
   if (!QueryHasHnswIndex(conn, &has_hnsw, errorOut)) {
     return false;
@@ -495,7 +487,44 @@ auto EnsureVssExtensionForExistingHnswIndexes(duckdb_connection conn, QString* e
   if (!has_hnsw) {
     return true;
   }
-  return LoadVssExtension(conn, errorOut);
+  if (!LoadVssExtension(conn, errorOut)) {
+    return false;
+  }
+
+  duckdb_result result;
+  static constexpr const char* kIndexQuery =
+      "SELECT schema_name, index_name FROM duckdb_indexes() "
+      "WHERE lower(COALESCE(sql, '')) LIKE '%using hnsw%' ORDER BY schema_name, index_name;";
+  if (duckdb_query(conn, kIndexQuery, &result) != DuckDBSuccess) {
+    const char* err_msg = duckdb_result_error(&result);
+    if (errorOut) {
+      *errorOut = Tr("DuckDB query HNSW indexes failed: %1")
+                      .arg(QString::fromUtf8(err_msg ? err_msg : ""));
+    }
+    duckdb_destroy_result(&result);
+    return false;
+  }
+  std::vector<std::string> drop_statements;
+  const auto               row_count = duckdb_row_count(&result);
+  for (idx_t row = 0; row < row_count; ++row) {
+    char*             schema = duckdb_value_varchar(&result, 0, row);
+    char*             index  = duckdb_value_varchar(&result, 1, row);
+    const std::string schema_name(schema ? schema : "");
+    const std::string index_name(index ? index : "");
+    duckdb_free(schema);
+    duckdb_free(index);
+    drop_statements.push_back("DROP INDEX IF EXISTS \"" +
+                              album_util::EscapeSqlIdentifier(schema_name) + "\".\"" +
+                              album_util::EscapeSqlIdentifier(index_name) + "\";");
+  }
+  duckdb_destroy_result(&result);
+
+  for (const auto& statement : drop_statements) {
+    if (!RunDuckDbQuery(conn, statement, "drop HNSW index", errorOut)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 auto QueryCurrentCatalog(duckdb_connection conn, std::string* catalogOut,

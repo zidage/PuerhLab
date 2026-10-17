@@ -538,7 +538,7 @@ TEST_F(LibrarySearchColumnsTest, SearchResultPageReadsDisplayColumnsAndTotalInOn
   EXPECT_EQ(rows[1].lens_, "NIKKOR 35mm f/1.8");
 
   // Without a semantic provider the semantic rows are empty (no vector scan substitute).
-  EXPECT_TRUE(filter_service.SearchFolderSemanticRows(folder_id, L"sunset", 0, 24).empty());
+  EXPECT_TRUE(filter_service.SearchFolderSemanticRows(folder_id, L"sunset", 0, 24).rows_.empty());
 }
 
 

@@ -66,16 +66,15 @@ auto RunDuckDbQuery(duckdb_connection conn, const std::string& sql,
 auto QueryCurrentCatalog(duckdb_connection conn, std::string* catalogOut,
                          QString* errorOut) -> bool;
 
-// Best-effort load of the DuckDB vss extension when the project DB already has
-// an HNSW index (the semantic embedding tables use HNSW). Without vss loaded,
-// any write to such a table fails with "Cannot bind index '...', unknown index
-// type 'HNSW'" — which silently breaks semantic-generation embedding persists
-// on a normal project open (snapshot import already loads vss). Returns true if
-// no HNSW index is present OR vss loaded successfully; false (with errorOut set)
-// only when an HNSW index exists but vss could not be loaded. Callers should
-// treat false as non-fatal (log a warning) — the project is still usable for
-// non-semantic work, but embedding writes will fail until vss is available.
-auto EnsureVssExtensionForExistingHnswIndexes(duckdb_connection conn, QString* errorOut) -> bool;
+// Drops the HNSW indexes that older projects created on the semantic embedding
+// tables. Natural-language search scans the folder scope exactly and uses no
+// vector index, and an HNSW index that stays in the file makes every write to
+// its table require the vss extension. When an index exists, loads the packaged
+// vss extension (DuckDB cannot bind or drop the index without it) and drops each
+// index. Returns true when no HNSW index is left; false with errorOut set when
+// the read, the extension load, or a drop fails. Project open fails on false.
+// Requires the database lock of @p conn.
+auto DropHnswIndexesOfOlderProject(duckdb_connection conn, QString* errorOut) -> bool;
 
 auto BuildTempDbSnapshotPath(std::filesystem::path* snapshotPathOut,
                              QString* errorOut) -> bool;

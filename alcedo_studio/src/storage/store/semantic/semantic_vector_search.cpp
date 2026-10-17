@@ -5,20 +5,18 @@
 #include "storage/store/semantic/semantic_vector_search.hpp"
 
 #include <QString>
-#include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <exception>
 #include <format>
-#include <iterator>
-#include <limits>
+#include <optional>
+#include <span>
+#include <stdexcept>
 #include <variant>
 
-#include "semantic_score_elbow.hpp"
 #include "semantic_tables.hpp"
-#include "storage/mapper/duckorm/duckdb_expr.hpp"
 #include "storage/mapper/duckorm/duckdb_orm.hpp"
-#include "storage/store/duckdb_extension.hpp"
 #include "storage/store/sleeve/element_store.hpp"
 #include "utils/diagnostics/app_logging.hpp"
 
@@ -29,157 +27,259 @@ using semantic_tables::Column;
 using semantic_tables::ImageEmbeddingTable;
 using semantic_tables::SetError;
 
-constexpr size_t kMinCandidatePool = 512;
-
-auto RequestedCandidateLimit(size_t offset, size_t limit) -> size_t {
-  const auto max_size      = std::numeric_limits<size_t>::max();
-  const auto requested_end = offset > max_size - limit ? max_size : offset + limit;
-  return std::max(requested_end, kMinCandidatePool);
+/// Checks the embedding against the registered model and returns the model dimension.
+/// @throws std::runtime_error with the reason.
+auto ValidatedModelDim(duckdb_connection conn, const SemanticQueryEmbedding& embedding) -> int {
+  const auto model_dim = semantic_tables::ModelEmbeddingDim(conn, embedding.model_key_);
+  if (!model_dim.has_value()) {
+    throw std::runtime_error("Semantic model is not registered.");
+  }
+  if (embedding.dimension_ != *model_dim) {
+    throw std::runtime_error("Semantic query embedding dimension does not match the model.");
+  }
+  std::string error;
+  if (!semantic_tables::ValidateEmbedding(embedding.query_, *model_dim, &error)) {
+    throw std::runtime_error("Semantic query embedding is invalid: " + error);
+  }
+  if (!semantic_tables::ValidateEmbedding(embedding.neutral_, *model_dim, &error)) {
+    throw std::runtime_error("Semantic neutral embedding is invalid: " + error);
+  }
+  return *model_dim;
 }
 
-auto FilterAndPageCandidates(std::vector<SemanticRankedFile> candidates, size_t offset,
-                             size_t limit) -> std::vector<SemanticRankedFile> {
-  std::vector<double> scores;
-  scores.reserve(candidates.size());
-  for (const auto& row : candidates) {
-    scores.push_back(row.score_);
+/// @p values scaled to unit length. ValidatedModelDim has rejected a zero norm.
+auto UnitLength(std::span<const float> values) -> std::vector<double> {
+  double norm_sq = 0.0;
+  for (const auto value : values) {
+    norm_sq += static_cast<double>(value) * static_cast<double>(value);
   }
-  const double cutoff = semantic_score_elbow::CutoffScore(scores);
-  candidates.erase(
-      std::remove_if(candidates.begin(), candidates.end(),
-                     [cutoff](const SemanticRankedFile& row) { return row.score_ < cutoff; }),
-      candidates.end());
-  if (offset >= candidates.size()) {
-    return {};
+  const double        norm = std::sqrt(norm_sq);
+  std::vector<double> unit;
+  unit.reserve(values.size());
+  for (const auto value : values) {
+    unit.push_back(static_cast<double>(value) / norm);
   }
-  const auto first          = candidates.begin() + static_cast<std::ptrdiff_t>(offset);
-  const auto remaining_rows = static_cast<size_t>(std::distance(first, candidates.end()));
-  const auto count          = std::min(limit, remaining_rows);
-  return {first, first + static_cast<std::ptrdiff_t>(count)};
+  return unit;
+}
+
+/// The unit-length query vector q of @p embedding.
+auto QueryDirection(const SemanticQueryEmbedding& embedding) -> std::vector<float> {
+  const auto         unit = UnitLength(embedding.query_);
+  std::vector<float> direction(unit.begin(), unit.end());
+  return direction;
+}
+
+/// q - n of the unit-length query and neutral vectors: `x . (q - n) / |x|` is the relevance.
+auto RelevanceDirection(const SemanticQueryEmbedding& embedding) -> std::vector<float> {
+  const auto         query   = UnitLength(embedding.query_);
+  const auto         neutral = UnitLength(embedding.neutral_);
+  std::vector<float> direction(query.size());
+  for (size_t i = 0; i < query.size(); ++i) {
+    direction[i] = static_cast<float>(query[i] - neutral[i]);
+  }
+  return direction;
+}
+
+/**
+ * The common table expressions of the relevance rule over the folder scope:
+ * `scoped` (the direct child files), `scored` (c and r of each file with a ready embedding),
+ * `stats` (count, mean, and population deviation of r), and `rated` (c, r, the z value of r,
+ * and the scored count on each row).
+ *
+ * c and b are cosine similarities. With the text vectors q and n scaled to unit length,
+ * `c = x . q / |x|`, `r = c - b = x . (q - n) / |x|`, and `|x| = sqrt(x . x)`: three inner
+ * products per embedding row. Stored image vectors need not have unit length.
+ *
+ * The products are computed in a projection directly over the scan of the ready embedding rows
+ * of the model, and only the scalar results join the scope. When the vectors go into the join,
+ * DuckDB 1.2 builds its hash table on the embedding rows and copies every vector (about twice
+ * the cost of the products at 20 000 rows). The cost of the scan therefore follows the number of
+ * ready embeddings of the model in the project, not the scope size; the statistics and the keep
+ * rule use the scope rows only. `scored` is materialized because `stats` and `rated` both read
+ * it. The vectors are array literals: DuckDB binds have no array type.
+ */
+auto BuildRatedCte(sl_element_id_t folder_id, const SemanticQueryEmbedding& embedding,
+                   int model_dim) -> duckorm::SqlFragment {
+  const auto scope = BuildScopedFileQuery(folder_id);
+  auto       query = expr::raw(std::format(
+      "WITH scoped AS (SELECT e.id AS file_id, fi.image_id AS image_id {}), "
+            "scored AS MATERIALIZED (SELECT products.file_id, products.image_id, "
+            "products.query_product / products.embedding_norm AS query_similarity, "
+            "products.relevance_product / products.embedding_norm AS relevance "
+            "FROM (SELECT se.file_id, se.image_id, "
+            "sqrt(CAST(array_inner_product(se.embedding, se.embedding) AS DOUBLE)) AS "
+            "embedding_norm, CAST(array_inner_product(se.embedding, ",
+      scope.from_where_));
+  query.append(expr::lit_float_array(QueryDirection(embedding)));
+  query.append(expr::raw(") AS DOUBLE) AS query_product, CAST(array_inner_product(se.embedding, "));
+  query.append(expr::lit_float_array(RelevanceDirection(embedding)));
+  query.append(expr::raw(std::format(") AS DOUBLE) AS relevance_product FROM {} se WHERE ",
+                                     ImageEmbeddingTable(model_dim))));
+  query.append(expr::column_eq("se.model_key", embedding.model_key_));
+  query.append(expr::raw(std::format(
+      " AND se.status = 'ready' AND se.embedding_dim = {}) products "
+      "JOIN scoped ON scoped.file_id = products.file_id AND scoped.image_id = products.image_id), "
+      "stats AS (SELECT COUNT(*) AS scored_count, AVG(relevance) AS relevance_mean, "
+      "STDDEV_POP(relevance) AS relevance_deviation FROM scored), "
+      "rated AS (SELECT scored.file_id, scored.image_id, scored.query_similarity, "
+      "scored.relevance, CASE WHEN stats.relevance_deviation > 0 THEN "
+      "(scored.relevance - stats.relevance_mean) / stats.relevance_deviation END AS relevance_z, "
+      "stats.scored_count FROM scored CROSS JOIN stats) ",
+      model_dim)));
+  return query;
+}
+
+/// The keep rule over the columns of `rated`. A NULL z value (zero deviation) keeps no file
+/// when the scope statistics are used.
+auto KeepCondition() -> duckorm::SqlFragment {
+  auto condition = expr::raw("(query_similarity >= ");
+  condition.append(expr::param(SemanticVectorSearch::kMinQuerySimilarity));
+  condition.append(expr::raw(" AND (scored_count < "));
+  condition.append(
+      expr::param(static_cast<int64_t>(SemanticVectorSearch::kMinScopeStatisticsCount)));
+  condition.append(expr::raw(" OR relevance_z >= "));
+  condition.append(expr::param(SemanticVectorSearch::kMinRelevanceZ));
+  condition.append(expr::raw("))"));
+  return condition;
+}
+
+auto BuildRelevanceSelectWithDim(sl_element_id_t folder_id, const SemanticQueryEmbedding& embedding,
+                                 int model_dim) -> duckorm::SqlFragment {
+  auto query = BuildRatedCte(folder_id, embedding, model_dim);
+  query.append(expr::raw("SELECT file_id, image_id, relevance FROM rated WHERE "));
+  query.append(KeepCondition());
+  return query;
 }
 }  // namespace
 
 SemanticVectorSearch::SemanticVectorSearch(Database& db_ctrl) : database_(db_ctrl) {}
 
-auto SemanticVectorSearch::SearchImageEmbeddings(sl_element_id_t        folder_id,
-                                                 const std::string&     model_key,
-                                                 std::span<const float> query_embedding,
+auto SemanticVectorSearch::BuildRelevanceSelect(sl_element_id_t               folder_id,
+                                                const SemanticQueryEmbedding& embedding) const
+    -> duckorm::SqlFragment {
+  auto       guard     = database_.GetConnectionGuard();
+  auto       db_lock   = guard.Lock();
+  const auto model_dim = ValidatedModelDim(guard.conn_, embedding);
+  return BuildRelevanceSelectWithDim(folder_id, embedding, model_dim);
+}
+
+auto SemanticVectorSearch::SearchImageEmbeddings(sl_element_id_t               folder_id,
+                                                 const SemanticQueryEmbedding& embedding,
                                                  size_t offset, size_t limit,
-                                                 std::string* error) const
-    -> std::vector<SemanticRankedFile> {
+                                                 std::string* error) const -> SemanticRankedPage {
   auto             guard   = database_.GetConnectionGuard();
   auto             db_lock = guard.Lock();
   diag::TraceScope trace(diag::semanticDbLog(), QStringLiteral("semantic.db.search"),
                          QStringLiteral("folder_id=%1 model_key=%2 offset=%3 limit=%4 dim=%5")
                              .arg(static_cast<qulonglong>(folder_id))
-                             .arg(QString::fromStdString(model_key))
+                             .arg(QString::fromStdString(embedding.model_key_))
                              .arg(static_cast<qulonglong>(offset))
                              .arg(static_cast<qulonglong>(limit))
-                             .arg(static_cast<qulonglong>(query_embedding.size())));
-  if (limit == 0) {
-    return {};
-  }
-  std::vector<SemanticRankedFile> candidates;
+                             .arg(static_cast<qulonglong>(embedding.query_.size())));
+  SemanticRankedPage page;
   try {
-    const auto model_dim = semantic_tables::ModelEmbeddingDim(guard.conn_, model_key);
-    if (!model_dim.has_value()) {
-      SetError(error, "Semantic model is not registered.");
-      return {};
-    }
-    if (!semantic_tables::ValidateEmbedding(query_embedding, *model_dim, error)) {
-      return {};
-    }
-    if (!EnsureVectorSearchIndex(model_key, error)) {
-      return {};
+    const auto model_dim = ValidatedModelDim(guard.conn_, embedding);
+    const auto kept      = BuildRelevanceSelectWithDim(folder_id, embedding, model_dim);
+    const auto count_kept = [&]() -> size_t {
+      auto count = expr::raw("SELECT COUNT(*) FROM (");
+      count.append(kept);
+      count.append(expr::raw(") kept"));
+      return static_cast<size_t>(duckorm::select_int64(guard.conn_, count).value_or(0));
+    };
+
+    if (limit == 0) {
+      page.total_ = count_kept();
+      return page;
     }
 
-    // The query vector is an array literal: DuckDB binds here have no array type.
-    const auto scope         = BuildScopedFileQuery(folder_id);
-    const auto query_literal = expr::lit_float_array(query_embedding);
-    auto       query         = expr::raw(
-        "WITH nearest AS (SELECT se.file_id, se.image_id, array_distance(se.embedding, ");
-    query.append(query_literal);
-    query.append(expr::raw(
-        std::format(") AS distance FROM {} se WHERE ", ImageEmbeddingTable(*model_dim))));
-    query.append(expr::column_eq("se.model_key", model_key));
-    query.append(expr::raw(std::format(" AND se.status = 'ready' AND se.embedding_dim = {} ORDER "
-                                       "BY array_distance(se.embedding, ",
-                                       *model_dim)));
-    query.append(query_literal);
-    query.append(expr::raw(std::format(
-        ") ASC LIMIT {}), "
-        "scoped AS (SELECT e.id AS file_id, fi.image_id AS image_id, e.element_name AS file_name "
-        "{}), "
-        "ranked AS (SELECT scoped.file_id, scoped.image_id, scoped.file_name, "
-        "1.0 - ((nearest.distance * nearest.distance) / 2.0) AS score "
-        "FROM nearest JOIN scoped ON scoped.file_id = nearest.file_id "
-        "AND scoped.image_id = nearest.image_id) "
-        "SELECT file_id, image_id, file_name, score FROM ranked ORDER BY score DESC, file_id",
-        RequestedCandidateLimit(offset, limit), scope.from_where_)));
+    auto query = expr::raw(
+        "SELECT file_id, image_id, relevance, COUNT(*) OVER () AS kept_count FROM (");
+    query.append(kept);
+    query.append(expr::raw(") kept ORDER BY relevance DESC, file_id ASC LIMIT "));
+    query.append(expr::param(static_cast<int64_t>(limit)));
+    query.append(expr::raw(" OFFSET "));
+    query.append(expr::param(static_cast<int64_t>(offset)));
 
     static const std::array<duckorm::DuckFieldDesc, 4> fields = {
         Column("file_id", duckorm::DuckDBType::INT64),
         Column("image_id", duckorm::DuckDBType::INT64),
-        Column("file_name", duckorm::DuckDBType::VARCHAR),
-        Column("score", duckorm::DuckDBType::DOUBLE)};
+        Column("relevance", duckorm::DuckDBType::DOUBLE),
+        Column("kept_count", duckorm::DuckDBType::INT64)};
     const auto rows = duckorm::select_by_query(guard.conn_, fields, fields.size(), query);
-    candidates.reserve(rows.size());
+    page.rows_.reserve(rows.size());
     for (const auto& row : rows) {
-      candidates.push_back(
+      page.rows_.push_back(
           SemanticRankedFile{.file_id_   = static_cast<sl_element_id_t>(std::get<int64_t>(row[0])),
                              .image_id_  = static_cast<image_id_t>(std::get<int64_t>(row[1])),
-                             .file_name_ = duckorm::cell_text(row[2]),
-                             .score_     = std::get<double>(row[3])});
+                             .relevance_ = std::get<double>(row[2])});
     }
+    // The window value exists only on a returned row; a page past the end counts separately.
+    page.total_ = rows.empty() ? (offset == 0 ? 0 : count_kept())
+                               : static_cast<size_t>(std::get<int64_t>(rows.front()[3]));
   } catch (const std::exception& e) {
     SetError(error, e.what());
     return {};
   }
 
-  const auto raw_count = candidates.size();
-  auto       page      = FilterAndPageCandidates(std::move(candidates), offset, limit);
   qCInfo(diag::semanticDbLog).noquote()
       << QStringLiteral(
-             "semantic.db.search.result folder_id=%1 model_key=%2 raw_candidates=%3 "
-             "page_count=%4 offset=%5 limit=%6")
+             "semantic.db.search.result folder_id=%1 model_key=%2 kept=%3 page_count=%4 "
+             "offset=%5 limit=%6")
              .arg(static_cast<qulonglong>(folder_id))
-             .arg(QString::fromStdString(model_key))
-             .arg(static_cast<qulonglong>(raw_count))
-             .arg(static_cast<qulonglong>(page.size()))
+             .arg(QString::fromStdString(embedding.model_key_))
+             .arg(static_cast<qulonglong>(page.total_))
+             .arg(static_cast<qulonglong>(page.rows_.size()))
              .arg(static_cast<qulonglong>(offset))
              .arg(static_cast<qulonglong>(limit));
   return page;
 }
 
-auto SemanticVectorSearch::EnsureVectorSearchIndex(const std::string& model_key,
-                                                   std::string*       error) const -> bool {
+auto SemanticVectorSearch::ReadRelevanceScores(sl_element_id_t               folder_id,
+                                               const SemanticQueryEmbedding& embedding,
+                                               std::string*                  error) const
+    -> std::vector<SemanticRelevanceScore> {
   auto guard   = database_.GetConnectionGuard();
   auto db_lock = guard.Lock();
+  std::vector<SemanticRelevanceScore> scores;
   try {
-    const auto model_dim = semantic_tables::ModelEmbeddingDim(guard.conn_, model_key);
-    if (!model_dim.has_value()) {
-      SetError(error, "Semantic model is not registered.");
-      return false;
+    const auto model_dim = ValidatedModelDim(guard.conn_, embedding);
+    auto       query     = BuildRatedCte(folder_id, embedding, model_dim);
+    query.append(expr::raw(
+        "SELECT rated.file_id, rated.image_id, e.element_name AS file_name, query_similarity, "
+        "query_similarity - relevance AS neutral_similarity, relevance, relevance_z, CAST("));
+    query.append(KeepCondition());
+    query.append(expr::raw(
+        " AS INTEGER) AS kept FROM rated JOIN Element e ON e.id = rated.file_id "
+        "ORDER BY relevance DESC, rated.file_id"));
+
+    static const std::array<duckorm::DuckFieldDesc, 8> fields = {
+        Column("file_id", duckorm::DuckDBType::INT64),
+        Column("image_id", duckorm::DuckDBType::INT64),
+        Column("file_name", duckorm::DuckDBType::VARCHAR),
+        Column("query_similarity", duckorm::DuckDBType::DOUBLE),
+        Column("neutral_similarity", duckorm::DuckDBType::DOUBLE),
+        Column("relevance", duckorm::DuckDBType::DOUBLE),
+        Column("relevance_z", duckorm::DuckDBType::NULLABLE_DOUBLE),
+        Column("kept", duckorm::DuckDBType::NULLABLE_INT64)};
+    const auto rows = duckorm::select_by_query(guard.conn_, fields, fields.size(), query);
+    scores.reserve(rows.size());
+    for (const auto& row : rows) {
+      const auto kept = std::get<std::optional<int64_t>>(row[7]);
+      scores.push_back(SemanticRelevanceScore{
+          .file_id_            = static_cast<sl_element_id_t>(std::get<int64_t>(row[0])),
+          .image_id_           = static_cast<image_id_t>(std::get<int64_t>(row[1])),
+          .file_name_          = duckorm::cell_text(row[2]),
+          .query_similarity_   = std::get<double>(row[3]),
+          .neutral_similarity_ = std::get<double>(row[4]),
+          .relevance_          = std::get<double>(row[5]),
+          .relevance_z_        = std::get<std::optional<double>>(row[6]),
+          .kept_               = kept.value_or(0) != 0});
     }
-    if (!semantic_tables::IsSupportedEmbeddingDim(*model_dim)) {
-      SetError(error, std::format("Semantic storage does not support {}-dimensional embeddings.",
-                                  *model_dim));
-      return false;
-    }
-    if (!LoadPackagedDuckDbExtension(guard.conn_, "vss", error)) {
-      return false;
-    }
-    duckorm::execute(guard.conn_, expr::raw("SET hnsw_enable_experimental_persistence = true;"));
-    duckorm::execute(guard.conn_,
-                     expr::raw(std::format("CREATE INDEX IF NOT EXISTS {} ON {} USING HNSW "
-                                           "(embedding);",
-                                           semantic_tables::ImageEmbeddingIndex(*model_dim),
-                                           ImageEmbeddingTable(*model_dim))));
-    return true;
   } catch (const std::exception& e) {
     SetError(error, e.what());
-    return false;
+    return {};
   }
+  return scores;
 }
 
 }  // namespace alcedo

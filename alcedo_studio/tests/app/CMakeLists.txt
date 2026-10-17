@@ -309,6 +309,28 @@ target_link_libraries(SleeveServiceTest
 
 alcedo_register_test_target(SleeveServiceTest app)
 
+# Query embedding cache of natural-language search
+# (docs/roadmap/alcedo_studio/ui/global_search_redesign_plan.md, Phase GS1).
+add_executable(SemanticQueryEmbeddingCacheTest
+  ${ALCEDO_TEST_ROOT}/app/semantic_query_embedding_cache_test.cpp)
+target_include_directories(SemanticQueryEmbeddingCacheTest PUBLIC ${ALCEDO_INCLUDE_DIR})
+target_link_libraries(SemanticQueryEmbeddingCacheTest SemanticQueryEmbeddingCache GTest::gtest_main)
+gtest_discover_tests(SemanticQueryEmbeddingCacheTest TEST_PREFIX "SemanticQueryEmbeddingCacheTest."
+  PROPERTIES LABELS "ci_core_flow")
+alcedo_register_test_target(SemanticQueryEmbeddingCacheTest app ci_core)
+
+# Calibration of the natural-language relevance rule against a real project (same plan,
+# Phase GS1). Skipped unless ALCEDO_SEMANTIC_CALIBRATION_PROJECT and
+# ALCEDO_SEMANTIC_CALIBRATION_QUERIES are set.
+add_executable(SemanticRelevanceCalibrationTest
+  ${ALCEDO_TEST_ROOT}/app/semantic_relevance_calibration_test.cpp)
+target_include_directories(SemanticRelevanceCalibrationTest PUBLIC ${ALCEDO_INCLUDE_DIR})
+target_link_libraries(SemanticRelevanceCalibrationTest ProjectService GTest::gtest_main)
+gtest_discover_tests(SemanticRelevanceCalibrationTest
+  TEST_PREFIX "SemanticRelevanceCalibrationTest.")
+alcedo_copy_duckdb_extensions(SemanticRelevanceCalibrationTest)
+alcedo_register_test_target(SemanticRelevanceCalibrationTest app)
+
 add_executable(FilterServiceTest ${ALCEDO_TEST_ROOT}/app/filter_service_test.cpp)
 target_include_directories(FilterServiceTest PUBLIC ${ALCEDO_INCLUDE_DIR} ${ALCEDO_TEST_DIR})
 target_link_libraries(FilterServiceTest ImportService ProjectService SleeveFilterService GTest::gtest_main)

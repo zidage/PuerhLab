@@ -146,6 +146,13 @@ def_library(SleeveFilterService
     PUBLIC_DEPS SleeveElement Storage SleeveFilter StrConv
 )
 
+# LRU cache of natural-language query embeddings (global search GS1).
+def_library(SemanticQueryEmbeddingCache
+    SOURCES
+        "${ALCEDO_APP_ROOT}/semantic_query_embedding_cache.cpp"
+        "${ALCEDO_INCLUDE_ROOT}/app/semantic_query_embedding_cache.hpp"
+)
+
 def_library(AlbumBrowseService
     SOURCES
         "${ALCEDO_APP_ROOT}/album_browse_service.cpp"
@@ -313,7 +320,7 @@ def_library(ProjectService
         "${ALCEDO_APP_ROOT}/project_package_service.cpp"
         "${ALCEDO_SRC_ROOT}/ui/alcedo_main/album_backend/path_utils.cpp"
     PUBLIC_DEPS FSService Storage ImagePoolService AlbumBrowseService SleeveFilterService
-                AiSidecarRuntimeService ModelDownloadService
+                AiSidecarRuntimeService ModelDownloadService SemanticQueryEmbeddingCache
                 StrConv JSON xxHash stduuid EditMaskCore
     PRIVATE_DEPS
         AppDiagnostics

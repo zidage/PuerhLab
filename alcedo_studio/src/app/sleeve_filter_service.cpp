@@ -12,6 +12,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -592,14 +593,34 @@ auto SleeveFilterService::HasSemanticSearchProvider() const -> bool {
   return semantic_search_provider_ != nullptr;
 }
 
+auto SleeveFilterService::EmbedSemanticQuery(const std::wstring& query) const
+    -> SemanticQueryEmbedding {
+  if (!semantic_search_provider_) {
+    throw std::runtime_error("No semantic search provider is available.");
+  }
+  const auto text = TrimCopy(query);
+  if (text.empty()) {
+    throw std::runtime_error("Semantic search query is empty.");
+  }
+  return semantic_search_provider_->EmbedQuery(text);
+}
+
 auto SleeveFilterService::SearchFolderSemantic(sl_element_id_t parent_id, const std::wstring& query,
                                                size_t offset, size_t limit) const
-    -> std::vector<FuzzySearchMatch> {
+    -> SemanticRankedPage {
   NotifyQueryThreadObserver("SearchFolderSemantic");
-  if (!semantic_search_provider_) {
+  if (!semantic_search_provider_ || !storage_ || TrimCopy(query).empty()) {
     return {};
   }
-  return semantic_search_provider_->Search(parent_id, query, offset, limit);
+  const auto  embedding = EmbedSemanticQuery(query);
+  std::string error;
+  auto        page =
+      storage_->GetSemanticVectorSearch().SearchImageEmbeddings(parent_id, embedding, offset,
+                                                                limit, &error);
+  if (!error.empty()) {
+    throw std::runtime_error(error);
+  }
+  return page;
 }
 
 auto SleeveFilterService::SearchFolderPage(sl_element_id_t parent_id, const std::wstring& query,
@@ -630,19 +651,19 @@ auto SleeveFilterService::ListSearchResultPage(sl_element_id_t                  
 
 auto SleeveFilterService::SearchFolderSemanticRows(sl_element_id_t     parent_id,
                                                    const std::wstring& query, size_t offset,
-                                                   size_t limit) const
-    -> std::vector<SearchResultRow> {
+                                                   size_t limit) const -> SearchResultPage {
   NotifyQueryThreadObserver("SearchFolderSemanticRows");
   if (!storage_) {
     return {};
   }
-  const auto                   matches = SearchFolderSemantic(parent_id, query, offset, limit);
+  const auto                   ranked = SearchFolderSemantic(parent_id, query, offset, limit);
   std::vector<sl_element_id_t> file_ids;
-  file_ids.reserve(matches.size());
-  for (const auto& match : matches) {
-    file_ids.push_back(match.file_id_);
+  file_ids.reserve(ranked.rows_.size());
+  for (const auto& row : ranked.rows_) {
+    file_ids.push_back(row.file_id_);
   }
-  return storage_->GetElementStore().ListSearchResultRows(file_ids);
+  return SearchResultPage{.total_ = ranked.total_,
+                          .rows_  = storage_->GetElementStore().ListSearchResultRows(file_ids)};
 }
 
 void SleeveFilterService::SetQueryThreadObserver(QueryThreadObserver observer) {

@@ -76,11 +76,47 @@ struct SemanticLabelQueryRecord {
   std::string query_text_{};
 };
 
-/// One file ranked by a natural-language vector search.
+/**
+ * @brief The text embeddings of one natural-language query for one model.
+ *
+ * The result of an embedding operation (SemanticSearchProvider::EmbedQuery), not a copy of an
+ * owner's state. `query_` is the embedding of the trimmed query text and `neutral_` the
+ * embedding of the fixed neutral text (SemanticVectorSearch::kNeutralText); both have
+ * `dimension_` values. A search caller keeps the value while the search is active, so later
+ * page reads do not embed the text again, and releases it when the search ends. No code writes
+ * it back to an owner.
+ */
+struct SemanticQueryEmbedding {
+  std::string        model_key_{};
+  int                dimension_ = 0;
+  std::vector<float> query_{};
+  std::vector<float> neutral_{};
+};
+
+/// One file kept by the natural-language relevance rule (SemanticVectorSearch).
 struct SemanticRankedFile {
   sl_element_id_t file_id_  = 0;
   image_id_t      image_id_ = 0;
+  /// Query similarity minus neutral similarity.
+  double          relevance_ = 0.0;
+};
+
+/// One page of the kept files, in relevance order, and the number of all kept files.
+struct SemanticRankedPage {
+  std::vector<SemanticRankedFile> rows_{};
+  size_t                          total_ = 0;
+};
+
+/// The relevance values of one scored file of a scope, before the keep rule is applied.
+struct SemanticRelevanceScore {
+  sl_element_id_t file_id_            = 0;
+  image_id_t      image_id_           = 0;
   std::string     file_name_{};
-  double          score_ = 0.0;
+  double          query_similarity_   = 0.0;  ///< c: cosine similarity to the query text.
+  double          neutral_similarity_ = 0.0;  ///< b: cosine similarity to the neutral text.
+  double          relevance_          = 0.0;  ///< r = c - b.
+  /// (r - mean) / population standard deviation over the scope; empty when the deviation is 0.
+  std::optional<double> relevance_z_{};
+  bool                  kept_ = false;  ///< True when the keep rule keeps the file.
 };
 }  // namespace alcedo

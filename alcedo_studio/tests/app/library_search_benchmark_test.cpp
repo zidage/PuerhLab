@@ -14,6 +14,11 @@
 // Since Phase S8 the apply read evaluates the search predicate once for the page, the total,
 // and the stats.
 //
+// A third benchmark measures the natural-language relevance read
+// (global_search_redesign_plan.md, Phase GS1): SemanticVectorSearch::SearchImageEmbeddings
+// over one folder of 20 000 synthetic 512-dimensional embeddings. Target: p50 at or below 80 ms
+// in a release build.
+//
 // Environment variables:
 //   ALCEDO_SEARCH_BENCH_REPEAT   runs per query (default 3)
 //   ALCEDO_SEARCH_BENCH_PROJECT  path to a packed .alcd project for the real-project test
@@ -37,6 +42,8 @@
 #include "app/sleeve_filter_service.hpp"
 #include "library_search_test_support.hpp"
 #include "process_memory_test_support.hpp"
+#include "storage/store/semantic/semantic_records.hpp"
+#include "storage/store/semantic/semantic_vector_search.hpp"
 #include "utils/clock/time_provider.hpp"
 
 namespace alcedo {
@@ -264,6 +271,85 @@ TEST_F(LibrarySearchBenchmarkTest, DISABLED_ReportsSearchLatencyForOneThousandFi
 // A lower DNG share keeps the temporary database near 200 MB with the current profile storage.
 TEST_F(LibrarySearchBenchmarkTest, DISABLED_ReportsSearchLatencyForTwentyThousandFileLibrary) {
   RunSyntheticBenchmark(20000, 20);
+}
+
+/// A deterministic unit-length vector of the 512-dimensional model; @p salt selects the vector.
+auto SyntheticUnitVector(uint32_t salt) -> std::vector<float> {
+  std::vector<float> values(kSemanticEmbeddingDim);
+  uint32_t           state = 2166136261U ^ salt;
+  double             norm  = 0.0;
+  for (auto& value : values) {
+    state = state * 1664525U + 1013904223U;
+    value = static_cast<float>(state >> 8U) / static_cast<float>(1U << 24U) - 0.5F;
+    norm += static_cast<double>(value) * value;
+  }
+  for (auto& value : values) {
+    value = static_cast<float>(value / std::sqrt(norm));
+  }
+  return values;
+}
+
+TEST_F(LibrarySearchBenchmarkTest, DISABLED_RelevanceSelectOver20000Embeddings) {
+  constexpr size_t      kFileCount = 20000;
+  constexpr size_t      kPageSize  = 120;
+  constexpr const char* kModelKey  = "relevance-benchmark";
+  ProjectService        project(work_dir_ / "relevance.db", work_dir_ / "relevance.json");
+  ASSERT_EQ(SyntheticLibraryBuilder(project).AddFiles(BenchmarkLibrarySpecs(kFileCount, 0)).size(),
+            kFileCount);
+
+  auto&       storage = *project.GetStorage();
+  std::string error;
+  ASSERT_TRUE(storage.GetSemanticModelRegistry().UpsertModel(
+      SemanticModelRecord{.model_key_     = kModelKey,
+                          .model_id_      = "relevance-benchmark",
+                          .revision_      = "bench",
+                          .embedding_dim_ = kSemanticEmbeddingDim,
+                          .image_size_    = 256},
+      &error))
+      << error;
+  {
+    // One statement writes a pseudo-random ready embedding for every file.
+    auto          guard = storage.GetDatabase().GetConnectionGuard();
+    auto          lock  = guard.Lock();
+    duckdb_result result;
+    const auto    sql = std::format(
+        "INSERT INTO SemanticImageEmbedding (file_id, image_id, model_key, embedding, "
+           "embedding_dim, thumbnail_resolution, status, error) "
+           "SELECT fi.file_id, fi.image_id, '{}', "
+           "CAST(list_transform(range({}), k -> CAST(hash(fi.file_id * {} + k) % 2001 AS FLOAT) "
+           "/ 1000.0 - 1.0) AS FLOAT[{}]), {}, 256, 'ready', NULL FROM FileImage fi",
+        kModelKey, kSemanticEmbeddingDim, kSemanticEmbeddingDim, kSemanticEmbeddingDim,
+        kSemanticEmbeddingDim);
+    ASSERT_EQ(duckdb_query(guard.conn_, sql.c_str(), &result), DuckDBSuccess)
+        << duckdb_result_error(&result);
+    duckdb_destroy_result(&result);
+  }
+  ASSERT_EQ(storage.GetSemanticEmbeddingStore().CountImageEmbeddings(kModelKey), kFileCount);
+
+  const SemanticQueryEmbedding embedding{.model_key_ = kModelKey,
+                                         .dimension_ = kSemanticEmbeddingDim,
+                                         .query_     = SyntheticUnitVector(1),
+                                         .neutral_   = SyntheticUnitVector(2)};
+  const auto                   folder_id = LibraryRootFolderId(project);
+  const auto&                  search    = storage.GetSemanticVectorSearch();
+  std::vector<double>          samples;
+  const int                    repeat = std::max(RepeatCount(), 20);
+  size_t                       total  = 0;
+  for (int run = 0; run < repeat; ++run) {
+    const auto start = Clock::now();
+    const auto page  = search.SearchImageEmbeddings(folder_id, embedding, 0, kPageSize, &error);
+    samples.push_back(ElapsedMs(start));
+    ASSERT_TRUE(error.empty()) << error;
+    total = page.total_;
+  }
+
+  const auto line = std::format("  {} embeddings, {} kept, p50 {:.1f} ms, p95 {:.1f} ms ({} runs)",
+                                kFileCount, total, Percentile(samples, 50),
+                                Percentile(samples, 95), repeat);
+  std::cout << "\n[natural-language relevance read]\n" << line << "\n";
+  std::cout.flush();
+  ::testing::Test::RecordProperty("relevance read", line);
+  EXPECT_LE(Percentile(samples, 50), 80.0);
 }
 
 TEST_F(LibrarySearchBenchmarkTest, DISABLED_ReportsSearchLatencyForPackedProject) {
