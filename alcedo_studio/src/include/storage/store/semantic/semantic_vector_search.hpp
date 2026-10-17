@@ -32,10 +32,10 @@ class SemanticVectorSearch {
   /// subject is in about 40 % of the scope has z values near 1.1 for its clear matches.
   static constexpr double      kMinRelevanceZ           = 1.0;
   /// Minimum cosine similarity between the image and the query text for a file to be kept.
-  /// Calibrated with SemanticRelevanceCalibrationTest on SigLIP2 embeddings: the midpoint
-  /// between the highest similarity of a nonsense-query file with z >= kMinRelevanceZ (0.0779)
-  /// and the lowest similarity of a listed match (0.0807).
-  static constexpr double      kMinQuerySimilarity      = 0.0793;
+  /// Calibrated with SemanticRelevanceCalibrationTest on SigLIP2 embeddings of a varied project:
+  /// the midpoint between the highest similarity of a nonsense-query file with
+  /// z >= kMinRelevanceZ (0.0816) and the lowest similarity of a listed match (0.0894).
+  static constexpr double      kMinQuerySimilarity      = 0.0855;
   /// Below this number of scored files the scope statistics are not used.
   static constexpr size_t      kMinScopeStatisticsCount = 30;
   /// The text whose embedding gives the neutral similarity `b`.

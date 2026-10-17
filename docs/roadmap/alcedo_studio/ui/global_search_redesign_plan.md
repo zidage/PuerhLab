@@ -235,7 +235,7 @@ Constants (owned by `SemanticVectorSearch`):
 | Constant | Initial value | Value after the Phase GS1 calibration |
 | --- | --- | --- |
 | `kMinRelevanceZ` | 2.0 | 1.0 |
-| `kMinQuerySimilarity` | none | 0.0793 (SigLIP2 embeddings) |
+| `kMinQuerySimilarity` | none | 0.0855 (SigLIP2 embeddings) |
 | `kMinScopeStatisticsCount` | 30 | 30 (fixed) |
 | neutral text | `a photo` | `a photo` (fixed) |
 
@@ -705,8 +705,9 @@ Discovered / passed / failed / skipped counts: 120 discovered; 116 passed; 0 fai
   (SemanticQueryEmbeddingCacheTest); SemanticSearchProviderDelegatesWhenRegistered
   (FilterServiceTest). VssSearchCutsOffWeakTailBeforePaging is removed.
   LiveRelevanceKeepsListedPhotosAndRejectsNonsenseQueries: run directly with the
-  environment below -> PASSED (127 s).
-Manual verification: alcedo-cli session start --headless on a copy of bug_reproduce.alcd
+  environment below, final constants -> PASSED (240 s).
+Manual verification (with the first constant 0.0793, before the time-test calibration):
+  alcedo-cli session start --headless on a copy of bug_reproduce.alcd
   (649 SigLIP2 embeddings, older HNSW index) with a settings directory that enables
   natural-language search. The project opened (index dropped).
   search.query "a plate of sushi" and "quarterly tax invoice spreadsheet" -> matches [],
@@ -716,8 +717,9 @@ Manual verification: alcedo-cli session start --headless on a copy of bug_reprod
 Performance or resource evidence:
   LibrarySearchBenchmarkTest.DISABLED_RelevanceSelectOver20000Embeddings, win_release with
   ALCEDO_BUILD_TESTS=ON (set back to OFF): 20 000 synthetic 512-dimensional embeddings in
-  one folder, page of 120, final constants: p50 52.9 ms / 53.7 ms (two runs), p95 57.8 ms /
-  62.0 ms, 552 kept. Target p50 <= 80 ms: met.
+  one folder, page of 120, final constants: p50 55.5 ms / 56.9 ms (two runs), p95 64.6 ms /
+  79.1 ms, 419 kept. Target p50 <= 80 ms: met. (With the first constant 0.0793: p50 52.9 ms /
+  53.7 ms, 552 kept.)
   Measured during the work: array_cosine_similarity twice with an inner join of the vectors
   161 ms; with a materialized CTE 100.6 ms. DuckDB 1.2.1 runs 20 000 rows (one row group)
   on one thread, one 512-dimensional product costs about 18 ms, and an inner join that
@@ -726,44 +728,75 @@ Performance or resource evidence:
   only scalars to the scope. Consequence: the scan cost follows the number of ready
   embeddings of the model in the project, not the scope size.
 Calibration constants and table (GS1 only):
-  Environment: ALCEDO_SEMANTIC_CALIBRATION_PROJECT = bug_reproduce.alcd (649 SigLIP2-256
-  embeddings, Shangri-La trip: waterfalls, forest, travertine terraces, old town, portraits);
-  ALCEDO_SEMANTIC_CALIBRATION_QUERIES = 9 positive queries with listed files and 7 nonsense
-  queries; ALCEDO_SEMANTIC_CALIBRATION_MODEL_DIR = local model directory; ALCEDO_MIND_BINARY =
-  release alcedo_mind.exe. The query file was written by the implementing agent from contact
-  sheets of the embedded RW2 thumbnails, not by the maintainer. The listed files are clear
-  examples, not every match.
-  Chosen: kMinQuerySimilarity 0.0793, kMinRelevanceZ 1.0 (kMinScopeStatisticsCount 30).
-  Feasible region over all 649 x 16 scores: kMinQuerySimilarity in [0.07875, 0.08] with
-  kMinRelevanceZ in [0, 1.1]. The highest c of a nonsense-query file with z >= 1 is 0.0779;
-  the lowest c of a listed file is 0.0807 (margin 0.0028). kMinRelevanceZ 2.0 is not
-  feasible: the listed files of the broad waterfall query have z 1.12 to 1.34.
+  Environment: ALCEDO_SEMANTIC_CALIBRATION_PROJECT = time-test.alcd (195 SigLIP2-256
+  embeddings of 768 values, a varied set: city streets and skylines, animals, vehicles,
+  portraits, concerts, landscapes, snow, night scenes), chosen by the maintainer;
+  ALCEDO_SEMANTIC_CALIBRATION_QUERIES = 25 positive queries (2 in Chinese) with 39 listed
+  files and 8 nonsense queries; ALCEDO_SEMANTIC_CALIBRATION_MODEL_DIR = local model directory;
+  ALCEDO_MIND_BINARY = release alcedo_mind.exe. The query file was written by the implementing
+  agent from contact sheets of the embedded previews, not by the maintainer. The listed files
+  are clear examples, not every match.
+  Chosen: kMinQuerySimilarity 0.0855, kMinRelevanceZ 1.0 (kMinScopeStatisticsCount 30).
+  Feasible region over all 195 x 33 scores: kMinQuerySimilarity in [0.0817, 0.0894] with
+  kMinRelevanceZ in [0, 1.8]. The highest c of a nonsense-query file is 0.0816 ("qwzx vplk
+  mrrt", z 2.19); the lowest c of a listed file is 0.0894 ("樱花"). 0.0855 is the midpoint
+  (margin 0.0039 on each side). The lowest z of a listed file is 1.80 (broad query "a snowy
+  park by a lake in winter"); kMinRelevanceZ 1.0 also keeps the broad query of the first
+  calibration (z 1.12).
   | query                                           | kept | listed min c | listed min z |
-  | two people taking a selfie                      |   27 |       0.0807 |        2.261 |
-  | a Chinese pavilion with curved roofs            |   15 |       0.0844 |        3.025 |
-  | old town street with wooden houses              |   12 |       0.1054 |        4.442 |
-  | white travertine terraces with turquoise pools  |  106 |       0.1383 |        2.192 |
-  | rocky mountain peaks under a cloudy sky         |   14 |       0.0825 |        2.359 |
-  | a stone statue                                  |    6 |       0.1069 |        4.765 |
-  | a woman in a yellow jacket                      |  101 |       0.1460 |        2.481 |
-  | a waterfall cascading over mossy rocks          |  130 |       0.1017 |        1.123 |
-  | 古城的街道 (old town street)                     |   65 |       0.1147 |        3.015 |
+  | a squirrel                                      |    2 |       0.1437 |        6.066 |
+  | an owl perched on a branch                      |    1 |       0.1341 |        5.423 |
+  | a red race car on a track                       |    1 |       0.1347 |        4.693 |
+  | a cowboy riding a horse                         |    2 |       0.1212 |        5.034 |
+  | cherry blossom trees                            |   10 |       0.1169 |        2.900 |
+  | wind turbines                                   |    2 |       0.1448 |        5.314 |
+  | a city skyline at night                         |    2 |       0.1151 |        3.145 |
+  | a man standing next to an elephant              |    1 |       0.1531 |        5.752 |
+  | a woman playing electric guitar on stage        |    1 |       0.1340 |        5.255 |
+  | a city bus with passengers wearing face masks   |    9 |       0.1387 |        3.438 |
+  | sand dunes in front of mountains                |    5 |       0.1642 |        4.224 |
+  | a flower shop                                   |    2 |       0.1388 |        4.282 |
+  | a vintage streetcar                             |    9 |       0.1461 |        4.096 |
+  | a snowy park by a lake in winter                |   19 |       0.1001 |        1.801 |
+  | a hot air balloon over red rock canyons         |    1 |       0.1795 |        6.539 |
+  | a protest march escorted by police motorcycles  |    1 |       0.1635 |        5.985 |
+  | an old airplane in a museum hangar              |    1 |       0.1293 |        4.541 |
+  | a portrait of a woman with tattoos              |    1 |       0.1363 |        6.443 |
+  | a couple posing in front of a waterfall         |    2 |       0.1651 |        5.546 |
+  | a vintage Mercedes car parked on the street     |    7 |       0.1213 |        2.890 |
+  | a red boat in a harbor at dusk                  |    2 |       0.1582 |        4.214 |
+  | a woman on a rope bridge in the forest          |    1 |       0.1509 |        4.832 |
+  | a man taking a photo with a camera              |    3 |       0.1558 |        4.572 |
+  | 一辆公交车 (a bus)                               |   10 |       0.1134 |        3.315 |
+  | 樱花 (cherry blossoms)                           |    6 |       0.0894 |        3.071 |
   | nonsense query                                  | kept | top-1 c | top-1 r | top-1 z |
-  | quarterly tax invoice spreadsheet               |    0 |  0.0359 | -0.0380 |   3.263 |
-  | a red sports car on a racetrack                 |    0 |  0.0528 | -0.0136 |   3.852 |
-  | an astronaut walking on the moon                |    0 |  0.0673 |  0.0034 |   3.137 |
-  | a plate of sushi                                |    0 |  0.0410 | -0.0274 |   3.737 |
-  | a cat sleeping on a laptop keyboard             |    0 |  0.0590 |  0.0017 |   6.101 |
-  | qwzx vplk mrrt                                  |    0 |  0.0676 |  0.0074 |   2.393 |
-  | 一碗牛肉面 (a bowl of beef noodles)              |    0 |  0.0663 | -0.0099 |   4.364 |
-  Ranking by r against ranking by c (mean rank of the listed files): r is better for 4
-  queries, c for 4, equal for 1; mean 17.4 (r) against 17.2 (c). The neutral text does not
-  change the ranking on this set in either direction. Stop condition 3 of Section 12 ("r
-  ranks worse than c") is not met clearly; the result is recorded for a later review.
-Evidence path: build/tmp/global_search_gs1/ (logs removed after the phase).
+  | quarterly tax invoice spreadsheet               |    0 |  0.0344 | -0.0304 |   3.108 |
+  | an astronaut walking on the moon                |    0 |  0.0753 |  0.0118 |   3.339 |
+  | a plate of sushi                                |    0 |  0.0434 | -0.0289 |   3.047 |
+  | a cat sleeping on a laptop keyboard             |    0 |  0.0350 | -0.0234 |   3.541 |
+  | qwzx vplk mrrt                                  |    0 |  0.0816 |  0.0164 |   2.185 |
+  | 一碗牛肉面 (a bowl of beef noodles)              |    0 |  0.0584 | -0.0059 |   3.601 |
+  | an underwater coral reef with tropical fish     |    0 |  0.0305 | -0.0335 |   2.742 |
+  | a newborn baby in a hospital crib               |    0 |  0.0495 | -0.0089 |   4.087 |
+  Ranking by r against ranking by c (mean rank of the listed files): equal for 21 queries,
+  r better for 2, c better for 2; mean 1.8 (r) against 1.6 (c). The neutral text does not
+  change the ranking on this set either. Stop condition 3 of Section 12 ("r ranks worse than
+  c") is not met clearly; the result is recorded for a later review.
+  First calibration (superseded): bug_reproduce.alcd (649 SigLIP2-256 embeddings of one trip,
+  most photos waterfalls and forest) gave the feasible region kMinQuerySimilarity in
+  [0.07875, 0.08] and the first constant 0.0793. On time-test.alcd that constant keeps 2 files
+  for "qwzx vplk mrrt". The two feasible regions do not overlap: with 0.0855, listed files of
+  3 of the 9 bug_reproduce queries ("two people taking a selfie" 0.0807, "rocky mountain peaks
+  under a cloudy sky" 0.0825, "a Chinese pavilion with curved roofs" 0.0844) fall below the
+  limit. The maintainer chose the varied project as the reference because bug_reproduce
+  is not representative.
+Evidence path: build/tmp/global_search_gs1/ and build/tmp/global_search_gs1b/ (logs removed
+  after the phase).
 Remaining defects or unavailable platforms:
-  - The constants are calibrated on SigLIP2 only, with a 0.0028 margin on c. Other model
-    profiles (for example jina-clip-v2) are not calibrated. Follow-up issue.
+  - The constants are calibrated on SigLIP2 only, with a 0.0039 margin on c, and the c
+    limit depends on the photo set (the two calibration projects have no common feasible
+    value). Other model profiles (for example jina-clip-v2) are not calibrated. Follow-up
+    issue.
   - Scan cost follows the project embedding count, not the folder size. Follow-up issue.
   - macOS not built or tested in this phase.
   - Cold sidecar start on Enter still blocks the worker (Section 12, known behavior; the
