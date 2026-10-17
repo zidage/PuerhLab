@@ -89,7 +89,7 @@ class SearchController final : public QObject {
   [[nodiscard]] bool           natural_language_search_enabled() const {
     return natural_language_search_enabled_;
   }
-  /// Routing, response matching, and paging of the global search dialog and search.query.
+  /// Routing, response matching, and the preview rows of the search palette and search.query.
   [[nodiscard]] auto session() -> SearchSession* { return session_; }
   [[nodiscard]] bool HasActiveSearchFilter() const;
   /// Active search filter tree. The tree owns compiler output only; consumers

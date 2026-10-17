@@ -29,7 +29,7 @@ struct SearchSessionPort {
 /**
  * @brief Routing, response matching, and the result rows of the global search.
  *
- * @details GlobalSearchDialog.qml and the search.query command read the search through this
+ * @details SearchPalette.qml and the search.query command read the search through this
  * object. A request replaces the active request and its rows; only the response whose request
  * id is the active request id sets the rows. The typing preview of a field query asks for
  * kPreviewRows rows; search.query asks for one page of at most kMaxPageRows rows. The session
