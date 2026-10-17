@@ -813,6 +813,7 @@ set(ALCEDO_MAIN_QML_FILES
     "${ALCEDO_UI_SHELL_ROOT}/qml/AdjustmentField.qml"
     "${ALCEDO_UI_SHELL_ROOT}/qml/AdjustmentToggle.qml"
     "${ALCEDO_UI_SHELL_ROOT}/qml/AdjustmentCombo.qml"
+    "${ALCEDO_UI_SHELL_ROOT}/qml/SearchableAdjustmentCombo.qml"
     "${ALCEDO_UI_SHELL_ROOT}/qml/AdjustmentGroup.qml"
     "${ALCEDO_UI_SHELL_ROOT}/qml/AdjustmentResetButton.qml"
 )

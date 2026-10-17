@@ -50,6 +50,9 @@ enum class ColorGamutId : uint8_t {
   BlackmagicWideGamutGen5,
   DaVinciWideGamut,
   DGamut,
+  FGamutC,
+  AppleWideGamut,
+  KinefinityWideGamut,
 };
 
 /// Chromatic adaptation between two white points.
@@ -62,7 +65,7 @@ struct ColorGamut {
   PrimariesXy         primaries_xy_;
   /// Adaptation of the gamut's published conversion to ACES (the OCIO 2.5.1 studio config).
   /// Bradford for the video and print gamuts (Rec.709, Rec.2020, P3, Adobe RGB, ProPhoto,
-  /// BT.601), V-Gamut and REDWideGamutRGB; CAT02 for the other camera gamuts.
+  /// BT.601), V-Gamut, REDWideGamutRGB and Apple Wide Gamut; CAT02 for the other camera gamuts.
   ChromaticAdaptation aces_adaptation_;
 };
 
@@ -92,6 +95,21 @@ enum class TransferFunctionId : int {
   AppleLog            = CE_TF_APPLE_LOG,
   NikonNLog           = CE_TF_NIKON_NLOG,
   DjiDLog             = CE_TF_DJI_DLOG,
+  CanonCLog           = CE_TF_CANON_CLOG,
+  Cineon              = CE_TF_CINEON,
+  ArriLogC3Ei160      = CE_TF_ARRI_LOGC3_EI160,
+  ArriLogC3Ei200      = CE_TF_ARRI_LOGC3_EI200,
+  ArriLogC3Ei250      = CE_TF_ARRI_LOGC3_EI250,
+  ArriLogC3Ei320      = CE_TF_ARRI_LOGC3_EI320,
+  ArriLogC3Ei400      = CE_TF_ARRI_LOGC3_EI400,
+  ArriLogC3Ei500      = CE_TF_ARRI_LOGC3_EI500,
+  ArriLogC3Ei640      = CE_TF_ARRI_LOGC3_EI640,
+  ArriLogC3Ei1000     = CE_TF_ARRI_LOGC3_EI1000,
+  ArriLogC3Ei1280     = CE_TF_ARRI_LOGC3_EI1280,
+  ArriLogC3Ei1600     = CE_TF_ARRI_LOGC3_EI1600,
+  LeicaLLog           = CE_TF_LEICA_LLOG,
+  KinefinityKineLog3  = CE_TF_KINEFINITY_KINELOG3,
+  GoproGpLog2         = CE_TF_GOPRO_GPLOG2,
 };
 
 /// Whether code values encode scene light or light after a display rendering.

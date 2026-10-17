@@ -224,6 +224,22 @@ Scene-referred:
 | `dji_dlog_dgamut` | D-Gamut | D-Log |
 | `dji_dlogm_dgamut` | D-Gamut | D-Log M |
 
+Added by [#411](https://github.com/zidage/AlcedoStudio/issues/411) (2026-10-16). Each curve and
+gamut has a published source, checked on that date:
+
+| Encoding id | Gamut | Transfer | Source |
+|---|---|---|---|
+| `arri_logc3_ei{160,200,250,320,400,500,640,1000,1280,1600}_awg3` | ARRI Wide Gamut 3 | LogC3 at that EI | ARRI "ALEXA Log C Curve - Usage in VFX" (2017), SUP 3.x "Linear Scene Exposure Factor" table. The document has no compact formula above EI 1600. |
+| `fujifilm_flog2c_fgamutc` | F-Gamut C | F-Log2 | Fujifilm "F-Log2 C Data Sheet" Ver.1.0 (2024-11-21); Fujifilm's F-Log2 C input transform Ver.1.10 adapts F-Gamut C to AP0 with CAT02. |
+| `canon_clog_rec2020`, `canon_clog_rec709` | Rec.2020, Rec.709 | Canon Log | Canon U.S.A. "Canon-Log Transfer Characteristic" (2012-06-20); the gamut settings are in the Canon C70 "Gamma/Gamut Settings" guide (2022) and the EOS R5 manual. |
+| `canon_clog2_rec2020`, `canon_clog3_rec2020`, `canon_clog3_rec709` | Rec.2020, Rec.709 | Canon Log 2, Canon Log 3 | Existing curves; same gamut sources. |
+| `red_logfilm_rwg` | REDWideGamutRGB | Cineon | RED "IPP2 Output Transforms" (915-0201 Rev A, 2017): REDLogFilm is RED's version of Cineon; OCIO builtin `RED_REDLOGFILM-RWG_to_ACES2065-1`. |
+| `apple_log2_applewg` | Apple Wide Gamut | Apple Log | Apple "Apple Log 2 White Paper" (2025-09, Apple developer downloads); primaries as in the OCIO 2.6.0 builtin `APPLE_LOG-APPLEWG_to_ACES2065-1` (Bradford). |
+| `leica_llog_rec2020`, `leica_llog_rec709` | Rec.2020, Rec.709 | L-Log | Leica "L-Log Reference Manual" V1.9 (2026-06-25). |
+| `kinefinity_kinelog3_kwg` | Kinefinity Wide Gamut | KineLOG3 | Kinefinity "KineLOG3 Technical Specifications" (2025-09-24). |
+| `gopro_gplog2_rec2020` | Rec.2020 | GP-Log2 | GoPro Labs "GP-Log2" page: formula, mirror below 0, 18% grey at L = 0.0517. |
+| `cineon_rec709`, `cineon_rec2020` | Rec.709, Rec.2020 | Cineon | Kodak "Grayscale Transformations of Cineon Digital Film Data" v1.1 (0.002 density per code value, gamma 0.6); black 95 and white 685 as in OCIO's REDLogFilm builtin. Cineon has no primaries; the pairs follow grading software. |
+
 Display-referred (ACES 2.0, no white simulation):
 
 | Encoding id | Primaries | Transfer | Peak |
@@ -403,8 +419,14 @@ unknown tf id        -> CeEncode/CeDecode return the input (only reachable with 
 | Log-camera decode | — | Multiplies by reciprocal constants | OpenCL C does not round float division correctly by default (LogC4 was 1.5e-6 off the host) |
 
 **Blocking item — D-Log M:** DJI publishes a D-Log and D-Gamut white paper (2017, X9 2022) but
-no D-Log M formula or code value table. `dji_dlogm_dgamut` is not in the catalog (25 encodings, not
-the 26 of section 5.2). Adding it needs a DJI document.
+no D-Log M formula or code value table. `dji_dlogm_dgamut` is not in the catalog, which has 50
+encodings. Adding it needs a DJI document.
+
+**Blocking items — no public source (#411, 2026-10-16):** RED Log3G12, FilmLight T-Log / E-Gamut,
+Blackmagic Film Gen 1 to Gen 4, GoPro Protune Flat / Protune Native and Z CAM Z-Log2 have no
+vendor document with the curve and primaries. **Decisions needed:** Sony S-Log2 / S-Gamut (Sony's
+S-Log2 paper has the curve, no Sony document gives S-Gamut primaries) and VENICE S-Gamut3 /
+S-Gamut3.Cine (Sony publishes matrices to AP0 only; the catalog stores primaries).
 
 **BT.1886 decode question (section 5.3):** answered. The 2.6 decode lived in `eotf()` and
 `DisplayDecoding` in `disp_enc_funcs.cuh`; neither had a caller on any backend. Both are deleted.

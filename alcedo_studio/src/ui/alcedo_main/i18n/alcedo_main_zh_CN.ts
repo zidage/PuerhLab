@@ -3202,6 +3202,11 @@ Original source files on disk will be kept.</source>
         <source>The LUT library stores these encodings and applies them the next time this LUT is selected.</source>
         <translation>LUT 库会保存这组输入/输出编码，下次选择此 LUT 时自动应用。</translation>
     </message>
+    <message>
+        <location line="+1"/>
+        <source>Search encodings</source>
+        <translation>搜索编码</translation>
+    </message>
 </context>
 <context>
     <name>EditorLutResultCard</name>
@@ -6189,6 +6194,19 @@ Create a new layer above it and draw the Mask there?</source>
     <name>SearchComboBox</name>
     <message>
         <location filename="../qml/util/SearchComboBox.qml" line="+14"/>
+        <source>Search</source>
+        <translation>搜索</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>No matches</source>
+        <translation>无匹配项</translation>
+    </message>
+</context>
+<context>
+    <name>SearchableAdjustmentCombo</name>
+    <message>
+        <location filename="../qml/SearchableAdjustmentCombo.qml" line="+36"/>
         <source>Search</source>
         <translation>搜索</translation>
     </message>

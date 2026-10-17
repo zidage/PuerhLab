@@ -624,19 +624,52 @@ TEST(EditorLutBrowserPanelQmlTest, EmptyLibraryLinksToLutSettings) {
   EXPECT_TRUE(h.warnings.isEmpty()) << h.Warnings();
 }
 
-// L4: the LUT adjustment panel (EditorLutControlPanel.qml) shows the stored input and output
-// encodings in its two combos and the ACES 2.0 note for a display-referred side, and follows a
-// stored change without a submit. Pointer delivery is not used; the combo writes are covered by
-// LutLibraryControllerTest.EncodingSelectionSubmitsOneSettledWriteOfThatSideOnly.
-TEST(EditorLutBrowserPanelQmlTest, ControlPanelShowsStoredEncodingsAndDisplayNote) {
-  TemporaryLutLibrary  library(LibraryFiles());
-  DocumentTargetSource source;
-  LutLibraryModel      browser;
-  LutLibraryController target;
-  browser.setLibrary(library.Service());
-  target.setLibrary(library.Service());
-  target.SetTargetSource(&source);
-  const auto write_lut = [&](EditorLutWrite write) {
+/// EditorLutControlPanel.qml loaded over a real LUT library and target controller, with a
+/// LUT and its encodings stored on Color Grade B. The panel has no submitter: selections update
+/// the encoding models only.
+struct ControlPanelHarness {
+  TemporaryLutLibrary   library{LibraryFiles()};
+  DocumentTargetSource  source;
+  LutLibraryModel       browser;
+  LutLibraryController  target;
+  LutAppModules         modules{&browser, &target, library.Service()};
+  QQmlApplicationEngine engine;
+  QStringList           warnings;
+  QQuickWindow*         window = nullptr;
+
+  ControlPanelHarness() {
+    browser.setLibrary(library.Service());
+    target.setLibrary(library.Service());
+    target.SetTargetSource(&source);
+    EditorLutWrite stored;
+    stored.reference       = LibraryLutReference{"general/teal.cube"};
+    stored.input_encoding  = "sony_slog3_sgamut3cine";
+    stored.output_encoding = "rec709_bt1886";
+    WriteLut(stored);
+
+    QObject::connect(&engine, &QQmlEngine::warnings, [this](const QList<QQmlError>& list) {
+      for (const QQmlError& warning : list) warnings << warning.toString();
+    });
+    AppTheme::Instance().setReduceMotion(true);
+    QQuickStyle::setStyle(QStringLiteral("Basic"));
+    RegisterShortcutRegistryQmlType();
+    RegisterEditorAdjustmentQmlTypes();
+    engine.addImportPath(QStringLiteral("qrc:/"));
+    engine.addImportPath(SrcQmlDir());
+    engine.rootContext()->setContextProperty(QStringLiteral("appTheme"), &AppTheme::Instance());
+    engine.rootContext()->setContextProperty(QStringLiteral("appModules"), &modules);
+    engine.rootContext()->setContextProperty(
+        QStringLiteral("panelSourceUrl"),
+        QUrl::fromLocalFile(SrcQmlDir() + QStringLiteral("/EditorLutControlPanel.qml")));
+    engine.loadData(QByteArray{kHarnessQml}, QUrl(QStringLiteral("file:///LutControlHarness.qml")));
+    window = qobject_cast<QQuickWindow*>(engine.rootObjects().value(0, nullptr));
+    if (window == nullptr) return;
+    window->show();
+    (void)QTest::qWaitForWindowExposed(window);
+    (void)WaitUntil([this] { return Find(QStringLiteral("editorAdjustmentPanel_lut")); }, 3000);
+  }
+
+  void WriteLut(const EditorLutWrite& write) {
     EditorParameterTarget field;
     field.owner_kind             = EditorParameterOwnerKind::ColorGrade;
     field.node_id                = kGradeB;
@@ -645,45 +678,35 @@ TEST(EditorLutBrowserPanelQmlTest, ControlPanelShowsStoredEncodingsAndDisplayNot
     std::string error;
     EXPECT_TRUE(ApplyEditorParameterWrite(source.Mutable(), field, write, &error)) << error;
     target.reload();
-  };
-  EditorLutWrite stored;
-  stored.reference       = LibraryLutReference{"general/teal.cube"};
-  stored.input_encoding  = "sony_slog3_sgamut3cine";
-  stored.output_encoding = "rec709_bt1886";
-  write_lut(stored);
+  }
 
-  LutAppModules         modules{&browser, &target, library.Service()};
-  QQmlApplicationEngine engine;
-  QStringList           warnings;
-  QObject::connect(&engine, &QQmlEngine::warnings, [&warnings](const QList<QQmlError>& list) {
-    for (const QQmlError& warning : list) warnings << warning.toString();
-  });
-  AppTheme::Instance().setReduceMotion(true);
-  QQuickStyle::setStyle(QStringLiteral("Basic"));
-  RegisterShortcutRegistryQmlType();
-  RegisterEditorAdjustmentQmlTypes();
-  engine.addImportPath(QStringLiteral("qrc:/"));
-  engine.addImportPath(SrcQmlDir());
-  engine.rootContext()->setContextProperty(QStringLiteral("appTheme"), &AppTheme::Instance());
-  engine.rootContext()->setContextProperty(QStringLiteral("appModules"), &modules);
-  engine.rootContext()->setContextProperty(
-      QStringLiteral("panelSourceUrl"),
-      QUrl::fromLocalFile(SrcQmlDir() + QStringLiteral("/EditorLutControlPanel.qml")));
-  engine.loadData(QByteArray{kHarnessQml}, QUrl(QStringLiteral("file:///LutControlHarness.qml")));
-  auto* window = qobject_cast<QQuickWindow*>(engine.rootObjects().value(0, nullptr));
-  ASSERT_NE(window, nullptr) << warnings.join(QLatin1Char('\n')).toStdString();
-  window->show();
-  (void)QTest::qWaitForWindowExposed(window);
-  const auto find = [window](const QString& name) {
-    return ChildNamed(window->contentItem(), name);
-  };
-  ASSERT_TRUE(WaitUntil([&] { return find(QStringLiteral("editorAdjustmentPanel_lut")); }, 3000))
-      << warnings.join(QLatin1Char('\n')).toStdString();
+  /// Item named @p name, also inside open popups (the window overlay holds their content).
+  [[nodiscard]] auto Find(const QString& name) const -> QQuickItem* {
+    if (window == nullptr) return nullptr;
+    QQuickItem* root = window->contentItem()->parentItem() != nullptr
+                           ? window->contentItem()->parentItem()
+                           : window->contentItem();
+    return ChildNamed(root, name);
+  }
 
-  QQuickItem* input_combo  = find(QStringLiteral("editorLutInputEncodingCombo"));
-  QQuickItem* output_combo = find(QStringLiteral("editorLutOutputEncodingCombo"));
-  QQuickItem* output_note  = find(QStringLiteral("editorLutOutputDisplayNote"));
-  QQuickItem* input_note   = find(QStringLiteral("editorLutInputDisplayNote"));
+  [[nodiscard]] auto Warnings() const -> std::string {
+    return warnings.join(QLatin1Char('\n')).toStdString();
+  }
+};
+
+// L4: the LUT adjustment panel (EditorLutControlPanel.qml) shows the stored input and output
+// encodings in its two combos and the ACES 2.0 note for a display-referred side, and follows a
+// stored change without a submit. Pointer delivery is not used; the combo writes are covered by
+// LutLibraryControllerTest.EncodingSelectionSubmitsOneSettledWriteOfThatSideOnly.
+TEST(EditorLutBrowserPanelQmlTest, ControlPanelShowsStoredEncodingsAndDisplayNote) {
+  ControlPanelHarness h;
+  ASSERT_NE(h.window, nullptr) << h.Warnings();
+  ASSERT_NE(h.Find(QStringLiteral("editorAdjustmentPanel_lut")), nullptr) << h.Warnings();
+
+  QQuickItem* input_combo  = h.Find(QStringLiteral("editorLutInputEncodingCombo"));
+  QQuickItem* output_combo = h.Find(QStringLiteral("editorLutOutputEncodingCombo"));
+  QQuickItem* output_note  = h.Find(QStringLiteral("editorLutOutputDisplayNote"));
+  QQuickItem* input_note   = h.Find(QStringLiteral("editorLutInputDisplayNote"));
   ASSERT_NE(input_combo, nullptr);
   ASSERT_NE(output_combo, nullptr);
   ASSERT_NE(output_note, nullptr);
@@ -697,7 +720,7 @@ TEST(EditorLutBrowserPanelQmlTest, ControlPanelShowsStoredEncodingsAndDisplayNot
 
   EditorLutWrite scene_output;
   scene_output.output_encoding = "acescc";
-  write_lut(scene_output);
+  h.WriteLut(scene_output);
   ASSERT_TRUE(WaitUntil(
       [&] {
         return output_combo->property("displayText").toString() == QStringLiteral("ACEScc (AP1)");
@@ -706,24 +729,95 @@ TEST(EditorLutBrowserPanelQmlTest, ControlPanelShowsStoredEncodingsAndDisplayNot
   EXPECT_FALSE(output_note->isVisible());
   EXPECT_EQ(input_combo->property("displayText").toString(),
             QStringLiteral("Sony S-Log3 / S-Gamut3.Cine"));
-  EXPECT_EQ(source.submit_count, 0) << "loading the encodings never submits";
+  EXPECT_EQ(h.source.submit_count, 0) << "loading the encodings never submits";
 
   // L5: the "remember" checkbox follows the library and its toggle writes the library only.
-  QQuickItem* remember = find(QStringLiteral("editorLutRememberEncodings"));
+  QQuickItem* remember = h.Find(QStringLiteral("editorLutRememberEncodings"));
   ASSERT_NE(remember, nullptr);
   EXPECT_TRUE(remember->isVisible());
   EXPECT_FALSE(remember->property("checked").toBool());
-  ASSERT_TRUE(target.setRememberEncodings(true));
+  ASSERT_TRUE(h.target.setRememberEncodings(true));
   ASSERT_TRUE(WaitUntil([&] { return remember->property("checked").toBool(); }, 2000));
   ASSERT_TRUE(QMetaObject::invokeMethod(remember, "toggle"));
   ASSERT_TRUE(WaitUntil([&] { return !remember->property("checked").toBool(); }, 2000));
-  EXPECT_FALSE(library.Service()->RememberedEncodings("library:general/teal.cube").has_value());
-  EXPECT_EQ(source.submit_count, 0) << "the checkbox never submits an edit";
+  EXPECT_FALSE(h.library.Service()->RememberedEncodings("library:general/teal.cube").has_value());
+  EXPECT_EQ(h.source.submit_count, 0) << "the checkbox never submits an edit";
   EditorLutWrite no_lut;
   no_lut.reference = LutReference{};
-  write_lut(no_lut);
+  h.WriteLut(no_lut);
   ASSERT_TRUE(WaitUntil([&] { return !remember->isVisible(); }, 2000));
-  EXPECT_TRUE(warnings.isEmpty()) << warnings.join(QLatin1Char('\n')).toStdString();
+  EXPECT_TRUE(h.warnings.isEmpty()) << h.Warnings();
+}
+
+// Issue #411: the encoding field opens a popup with a search field. Typing filters the encodings
+// by name or id with every query token required, hides groups without a match, and shows a
+// message when nothing matches; typing alone never selects. Picking the highlighted row selects
+// that encoding and closes the popup.
+TEST(EditorLutBrowserPanelQmlTest, EncodingSearchFiltersTheListAndPicksTheHighlightedEncoding) {
+  ControlPanelHarness h;
+  ASSERT_NE(h.window, nullptr) << h.Warnings();
+  QQuickItem* input = h.Find(QStringLiteral("editorLutInputEncoding"));
+  QQuickItem* field = h.Find(QStringLiteral("editorLutInputEncodingCombo"));
+  ASSERT_NE(input, nullptr) << h.Warnings();
+  ASSERT_NE(field, nullptr);
+  const auto rows   = [&] { return input->property("filteredRows").toList(); };
+  const auto labels = [&] {
+    QStringList out;
+    for (const QVariant& row : rows()) {
+      out << row.toMap().value(QStringLiteral("label")).toString();
+    }
+    return out;
+  };
+
+  ASSERT_TRUE(QMetaObject::invokeMethod(field, "clicked"));
+  ASSERT_TRUE(WaitUntil([&] { return input->property("popupOpen").toBool(); }, 2000));
+  QQuickItem* search = h.Find(QStringLiteral("editorLutInputEncodingComboSearch"));
+  QQuickItem* empty  = h.Find(QStringLiteral("editorLutInputEncodingComboEmpty"));
+  ASSERT_NE(search, nullptr);
+  ASSERT_NE(empty, nullptr);
+  // An empty query lists every encoding; the scene group heads the first row.
+  const qsizetype all = rows().size();
+  EXPECT_GE(all, 50);
+  EXPECT_FALSE(rows().first().toMap().value(QStringLiteral("heading")).toString().isEmpty());
+
+  search->setProperty("text", QStringLiteral("canon 3 2020"));
+  ASSERT_TRUE(WaitUntil([&] { return rows().size() < all; }, 2000));
+  EXPECT_EQ(labels(), QStringList{QStringLiteral("Canon Log 3 / Rec.2020")});
+  EXPECT_EQ(input->property("highlightedRow").toInt(), 0);
+  EXPECT_FALSE(empty->isVisible());
+
+  // The id matches too, and only the scene group remains, under its heading.
+  search->setProperty("text", QStringLiteral("cineon"));
+  ASSERT_TRUE(WaitUntil([&] { return labels().size() == 2; }, 2000))
+      << labels().join(u',').toStdString();
+  EXPECT_EQ(labels(), (QStringList{QStringLiteral("Cineon Film Log / Rec.709"),
+                                   QStringLiteral("Cineon Film Log / Rec.2020")}));
+  EXPECT_FALSE(rows().first().toMap().value(QStringLiteral("heading")).toString().isEmpty());
+  EXPECT_TRUE(rows().last().toMap().value(QStringLiteral("heading")).toString().isEmpty());
+
+  search->setProperty("text", QStringLiteral("no such curve"));
+  ASSERT_TRUE(WaitUntil([&] { return rows().isEmpty(); }, 2000));
+  EXPECT_TRUE(empty->isVisible());
+  EXPECT_EQ(field->property("displayText").toString(),
+            QStringLiteral("Sony S-Log3 / S-Gamut3.Cine"))
+      << "typing never selects";
+
+  search->setProperty("text", QStringLiteral("clog3 rec2020"));
+  ASSERT_TRUE(WaitUntil([&] { return labels().size() == 1; }, 2000));
+  ASSERT_TRUE(QMetaObject::invokeMethod(input, "pickHighlighted"));
+  ASSERT_TRUE(WaitUntil([&] { return !input->property("popupOpen").toBool(); }, 2000));
+  EXPECT_EQ(field->property("displayText").toString(), QStringLiteral("Canon Log 3 / Rec.2020"));
+  EXPECT_EQ(
+      h.Find(QStringLiteral("editorLutOutputEncodingCombo"))->property("displayText").toString(),
+      QStringLiteral("Rec.709 BT.1886"))
+      << "a pick changes only its own side";
+
+  // Reopening clears the search.
+  ASSERT_TRUE(QMetaObject::invokeMethod(field, "clicked"));
+  ASSERT_TRUE(WaitUntil([&] { return input->property("popupOpen").toBool(); }, 2000));
+  EXPECT_TRUE(search->property("text").toString().isEmpty());
+  EXPECT_EQ(rows().size(), all);
+  EXPECT_TRUE(h.warnings.isEmpty()) << h.Warnings();
 }
 
 }  // namespace alcedo::ui::test
