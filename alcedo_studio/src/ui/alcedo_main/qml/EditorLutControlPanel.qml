@@ -18,6 +18,8 @@ import Alcedo.Main 1.0
 // encodings of the LUT, grouped into Scene and Display. Each selection is one
 // settled `lut` write of that side only (EditorLutEncodingModel), so one
 // history entry. They stay editable without a LUT: removing a LUT keeps them.
+// The encoding list is long, so each side is a SearchableAdjustmentCombo: typing
+// in its popup filters the encodings by name or id (issue #411).
 //
 // Remember for this LUT (L5): the checkbox shows whether the LUT library remembers
 // encodings for the applied LUT. Checking stores the shown pair, unchecking forgets
@@ -147,19 +149,21 @@ Item {
             model: strengthModel
         }
 
-        AdjustmentCombo {
+        SearchableAdjustmentCombo {
             objectName: "editorLutInputEncoding"
             controlObjectName: "editorLutInputEncodingCombo"
             Layout.fillWidth: true
             groupLabelRole: "groupLabel"
+            searchPlaceholder: qsTr("Search encodings")
             model: inputEncodingModel
         }
 
-        AdjustmentCombo {
+        SearchableAdjustmentCombo {
             objectName: "editorLutOutputEncoding"
             controlObjectName: "editorLutOutputEncodingCombo"
             Layout.fillWidth: true
             groupLabelRole: "groupLabel"
+            searchPlaceholder: qsTr("Search encodings")
             model: outputEncodingModel
         }
 
