@@ -9,6 +9,7 @@ use their own top-level category.
 - [AI Sidecar Backend Integration Plan](alcedo_studio/ai/ai_sidecar_backend_plan.md)
 - [AI Sidecar Phase 0 Requirements](alcedo_studio/ai/ai_sidecar_phase0_requirements.md)
 - [Semantic Generation and Search Integration Plan](alcedo_studio/ai/semantic_generation_search_plan.md)
+- [AI Sidecar Runtime Residency Plan](alcedo_studio/ai/ai_sidecar_runtime_residency_plan.md)
 
 ## Alcedo Studio — RAW processing and DemosaicNet
 
@@ -47,6 +48,7 @@ use their own top-level category.
 - [Editor Single Live Pipeline + WAL + Checkpoint Simplification Plan](alcedo_studio/ui/editor_single_live_pipeline_wal_checkpoint_plan.md)
   (includes **Final locked identity model**: history owns HEAD; pipeline = params table; chain hash unit = one commit)
 - [UI Fuzz Automation Platform Plan](alcedo_studio/ui/ui_fuzz_automation_platform_plan.md)
+- [Global Search Redesign Plan](alcedo_studio/ui/global_search_redesign_plan.md)
 
 ## Alcedo Studio — Automation
 
