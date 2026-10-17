@@ -69,7 +69,7 @@ auto RegisterAutomationSearchCommands(AutomationCommandRegistry& registry,
   AutomationCommandSpec query;
   query.method      = QStringLiteral("search.query");
   query.description = QStringLiteral(
-      "Searches the photos of the current folder with the rules of the global search dialog. An "
+      "Searches the photos of the current folder with the rules of the search palette. An "
       "empty text returns the recommendations. With 'mode' auto a natural language query uses "
       "the semantic path when natural language search is on; when that path is not available "
       "the result has 'semantic_unavailable' and no matches. 'mode' fuzzy always uses the text "

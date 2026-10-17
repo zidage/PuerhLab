@@ -255,7 +255,7 @@ EmbedText -> text encoder load fails (bad file) -> gRPC error with the ORT messa
 | `rust/puerh_mind/src/service/ort_clip.rs`, `coreml_clip.rs`, `inference.rs`, `embedding.rs`, `config.rs`, `main.rs` | SR2 | Lazy load, idle unload, text device |
 | `rust/puerh_mind/src/server/semantic.rs`, `rust/puerh_mind/proto/semantic.proto` | SR2 | Model info from manifest; residency status fields (new field numbers only) |
 | `include/ui/alcedo_main/album_backend/search_controller.hpp`, `.../search_controller.cpp` | SR3 | `PrewarmNaturalLanguageSearch` |
-| search palette QML (`GlobalSearchDialog.qml` or `SearchPalette.qml`, the one in use) | SR3 | Prewarm call on open and on switch on |
+| `ui/alcedo_main/qml/SearchPalette.qml` | SR3 | Prewarm call on open and on switch on |
 | `ui/alcedo_main/qml/SemanticGenerationSettingsPanel.qml` | SR3 | Setting row |
 
 ### 6.2 Proposed files

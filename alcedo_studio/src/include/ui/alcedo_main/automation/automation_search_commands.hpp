@@ -12,8 +12,8 @@
 namespace alcedo::automation {
 
 /// Registers `search.query`. It reads the search through the SearchSession of the
-/// SearchController, the owner that the global search dialog uses: the same routing, request
-/// match, and result window. @p host must outlive every dispatch. Returns false and writes
+/// SearchController, the owner that the search palette uses: the same routing and request
+/// match. @p host must outlive every dispatch. Returns false and writes
 /// @p error when a registration fails.
 [[nodiscard]] auto RegisterAutomationSearchCommands(AutomationCommandRegistry& registry,
                                                     ui::ApplicationModuleHost* host,

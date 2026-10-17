@@ -1574,6 +1574,10 @@ Alcedo 将改用 %1。</translation>
         <source>No semantic model is active.</source>
         <translation>没有已激活的语义模型。</translation>
     </message>
+    <message>
+        <source>This recent search does not exist.</source>
+        <translation>此最近搜索不存在。</translation>
+    </message>
 </context>
 <context>
     <name>AgentSessionCard</name>
@@ -5017,164 +5021,6 @@ Refresh the library afterwards; they are listed under the User category. Import 
     </message>
 </context>
 <context>
-    <name>GlobalSearchDialog</name>
-    <message>
-        <location filename="../qml/GlobalSearchDialog.qml" line="+929"/>
-        <source>Suggestion</source>
-        <translation>建议</translation>
-    </message>
-    <message>
-        <location line="-228"/>
-        <source>Search settings ▾</source>
-        <translation>搜索设置 ▾</translation>
-    </message>
-    <message>
-        <location line="-469"/>
-        <source>%1 matches</source>
-        <translation>%1 个匹配项</translation>
-    </message>
-    <message>
-        <location line="+3"/>
-        <source>0 of %1 matches</source>
-        <translation>0/%1 个匹配项</translation>
-    </message>
-    <message>
-        <location line="+4"/>
-        <source>%1-%2 of %3 matches</source>
-        <translation>匹配项 %1-%2，共 %3 项</translation>
-    </message>
-    <message>
-        <location line="+427"/>
-        <source>Search photos, cameras, lenses, dates...</source>
-        <translation>搜索照片、相机、镜头、日期...</translation>
-    </message>
-    <message>
-        <location line="+67"/>
-        <source>Search settings — choose which fields the search scans, or enable natural-language search</source>
-        <translation>搜索设置 — 选择搜索扫描的字段，或启用自然语言搜索</translation>
-    </message>
-    <message>
-        <location line="+5"/>
-        <source>Search</source>
-        <translation>搜索</translation>
-    </message>
-    <message>
-        <location line="+64"/>
-        <source>Search conditions</source>
-        <translation>搜索条件</translation>
-    </message>
-    <message>
-        <location line="+19"/>
-        <source>Filename</source>
-        <translation>文件名</translation>
-    </message>
-    <message>
-        <location line="+15"/>
-        <source>EXIF info</source>
-        <translation>EXIF 信息</translation>
-    </message>
-    <message>
-        <location line="+15"/>
-        <source>AI description</source>
-        <translation>AI 描述文本</translation>
-    </message>
-    <message>
-        <location line="+15"/>
-        <source>AI tags</source>
-        <translation>AI 标签</translation>
-    </message>
-    <message>
-        <location line="+21"/>
-        <source>Natural language search</source>
-        <translation>自然语言搜索</translation>
-    </message>
-    <message>
-        <location line="+15"/>
-        <source>Natural language search — use the CLIP model to search by meaning (Enter or Search button to run). Mutually exclusive with the field filters above.</source>
-        <translation>自然语言搜索 — 通过 CLIP 模型按语义搜索（按回车或点击搜索按钮运行）。与上方字段筛选互斥。</translation>
-    </message>
-    <message>
-        <location line="+28"/>
-        <source>Results</source>
-        <translation>结果</translation>
-    </message>
-    <message>
-        <location line="+30"/>
-        <source>Active: %1</source>
-        <translation>当前：%1</translation>
-    </message>
-    <message>
-        <location line="+39"/>
-        <source>No recent suggestions</source>
-        <translation>没有最近的建议</translation>
-    </message>
-    <message>
-        <location line="+55"/>
-        <source>Load previous</source>
-        <translation>加载上一项</translation>
-    </message>
-    <message>
-        <location line="+13"/>
-        <source>(unnamed)</source>
-        <translation>（未命名）</translation>
-    </message>
-    <message>
-        <location line="+1"/>
-        <source>%1  |  %2</source>
-        <translation>%1  |  %2</translation>
-    </message>
-    <message>
-        <location line="+2"/>
-        <source>Rating %1/5</source>
-        <translation>评分 %1/5</translation>
-    </message>
-    <message>
-        <location line="+34"/>
-        <source>No matches</source>
-        <translation>无匹配项</translation>
-    </message>
-    <message>
-        <location line="+33"/>
-        <source>Load more</source>
-        <translation>加载更多</translation>
-    </message>
-    <message>
-        <location line="+48"/>
-        <source>Source file is unavailable</source>
-        <translation>源文件不可用</translation>
-    </message>
-    <message>
-        <location line="+141"/>
-        <source>Preview image failed to load</source>
-        <translation>预览图像加载失败</translation>
-    </message>
-    <message>
-        <location line="+80"/>
-        <source>%1  -  %2</source>
-        <translation>%1  -  %2</translation>
-    </message>
-    <message>
-        <location line="-988"/>
-        <source>Query is too long for natural language search</source>
-        <translation>自然语言搜索的查询过长</translation>
-    </message>
-    <message>
-        <location line="+4"/>
-        <source>Natural language search is not available yet</source>
-        <translation>自然语言搜索暂不可用</translation>
-    </message>
-    <message>
-        <location line="-157"/>
-        <location line="+159"/>
-        <source>Press Enter or click Search for natural language search</source>
-        <translation>按回车或点击搜索按钮以执行自然语言搜索</translation>
-    </message>
-    <message>
-        <source>Press Enter to search by meaning.</source>
-        <translation>按回车按语义搜索。</translation>
-    </message>
-</context>
-<context>
     <name>ImageActionsController</name>
     <message>
         <location filename="../qml/ImageActionsController.qml" line="+62"/>
@@ -6225,6 +6071,121 @@ Create a new layer above it and draw the Mask there?</source>
         <location line="+1"/>
         <source>No matches</source>
         <translation>无匹配项</translation>
+    </message>
+</context>
+<context>
+    <name>SearchPalette</name>
+    <message>
+        <source>Search photos, cameras, lenses, dates</source>
+        <translation>搜索照片、相机、镜头、日期</translation>
+    </message>
+    <message>
+        <source>Search photos</source>
+        <translation>搜索照片</translation>
+    </message>
+    <message>
+        <source>Natural language</source>
+        <translation>自然语言</translation>
+    </message>
+    <message>
+        <source>Search settings</source>
+        <translation>搜索设置</translation>
+    </message>
+    <message>
+        <source>Esc</source>
+        <translation>Esc</translation>
+    </message>
+    <message>
+        <source>Close search</source>
+        <translation>关闭搜索</translation>
+    </message>
+    <message>
+        <source>Type to search photos</source>
+        <translation>输入内容以搜索照片</translation>
+    </message>
+    <message>
+        <source>Recent searches</source>
+        <translation>最近搜索</translation>
+    </message>
+    <message>
+        <source>Commands</source>
+        <translation>命令</translation>
+    </message>
+    <message>
+        <source>Search photos by meaning for &quot;%1&quot;</source>
+        <translation>按语义搜索“%1”的照片</translation>
+    </message>
+    <message>
+        <source>Search photos for &quot;%1&quot;</source>
+        <translation>搜索“%1”的照片</translation>
+    </message>
+    <message>
+        <source>Enter</source>
+        <translation>Enter</translation>
+    </message>
+    <message>
+        <source>Filters</source>
+        <translation>筛选</translation>
+    </message>
+    <message>
+        <source>Photos</source>
+        <translation>照片</translation>
+    </message>
+    <message>
+        <source>View all</source>
+        <translation>查看全部</translation>
+    </message>
+    <message>
+        <source>Press Enter to search by meaning.</source>
+        <translation>按回车按语义搜索。</translation>
+    </message>
+    <message>
+        <source>No matching photos in this folder</source>
+        <translation>此文件夹中没有匹配的照片</translation>
+    </message>
+    <message>
+        <source>Search in</source>
+        <translation>搜索范围</translation>
+    </message>
+    <message>
+        <source>File name</source>
+        <translation>文件名</translation>
+    </message>
+    <message>
+        <source>EXIF info</source>
+        <translation>EXIF 信息</translation>
+    </message>
+    <message>
+        <source>AI description</source>
+        <translation>AI 描述文本</translation>
+    </message>
+    <message>
+        <source>AI tags</source>
+        <translation>AI 标签</translation>
+    </message>
+    <message>
+        <source>Natural language search</source>
+        <translation>自然语言搜索</translation>
+    </message>
+    <message>
+        <source>Search by meaning with the semantic model. Press Enter to run it.</source>
+        <translation>使用语义模型按含义搜索。按回车运行。</translation>
+    </message>
+    <message>
+        <source>Search</source>
+        <translation>搜索</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>关闭</translation>
+    </message>
+    <message>
+        <source>Source file is unavailable</source>
+        <translation>源文件不可用</translation>
+    </message>
+    <message>
+        <source>Preview image failed to load</source>
+        <translation>预览图像加载失败</translation>
     </message>
 </context>
 <context>

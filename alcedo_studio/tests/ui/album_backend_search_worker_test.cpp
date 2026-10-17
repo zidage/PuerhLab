@@ -6,7 +6,8 @@
 // route of SearchController runs its SQL on the search worker, the dialog receives only the
 // newest response, and an applied search replaces the grid and stats from the worker result.
 // A natural-language search applied to the library (global_search_redesign_plan.md, Phase GS2)
-// shows the kept files in relevance order and embeds the query once.
+// shows the kept files in relevance order and embeds the query once. The palette data of
+// SearchController (Phase GS3): recent searches and the recommendation rows.
 
 #include <QCoreApplication>
 #include <QSettings>
@@ -29,6 +30,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "app/project_service.hpp"
@@ -358,19 +360,33 @@ class FakeSemanticSearchProvider final : public SemanticSearchProvider {
   std::atomic<bool> fail_{false};
 };
 
-/// Points the default QSettings store at an INI file in @p dir, so the natural-language switch
-/// of a test does not change the user's settings. Construct it before ApplicationModuleHost.
+/// Points the default QSettings store at an INI file in @p dir, so the search settings of a
+/// test (the natural-language switch, the recent searches) do not change the user's settings.
+/// QSettings reads and writes nothing without an organization name, so the test sets one.
+/// Construct it before ApplicationModuleHost.
 class ScopedSearchSettings {
  public:
-  explicit ScopedSearchSettings(const std::filesystem::path& dir) {
+  explicit ScopedSearchSettings(const std::filesystem::path& dir)
+      : organization_name_(QCoreApplication::organizationName()),
+        application_name_(QCoreApplication::applicationName()) {
+    QCoreApplication::setOrganizationName(QStringLiteral("AlcedoSearchWorkerTest"));
+    QCoreApplication::setApplicationName(QStringLiteral("AlbumBackendSearchWorkerTest"));
     QSettings::setDefaultFormat(QSettings::IniFormat);
     QSettings::setPath(QSettings::IniFormat, QSettings::UserScope,
                        PathToQString(dir / "search_settings"));
   }
-  ~ScopedSearchSettings() { QSettings::setDefaultFormat(QSettings::NativeFormat); }
+  ~ScopedSearchSettings() {
+    QSettings::setDefaultFormat(QSettings::NativeFormat);
+    QCoreApplication::setOrganizationName(organization_name_);
+    QCoreApplication::setApplicationName(application_name_);
+  }
 
   ScopedSearchSettings(const ScopedSearchSettings&)            = delete;
   ScopedSearchSettings& operator=(const ScopedSearchSettings&) = delete;
+
+ private:
+  QString organization_name_;
+  QString application_name_;
 };
 
 /// A loaded project whose files have embeddings of an active model with the given query
@@ -728,6 +744,250 @@ TEST_F(SearchWorkerTests, NonsenseSemanticQueryShowsNoPhotos) {
   EXPECT_EQ(backend.stats()->TotalPhotoCount(), 0);
   EXPECT_TRUE(backend.library()->QueryError().isEmpty());
   EXPECT_EQ(search->active_search_query(), QString::fromUtf8(kSemanticQuery));
+}
+
+// ── Palette data in SearchController (global_search_redesign_plan.md, Phase GS3) ────────────
+
+namespace {
+
+using RecentPairList = std::vector<std::pair<std::string, std::string>>;
+
+/// Recent searches as (query, route) pairs, newest first.
+auto RecentPairs(const SearchController& search) -> RecentPairList {
+  RecentPairList pairs;
+  for (const auto& value : search.RecentSearches()) {
+    const auto entry = value.toMap();
+    pairs.emplace_back(entry.value("query").toString().toStdString(),
+                       entry.value("route").toString().toStdString());
+  }
+  return pairs;
+}
+
+/// Apply a field search and wait until the library accepted it.
+auto ApplyFuzzyAndWait(ApplicationModuleHost& backend, const QString& query) -> bool {
+  backend.search()->ApplyFuzzySearch(query);
+  return WaitUntil(
+             [&]() {
+               return backend.search()->active_search_query() == query &&
+                      !backend.library()->QueryUpdating();
+             },
+             10000) &&
+         WaitForLibraryQuery(backend);
+}
+
+}  // namespace
+
+TEST_F(SearchWorkerTests, RecentSearchAddsAcceptedQueryAtTheTop) {
+  ScopedSearchSettings   settings(temp_dir_);
+  ApplicationModuleHost  backend;
+  SemanticLibraryProject project;
+  ASSERT_TRUE(project.Load(temp_dir_, backend, kTwelveFileSimilarities));
+  auto* search = backend.search();
+  ASSERT_TRUE(search->RecentSearches().isEmpty());
+
+  QSignalSpy recent_changes(search, &SearchController::RecentSearchesChanged);
+  ASSERT_TRUE(ApplyFuzzyAndWait(backend, QStringLiteral("album-delete-1")));
+  ASSERT_TRUE(search->ApplySemanticSearch(QString::fromUtf8(kSemanticQuery)).isEmpty());
+  ASSERT_TRUE(WaitForSemanticSearch(backend));
+
+  EXPECT_EQ(RecentPairs(*search),
+            (RecentPairList{{kSemanticQuery, "semantic"}, {"album-delete-1", "fuzzy"}}));
+  EXPECT_EQ(recent_changes.count(), 2);
+}
+
+TEST_F(SearchWorkerTests, RecentSearchMovesARepeatedQueryWithoutDuplicate) {
+  ScopedSearchSettings   settings(temp_dir_);
+  ApplicationModuleHost  backend;
+  LoadedPopulatedProject project;
+  ASSERT_TRUE(project.Load(temp_dir_, backend, kSyntheticImageCount));
+  auto* search = backend.search();
+
+  ASSERT_TRUE(ApplyFuzzyAndWait(backend, QStringLiteral("album-delete-1")));
+  ASSERT_TRUE(ApplyFuzzyAndWait(backend, QStringLiteral("album-delete-2")));
+  ASSERT_TRUE(ApplyFuzzyAndWait(backend, QStringLiteral("album-delete-1")));
+
+  EXPECT_EQ(RecentPairs(*search),
+            (RecentPairList{{"album-delete-1", "fuzzy"}, {"album-delete-2", "fuzzy"}}));
+}
+
+TEST_F(SearchWorkerTests, RecentSearchKeepsAtMostFiveEntries) {
+  ScopedSearchSettings   settings(temp_dir_);
+  ApplicationModuleHost  backend;
+  LoadedPopulatedProject project;
+  ASSERT_TRUE(project.Load(temp_dir_, backend, kSyntheticImageCount));
+  auto* search = backend.search();
+
+  for (int index = 1; index <= 6; ++index) {
+    ASSERT_TRUE(ApplyFuzzyAndWait(backend, QStringLiteral("album-delete-%1").arg(index)));
+  }
+
+  ASSERT_EQ(search->RecentSearches().size(), SearchController::kMaxRecentSearches);
+  EXPECT_EQ(RecentPairs(*search), (RecentPairList{{"album-delete-6", "fuzzy"},
+                                                  {"album-delete-5", "fuzzy"},
+                                                  {"album-delete-4", "fuzzy"},
+                                                  {"album-delete-3", "fuzzy"},
+                                                  {"album-delete-2", "fuzzy"}}));
+}
+
+TEST_F(SearchWorkerTests, ExactFileSearchIsNotARecentSearch) {
+  ScopedSearchSettings   settings(temp_dir_);
+  ApplicationModuleHost  backend;
+  SemanticLibraryProject project;
+  ASSERT_TRUE(project.Load(temp_dir_, backend, kTwelveFileSimilarities));
+  auto*      search = backend.search();
+  QSignalSpy recent_changes(search, &SearchController::RecentSearchesChanged);
+
+  search->ApplyExactSearch(static_cast<uint>(project.file_ids().at(3)));
+  ASSERT_TRUE(WaitUntil([&]() { return backend.library()->TotalCount() == 1; }, 10000));
+  ASSERT_TRUE(WaitForLibraryQuery(backend));
+  EXPECT_FALSE(search->active_search_query().isEmpty());
+
+  EXPECT_TRUE(search->RecentSearches().isEmpty());
+  EXPECT_EQ(recent_changes.count(), 0);
+}
+
+TEST_F(SearchWorkerTests, FailedSearchIsNotARecentSearch) {
+  ScopedSearchSettings   settings(temp_dir_);
+  ApplicationModuleHost  backend;
+  SemanticLibraryProject project;
+  ASSERT_TRUE(project.Load(temp_dir_, backend, kTwelveFileSimilarities));
+  auto* search             = backend.search();
+  auto* library            = backend.library();
+
+  project.provider().fail_ = true;
+  ASSERT_TRUE(search->ApplySemanticSearch(QString::fromUtf8(kSemanticQuery)).isEmpty());
+  ASSERT_TRUE(WaitUntil([&]() { return !library->QueryError().isEmpty(); }, 15000));
+  ASSERT_TRUE(WaitForLibraryQuery(backend));
+
+  EXPECT_FALSE(search->active_search_is_semantic());
+  EXPECT_TRUE(search->RecentSearches().isEmpty());
+}
+
+TEST_F(SearchWorkerTests, RecentSearchesPersistInSettings) {
+  ScopedSearchSettings settings(temp_dir_);
+  {
+    ApplicationModuleHost  backend;
+    SemanticLibraryProject project;
+    ASSERT_TRUE(project.Load(temp_dir_, backend, kTwelveFileSimilarities));
+    ASSERT_TRUE(ApplyFuzzyAndWait(backend, QStringLiteral("album-delete-1")));
+    ASSERT_TRUE(backend.search()->ApplySemanticSearch(QString::fromUtf8(kSemanticQuery)).isEmpty());
+    ASSERT_TRUE(WaitForSemanticSearch(backend));
+  }
+
+  const RecentPairList   expected{{kSemanticQuery, "semantic"}, {"album-delete-1", "fuzzy"}};
+  // The constructor reads the list; it needs no project.
+  const SearchController reader(nullptr, nullptr, nullptr, nullptr);
+  EXPECT_EQ(RecentPairs(reader), expected);
+
+  // An entry with an unknown route is skipped on read.
+  QVariantList stored = QSettings{}.value(QStringLiteral("search/recentQueries")).toList();
+  ASSERT_EQ(stored.size(), 2);
+  stored.prepend(
+      QVariantMap{{"query", QStringLiteral("album-delete-9")}, {"route", QStringLiteral("exact")}});
+  QSettings{}.setValue(QStringLiteral("search/recentQueries"), stored);
+  const SearchController second_reader(nullptr, nullptr, nullptr, nullptr);
+  EXPECT_EQ(RecentPairs(second_reader), expected);
+}
+
+TEST_F(SearchWorkerTests, RecentSemanticSearchUsesItsStoredRoute) {
+  ScopedSearchSettings   settings(temp_dir_);
+  ApplicationModuleHost  backend;
+  SemanticLibraryProject project;
+  ASSERT_TRUE(project.Load(temp_dir_, backend, kTwelveFileSimilarities));
+  auto* search = backend.search();
+
+  ASSERT_TRUE(search->ApplySemanticSearch(QString::fromUtf8(kSemanticQuery)).isEmpty());
+  ASSERT_TRUE(WaitForSemanticSearch(backend));
+  search->ClearFuzzySearch();
+  ASSERT_TRUE(WaitForLibraryQuery(backend));
+  ASSERT_FALSE(search->active_search_is_semantic());
+
+  // With the switch off, the query text uses field search; the stored entry keeps its route.
+  search->SetNaturalLanguageSearchEnabled(false);
+  ASSERT_EQ(search->session()->RouteFor(QString::fromUtf8(kSemanticQuery)),
+            QStringLiteral("fuzzy"));
+  EXPECT_FALSE(search->ApplyRecentSearch(1).isEmpty());
+  EXPECT_FALSE(search->ApplyRecentSearch(-1).isEmpty());
+  EXPECT_TRUE(search->ApplyRecentSearch(0).isEmpty());
+  ASSERT_TRUE(WaitForSemanticSearch(backend));
+
+  EXPECT_EQ(GridIds(backend), project.Ids({3, 7, 1, 10, 5}));
+  EXPECT_EQ(search->active_search_query(), QString::fromUtf8(kSemanticQuery));
+  EXPECT_EQ(RecentPairs(*search), (RecentPairList{{kSemanticQuery, "semantic"}}));
+}
+
+TEST_F(SearchWorkerTests, RecommendationAppliesStatsFilter) {
+  ScopedSearchSettings          settings(temp_dir_);
+  ApplicationModuleHost         backend;
+  SemanticLibraryProject        project;
+  std::vector<LibraryPhotoSpec> specs(12);
+  for (size_t i = 0; i < specs.size(); ++i) {
+    specs[i].model_ = i < 4 ? "Canon EOS R5" : "Nikon Z8";
+  }
+  ASSERT_TRUE(project.Load(temp_dir_, backend, kTwelveFileSimilarities, specs));
+  auto*      search  = backend.search();
+  auto*      stats   = backend.stats();
+  auto*      library = backend.library();
+  QSignalSpy filter_changes(stats, &StatsEngine::StatsFilterChanged);
+
+  search->ApplyRecommendation(QStringLiteral("camera"), QStringLiteral("Canon EOS R5"));
+  EXPECT_EQ(stats->filter_camera(), QStringLiteral("Canon EOS R5"));
+  EXPECT_TRUE(library->QueryUpdating());
+  EXPECT_EQ(filter_changes.count(), 1);
+  ASSERT_TRUE(WaitForLibraryQuery(backend));
+  EXPECT_EQ(library->TotalCount(), 4);
+  EXPECT_TRUE(search->active_search_query().isEmpty());
+
+  // A second click on the same row keeps the filter and starts no refresh.
+  filter_changes.clear();
+  search->ApplyRecommendation(QStringLiteral("camera"), QStringLiteral("Canon EOS R5"));
+  EXPECT_EQ(stats->filter_camera(), QStringLiteral("Canon EOS R5"));
+  EXPECT_FALSE(library->QueryUpdating());
+  EXPECT_EQ(filter_changes.count(), 0);
+  EXPECT_EQ(library->TotalCount(), 4);
+}
+
+TEST_F(SearchWorkerTests, MatchingRecommendationsFilterByLabel) {
+  ScopedSearchSettings          settings(temp_dir_);
+  ApplicationModuleHost         backend;
+  SemanticLibraryProject        project;
+  std::vector<LibraryPhotoSpec> specs(12);
+  for (size_t i = 0; i < specs.size(); ++i) {
+    specs[i].model_ = i < 4 ? "Canon EOS R5" : "Nikon Z8";
+    specs[i].lens_  = i < 4 ? "RF 24-70mm F2.8" : "Z 50mm F1.8";
+  }
+  ASSERT_TRUE(project.Load(temp_dir_, backend, kTwelveFileSimilarities, specs));
+  auto*      search = backend.search();
+
+  const auto rows   = search->MatchingRecommendations(QStringLiteral("r5"), 4);
+  ASSERT_EQ(rows.size(), 1);
+  const auto row = rows.front().toMap();
+  EXPECT_EQ(row.value("category").toString(), QStringLiteral("camera"));
+  EXPECT_EQ(row.value("label").toString(), QStringLiteral("Canon EOS R5"));
+  EXPECT_EQ(row.value("count").toInt(), 4);
+
+  // The query matches inside a label of any category, ignores case, and the limit applies.
+  const auto lens_rows = search->MatchingRecommendations(QStringLiteral("50MM"), 4);
+  ASSERT_EQ(lens_rows.size(), 1);
+  EXPECT_EQ(lens_rows.front().toMap().value("category").toString(), QStringLiteral("lens"));
+  EXPECT_EQ(search->MatchingRecommendations(QStringLiteral("o"), 1).size(), 1);
+  EXPECT_TRUE(search->MatchingRecommendations(QStringLiteral("   "), 4).isEmpty());
+  EXPECT_TRUE(search->MatchingRecommendations(QStringLiteral("sony"), 4).isEmpty());
+}
+
+TEST_F(SearchWorkerTests, SearchSettingsPanelOpenStatePersistsInSettings) {
+  ScopedSearchSettings settings(temp_dir_);
+  {
+    SearchController controller(nullptr, nullptr, nullptr, nullptr);
+    EXPECT_FALSE(controller.SearchSettingsPanelOpen());
+    QSignalSpy changes(&controller, &SearchController::SearchSettingsPanelOpenChanged);
+    controller.SetSearchSettingsPanelOpen(true);
+    controller.SetSearchSettingsPanelOpen(true);
+    EXPECT_EQ(changes.count(), 1);
+  }
+  const SearchController reader(nullptr, nullptr, nullptr, nullptr);
+  EXPECT_TRUE(reader.SearchSettingsPanelOpen());
+  EXPECT_TRUE(QSettings{}.value(QStringLiteral("search/settingsPanelOpen")).toBool());
 }
 
 }  // namespace alcedo::ui::test

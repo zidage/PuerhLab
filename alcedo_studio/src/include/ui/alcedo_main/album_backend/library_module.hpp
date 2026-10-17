@@ -280,15 +280,15 @@ class LibraryModule final : public QObject, public IAlbumCatalog {
   void ApplyThumbnailDiskCacheSettingsToService();
   void NotifyThumbnailsChanged();
   void NotifyCountsChanged();
-  void EmitThumbnailUpdated(uint elementId, const QString& dataUrl, bool loading,
+  void EmitThumbnailUpdated(uint elementId, const QString& thumbUrl, bool loading,
                             bool missingSource, const QString& errorText);
 
  signals:
   void ThumbnailsChanged();
   void thumbnailsChanged();
-  void ThumbnailUpdated(uint elementId, const QString& dataUrl, bool loading, bool missingSource,
+  void ThumbnailUpdated(uint elementId, const QString& thumbUrl, bool loading, bool missingSource,
                         const QString& errorText);
-  void thumbnailUpdated(uint elementId, const QString& dataUrl, bool loading, bool missingSource,
+  void thumbnailUpdated(uint elementId, const QString& thumbUrl, bool loading, bool missingSource,
                         const QString& errorText);
   void CountsChanged();
   void ThumbnailDiskCacheStateChanged();
