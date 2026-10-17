@@ -119,7 +119,7 @@ file(MAKE_DIRECTORY
 if(NOT EXISTS "${PUERHLAB_LENSFUN_SOURCE_DIR}/CMakeLists.txt")
     message(FATAL_ERROR
         "Bundled Lensfun source was not found at ${PUERHLAB_LENSFUN_SOURCE_DIR}. "
-        "Run `git submodule update --init --recursive pu-erh_lab/src/third_party/lensfun` and re-configure.")
+        "Run `git submodule update --init alcedo_studio/src/third_party/lensfun` and re-configure.")
 endif()
 
 set(_puerhlab_lensfun_cmake_args
