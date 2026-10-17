@@ -633,6 +633,12 @@ class EditorSessionService final : public IEditorSessionBackend {
   explicit EditorSessionService(Dependencies dependencies);
   ~EditorSessionService() override;
 
+  /// Runs the session work that is already due, joins the session-owner worker, and discards
+  /// work that has not started. After this returns, no result, change, progress, or availability
+  /// observer runs on the worker, so the host calls it before it destroys the observer receivers.
+  /// Must not be called from the session-owner thread. Idempotent.
+  void               StopCommandExecutor();
+
   void               SetResultObserver(ResultObserver observer) override;
   void               SetChangeNotifier(ChangeNotifier notifier) override;
   void               SetRenderProgressObserver(RenderProgressObserver observer) override;

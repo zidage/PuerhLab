@@ -657,7 +657,6 @@ alcedo_register_test_target(EditorSessionCq5QualificationTest app)
 
 add_executable(EditorSessionControllerPhase5ATest
     ${ALCEDO_TEST_ROOT}/ui/editor_session_controller_phase5a_test.cpp
-    ${ALCEDO_TEST_ROOT}/ui/ui_test_main.cpp
 )
 target_include_directories(EditorSessionControllerPhase5ATest
   PUBLIC ${ALCEDO_INCLUDE_DIR} ${ALCEDO_TEST_DIR})
@@ -665,6 +664,7 @@ target_compile_definitions(EditorSessionControllerPhase5ATest PRIVATE
   ALCEDO_REPO_ROOT="${CMAKE_SOURCE_DIR}")
 target_link_libraries(EditorSessionControllerPhase5ATest
   PRIVATE
+    AlcedoInProcessTestMain
     AlbumBackendLib
     EditorSessionService
     GTest::gtest
@@ -683,11 +683,11 @@ alcedo_register_test_target(EditorSessionControllerPhase5ATest app ci_core)
 add_executable(EditorHistoryOperationPublisherTest
     ${ALCEDO_TEST_ROOT}/ui/editor_history_operation_publisher_test.cpp
     ${CMAKE_SOURCE_DIR}/alcedo_studio/src/ui/alcedo_main/album_backend/editor_history_operation_publisher.cpp
-    ${ALCEDO_TEST_ROOT}/ui/ui_test_main.cpp
 )
 target_include_directories(EditorHistoryOperationPublisherTest PUBLIC ${ALCEDO_INCLUDE_DIR})
 target_link_libraries(EditorHistoryOperationPublisherTest
   PRIVATE
+    AlcedoInProcessTestMain
     GTest::gtest
     Qt6::Core
 )

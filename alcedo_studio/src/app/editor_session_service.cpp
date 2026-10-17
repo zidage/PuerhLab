@@ -115,11 +115,15 @@ EditorSessionService::~EditorSessionService() {
   // Join the session-owner worker before any member is torn down: queued and
   // in-flight tasks invoke this service's members, so the worker must be dead
   // before member destruction begins.
+  StopCommandExecutor();
+  save_service_.CancelAndWait();
+}
+
+void EditorSessionService::StopCommandExecutor() {
   if (const auto& executor = command_queue_.executor()) {
     executor->Shutdown();
   }
   command_queue_.Stop();
-  save_service_.CancelAndWait();
 }
 
 void EditorSessionService::DrainCommandQueueForTests() {

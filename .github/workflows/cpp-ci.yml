@@ -89,6 +89,10 @@ jobs:
       - name: Build CI targets
         run: cmake --build --preset macos_arm_metal_ci --parallel 4
 
+      - name: Record test start time
+        # Crash reports written after this file are the reports of the test step.
+        run: touch "${RUNNER_TEMP}/alcedo-test-start"
+
       - name: Test
         run: ctest --preset macos_arm_metal_ci --output-on-failure
 
@@ -98,4 +102,32 @@ jobs:
         with:
           name: automation-failures
           path: build/macos-arm-metal-ci/automation-failures/
+          if-no-files-found: ignore
+
+      - name: Collect native crash reports
+        # CTest reports only "SegFault". ReportCrash writes the native stack of every crashed test
+        # process to DiagnosticReports, so a failed run keeps the reports written during the test
+        # step.
+        if: failure()
+        run: |
+          set -euo pipefail
+          # ReportCrash writes a report a few seconds after the process ends.
+          sleep 10
+          dest="build/macos-arm-metal-ci/native-crash-reports"
+          mkdir -p "${dest}"
+          for dir in "${HOME}/Library/Logs/DiagnosticReports" /Library/Logs/DiagnosticReports; do
+            if [ -d "${dir}" ]; then
+              find "${dir}" -maxdepth 2 -type f \( -name '*.ips' -o -name '*.crash' \) \
+                -newer "${RUNNER_TEMP}/alcedo-test-start" -exec cp -p {} "${dest}/" \; \
+                || echo "Cannot read every crash report under ${dir}"
+            fi
+          done
+          ls -l "${dest}"
+
+      - name: Upload native crash reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-crash-reports
+          path: build/macos-arm-metal-ci/native-crash-reports/
           if-no-files-found: ignore
