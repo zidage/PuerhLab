@@ -6,6 +6,7 @@
 
 #include <gtest/gtest.h>
 
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -78,6 +79,11 @@ auto ReadJson(const std::filesystem::path& path) -> nlohmann::json {
  * moved the resolution into LensCalibrationResolver. It names the CI RAW file and the lens EXIF
  * name that the resolver received. The unmatched fixture replaces a real lens EXIF name with one
  * that Lensfun does not know, because every CI RAW lens has a profile.
+ *
+ * The user catalog file is the exception. LensCalibOp ranked a lens whose focal and aperture
+ * ranges fit the shot above the selected lens name, so the file from fcfbb2ef held the FE 28mm f/2
+ * profile of the RAW lens instead of the selected FE 20-70mm f/4 G. The file now holds the
+ * resolver output for the FE 20-70mm f/4 G profile at the RAW's 28 mm focal length.
  */
 struct LensFixture {
   const char* expected_file;
@@ -310,6 +316,192 @@ TEST(LensCalibDevelopResolve, MalformedDatabaseSkipsLensCorrectionWithoutError) 
                                                Extent2D{96, 64}, false)
                   .has_value());
   std::filesystem::remove_all(broken_root);
+}
+
+namespace {
+
+/// One lens as the RAW metadata names it, with the Lensfun profile it must match.
+struct LensMatchCase {
+  const char* camera_maker;
+  const char* camera_model;
+  const char* lens_maker;
+  const char* lens_model;
+  float       focal_length_mm;
+  float       aperture_f_number;
+  const char* expected_profile_maker;
+  const char* expected_profile_model;
+  bool        profile_has_vignetting;
+};
+
+auto MetaFor(const LensMatchCase& lens) -> LensInputMeta {
+  LensInputMeta meta;
+  meta.cam_maker_         = lens.camera_maker;
+  meta.cam_model_         = lens.camera_model;
+  meta.lens_maker_        = lens.lens_maker;
+  meta.lens_model_        = lens.lens_model;
+  meta.focal_length_mm_   = lens.focal_length_mm;
+  meta.aperture_f_number_ = lens.aperture_f_number;
+  meta.distance_m_        = 10.0f;
+  return meta;
+}
+
+auto AllCorrectionsSettings() -> LensCorrectionSettings {
+  LensCorrectionSettings settings;
+  settings.database_path_    = LensDatabasePath();
+  settings.apply_vignetting_ = true;
+  settings.apply_distortion_ = true;
+  settings.apply_tca_        = true;
+  settings.apply_crop_       = false;
+  return settings;
+}
+
+/// Resolve one case and check the matched profile and the corrections that its data supplies.
+void ExpectProfileMatches(const LensMatchCase& lens) {
+  const std::string context = std::string(lens.camera_model) + " + " + lens.lens_model;
+  const auto        result =
+      LensCalibrationResolver::ResolveProfile(MetaFor(lens), AllCorrectionsSettings(), false);
+  ASSERT_EQ(result.status_, LensProfileStatus::Resolved) << context;
+  EXPECT_EQ(result.matched_lens_maker_, lens.expected_profile_maker) << context;
+  EXPECT_EQ(result.matched_lens_model_, lens.expected_profile_model) << context;
+  // Every profile in the cases below has distortion and poly3 TCA data.
+  EXPECT_EQ(result.params_.apply_distortion, 1) << context;
+  EXPECT_NE(result.params_.distortion_model,
+            static_cast<std::int32_t>(LensCalibDistortionModel::NONE))
+      << context;
+  EXPECT_EQ(result.params_.apply_tca, 1) << context;
+  EXPECT_EQ(result.params_.tca_model, static_cast<std::int32_t>(LensCalibTCAModel::POLY3))
+      << context;
+  // Vignetting is requested for every case, and applies only where the profile has the data.
+  EXPECT_EQ(result.params_.apply_vignetting, lens.profile_has_vignetting ? 1 : 0) << context;
+  EXPECT_EQ(result.params_.vignetting_model,
+            static_cast<std::int32_t>(lens.profile_has_vignetting ? LensCalibVignettingModel::PA
+                                                                  : LensCalibVignettingModel::NONE))
+      << context;
+}
+
+auto ReadNikonZLensName(const char* lens_id) -> std::string {
+  const auto  id_map  = ReadJson(std::filesystem::path(CONFIG_PATH) / "nikon_lens" / "id_map.json");
+  const auto& z_names = id_map.at("numeric_id_map");
+  EXPECT_TRUE(z_names.contains(lens_id)) << "Nikon Z lens ID " << lens_id;
+  return z_names.contains(lens_id) ? z_names.at(lens_id).get<std::string>() : std::string{};
+}
+
+}  // namespace
+
+TEST(LensCalibDevelopResolve, ProfilesAddedInLensfun43f9e001MatchRawLensNames) {
+  const LensMatchCase cases[] = {
+      {"Sony", "ILCE-7M4", "", "FE 50mm F1.4 GM", 50.0f, 1.4f, "Sony", "FE 50mm f/1.4 GM", false},
+      {"Sony", "ILCE-7M4", "", "FE 16mm F1.8 G", 16.0f, 1.8f, "Sony", "FE 16mm f/1.8 G", false},
+      {"Canon", "Canon EOS R5", "", "RF50mm F1.4 L VCM", 50.0f, 1.4f, "Canon",
+       "Canon RF 50mm F1.4 L VCM", false},
+  };
+  for (const auto& lens : cases) {
+    ExpectProfileMatches(lens);
+  }
+}
+
+TEST(LensCalibDevelopResolve, NikonZLensIdNamesMatchAddedLensfunProfiles) {
+  // Nikon Z bodies store no lens name. The metadata extractor names the lens from the Z-mount
+  // lens ID in config/nikon_lens/id_map.json, so these names must match the Lensfun profiles.
+  const std::string   z_24_105   = ReadNikonZLensName("57");
+  const std::string   z_dx_16_50 = ReadNikonZLensName("53");
+  const std::string   z_24_70_f4 = ReadNikonZLensName("1");
+
+  const LensMatchCase cases[]    = {
+      {"Nikon Corporation", "Nikon Z 6_2", "Nikon", z_24_105.c_str(), 50.0f, 5.6f, "Nikon",
+          "Nikkor Z 24-105mm f/4-7.1", false},
+      {"Nikon Corporation", "Nikon Z 50", "Nikon", z_dx_16_50.c_str(), 24.0f, 2.8f, "Nikon",
+          "Nikkor Z DX 16-50mm f/2.8 VR", true},
+      // An ID that the map already had keeps matching its existing profile.
+      {"Nikon Corporation", "Nikon Z 6_2", "Nikon", z_24_70_f4.c_str(), 35.0f, 4.0f, "Nikon",
+          "Nikkor Z 24-70mm f/4 S", true},
+  };
+  for (const auto& lens : cases) {
+    ExpectProfileMatches(lens);
+  }
+}
+
+TEST(LensCalibDevelopResolve, SelectedLensNameOutranksLensWhoseRangesFitTheShot) {
+  // The shot values fit the FE 28mm f/2 (28 mm, f/2) and not the f/4 zoom. The name decides: the
+  // shot values only order Lensfun results with equal scores.
+  const LensMatchCase cases[] = {
+      {"Sony", "ILCE-7M4", "Sony", "FE 20-70mm F4 G", 28.0f, 2.0f, "Sony", "FE 20-70mm f/4 G",
+       true},
+      {"Sony", "ILCE-7M4", "Sony", "FE 28mm F2", 28.0f, 2.0f, "Sony", "FE 28mm f/2", true},
+  };
+  for (const auto& lens : cases) {
+    ExpectProfileMatches(lens);
+  }
+}
+
+TEST(LensCalibDevelopResolve, RevisedTamron17To70ProfileMatchesAllFourMounts) {
+  // The old profile listed only Sony E. "E 17-70mm F2.8 B070" is the Sony E EXIF name and the
+  // catalog name that existing projects saved before the profile was renamed.
+  const LensMatchCase cases[] = {
+      {"Sony", "ILCE-6400", "", "E 17-70mm F2.8 B070", 35.0f, 2.8f, "Tamron",
+       "Tamron 17-70mm F2.8 B070 Z/RF/X/E", true},
+      {"Fujifilm", "X-T5", "Tamron", "Tamron 17-70mm F2.8 B070 Z/RF/X/E", 35.0f, 2.8f, "Tamron",
+       "Tamron 17-70mm F2.8 B070 Z/RF/X/E", true},
+      {"Nikon Corporation", "Nikon Z 50", "Tamron", "Tamron 17-70mm F2.8 B070 Z/RF/X/E", 35.0f,
+       2.8f, "Tamron", "Tamron 17-70mm F2.8 B070 Z/RF/X/E", true},
+  };
+  for (const auto& lens : cases) {
+    ExpectProfileMatches(lens);
+  }
+}
+
+TEST(LensCalibDevelopResolve, RevisedTamron17To70ProfileUsesUpdatedDistortionCoefficients) {
+  // mil-tamron.xml at Lensfun 43f9e001: PTLens a, b, c at the 17 mm sample, calibrated at crop
+  // factor 1.534 with the default 3:2 aspect ratio. The old profile had a = 0.02392,
+  // b = -0.07326, c = 0.03809 at 17 mm and declared a 4:3 aspect ratio.
+  constexpr double kA           = 0.0350474;
+  constexpr double kB           = -0.1115517;
+  constexpr double kC           = 0.0777971;
+  constexpr double kCropFactor  = 1.534;
+  constexpr double kAspectRatio = 1.5;
+
+  LensMatchCase    lens;
+  lens.camera_maker           = "Sony";
+  lens.camera_model           = "ILCE-6400";
+  lens.lens_maker             = "";
+  lens.lens_model             = "E 17-70mm F2.8 B070";
+  lens.focal_length_mm        = 17.0f;
+  lens.aperture_f_number      = 2.8f;
+  lens.expected_profile_maker = "Tamron";
+  lens.expected_profile_model = "Tamron 17-70mm F2.8 B070 Z/RF/X/E";
+  lens.profile_has_vignetting = true;
+
+  const auto result =
+      LensCalibrationResolver::ResolveProfile(MetaFor(lens), AllCorrectionsSettings(), false);
+  ASSERT_EQ(result.status_, LensProfileStatus::Resolved);
+  ASSERT_EQ(result.params_.distortion_model,
+            static_cast<std::int32_t>(LensCalibDistortionModel::PTLENS));
+  ASSERT_GT(result.params_.real_focal_mm, 0.0f);
+
+  // Lensfun PTLens terms are relative to the calibration image half diagonal. The kernels use
+  // terms relative to the real focal length (the Hugin scaling of the Lensfun modifier).
+  const double hugin_scale_mm = 43.2666153 / kCropFactor / std::hypot(kAspectRatio, 1.0) * 0.5;
+  const double hugin_scaling  = result.params_.real_focal_mm / hugin_scale_mm;
+  const double d              = 1.0 - kA - kB - kC;
+  const double expected[]     = {kA * std::pow(hugin_scaling, 3.0) / std::pow(d, 4.0),
+                                 kB * std::pow(hugin_scaling, 2.0) / std::pow(d, 3.0),
+                                 kC * hugin_scaling / std::pow(d, 2.0)};
+  for (std::size_t i = 0; i < std::size(expected); ++i) {
+    EXPECT_NEAR(result.params_.distortion_terms[i], expected[i], std::fabs(expected[i]) * 1e-5)
+        << "distortion_terms[" << i << "]";
+  }
+}
+
+TEST(LensCalibDevelopResolve, RenamedSony16To50ProfileMatchesVersionOneAndTwoNames) {
+  const LensMatchCase cases[] = {
+      {"Sony", "ILCE-6400", "", "E PZ 16-50mm F3.5-5.6 OSS", 16.0f, 3.5f, "Sony",
+       "E PZ 16-50mm f/3.5-5.6 OSS I/II", true},
+      {"Sony", "ILCE-6400", "", "E PZ 16-50mm F3.5-5.6 OSS II", 16.0f, 3.5f, "Sony",
+       "E PZ 16-50mm f/3.5-5.6 OSS I/II", true},
+  };
+  for (const auto& lens : cases) {
+    ExpectProfileMatches(lens);
+  }
 }
 
 }  // namespace alcedo
