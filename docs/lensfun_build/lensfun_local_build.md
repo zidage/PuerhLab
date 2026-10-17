@@ -2,7 +2,7 @@
 
 Alcedo Studio now builds Lensfun directly from the upstream submodule at:
 
-- `alcedo/src/third_party/lensfun`
+- `alcedo_studio/src/third_party/lensfun`
 
 You do not need to configure or install Lensfun separately anymore. The top-level build drives a dedicated out-of-source Lensfun build under your active CMake build tree:
 
@@ -13,7 +13,7 @@ You do not need to configure or install Lensfun separately anymore. The top-leve
 1. Initialize the submodule:
 
 ```powershell
-git submodule update --init --recursive alcedo/src/third_party/lensfun
+git submodule update --init alcedo_studio/src/third_party/lensfun
 ```
 
 2. Make sure the Windows GLib2 dependency is available.

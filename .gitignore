@@ -1068,9 +1068,6 @@ alcedo_studio/tests/resources/sample_images/**
 temp_folder/
 
 third_party/
-!alcedo/src/third_party/
-!alcedo/src/third_party/lensfun/
-!alcedo/src/third_party/lensfun/**
 !alcedo_studio/src/
 !alcedo_studio/src/third_party/
 alcedo_studio/src/third_party/*
@@ -1080,6 +1077,7 @@ alcedo_studio/src/third_party/*
 !alcedo_studio/src/third_party/cmake/FindGLIB2.cmake
 !alcedo_studio/src/third_party/cmake/AlcedoQuickQanava.cmake
 !alcedo_studio/src/third_party/libultrahdr/
+!alcedo_studio/src/third_party/lensfun/
 !alcedo_studio/src/third_party/libraw
 !alcedo_studio/src/third_party/libraw/
 !alcedo_studio/src/third_party/libraw/**

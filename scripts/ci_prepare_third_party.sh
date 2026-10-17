@@ -36,10 +36,12 @@ download_file() {
   curl -fsSL "${url}" -o "${dest}"
 }
 
-clone_if_missing \
-  "alcedo_studio/src/third_party/lensfun" \
-  "CMakeLists.txt" \
-  "https://github.com/lensfun/lensfun.git"
+# Pin is the superproject gitlink. The build compiles the library from this checkout. The
+# packaged database is the copy of its data/db in alcedo_studio/src/config/lens_calib.
+if [[ ! -e "alcedo_studio/src/third_party/lensfun/CMakeLists.txt" ]]; then
+  git submodule sync -- "alcedo_studio/src/third_party/lensfun"
+  git submodule update --init --depth 1 "alcedo_studio/src/third_party/lensfun"
+fi
 
 if [[ ! -e "alcedo_studio/src/third_party/libultrahdr/third_party/image_io/includes/image_io/base/data_segment_data_source.h" ]]; then
   git submodule sync -- "alcedo_studio/src/third_party/libultrahdr"

@@ -61,13 +61,17 @@ enum class LensProfileStatus {
 /**
  * @brief Size-independent result of @ref LensCalibrationResolver::ResolveProfile.
  *
- * @c params_ and @c matched_meta_ are set for @c Resolved and @c NoCorrectionApplies. The image
- * size fields of @c params_ stay zero until @ref LensCalibrationResolver::BindImageExtent runs.
+ * @c params_, @c matched_meta_, and the matched profile names are set for @c Resolved and
+ * @c NoCorrectionApplies. The image size fields of @c params_ stay zero until
+ * @ref LensCalibrationResolver::BindImageExtent runs.
  */
 struct LensProfileResolution {
-  LensProfileStatus  status_       = LensProfileStatus::MissingLensIdentity;
-  LensCalibGpuParams params_       = {};
-  LensInputMeta      matched_meta_ = {};
+  LensProfileStatus  status_             = LensProfileStatus::MissingLensIdentity;
+  LensCalibGpuParams params_             = {};
+  LensInputMeta      matched_meta_       = {};
+  /// Default maker and model strings of the matched Lensfun lens profile.
+  std::string        matched_lens_maker_ = {};
+  std::string        matched_lens_model_ = {};
 };
 
 /**

@@ -13,11 +13,11 @@
 #include <cstring>
 #include <filesystem>
 #include <iostream>
-#include <limits>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
 #include <string>
+#include <tuple>
 #include <vector>
 
 #if defined(_WIN32)
@@ -403,30 +403,27 @@ auto FindBestCamera(const lfDatabase* db, const std::string& maker, const std::s
   return best;
 }
 
-auto ScoreLensCandidate(const lfLens* lens, const LensInputMeta& input) -> int {
-  if (!lens) {
-    return std::numeric_limits<int>::min();
+/// +1 when @p value lies in [@p min_value - @p slack, @p max_value + @p slack], -1 when it lies
+/// outside, and 0 when the value or the range is unknown.
+auto RangeFit(float value, float min_value, float max_value, float slack) -> int {
+  if (!IsFinitePositive(value) || !IsFinitePositive(min_value) || !IsFinitePositive(max_value)) {
+    return 0;
   }
-  int score = lens->Score;
-  if (IsFinitePositive(input.focal_length_mm_) && IsFinitePositive(lens->MinFocal) &&
-      IsFinitePositive(lens->MaxFocal)) {
-    if (input.focal_length_mm_ >= lens->MinFocal - 0.2f &&
-        input.focal_length_mm_ <= lens->MaxFocal + 0.2f) {
-      score += 2000;
-    } else {
-      score -= 2000;
-    }
-  }
-  if (IsFinitePositive(input.aperture_f_number_) && IsFinitePositive(lens->MinAperture) &&
-      IsFinitePositive(lens->MaxAperture)) {
-    if (input.aperture_f_number_ >= lens->MinAperture - 0.1f &&
-        input.aperture_f_number_ <= lens->MaxAperture + 0.1f) {
-      score += 200;
-    } else {
-      score -= 200;
-    }
-  }
-  return score;
+  return (value >= min_value - slack && value <= max_value + slack) ? 1 : -1;
+}
+
+/**
+ * @brief Order of one Lensfun search result; a larger rank is a better match.
+ *
+ * The Lensfun score comes first: it rates the lens name, maker, mount, and crop factor, and the
+ * focal length and aperture that the searched name states. The shooting focal length and
+ * aperture only decide between results with equal Lensfun scores, so a lens with another name
+ * cannot replace the named lens because its range fits the shot.
+ */
+auto RankLensCandidate(const lfLens* lens, const LensInputMeta& input)
+    -> std::tuple<int, int, int> {
+  return {lens->Score, RangeFit(input.focal_length_mm_, lens->MinFocal, lens->MaxFocal, 0.2f),
+          RangeFit(input.aperture_f_number_, lens->MinAperture, lens->MaxAperture, 0.1f)};
 }
 
 auto FindBestLens(const lfDatabase* db, const lfCamera* camera, const LensInputMeta& input)
@@ -443,13 +440,13 @@ auto FindBestLens(const lfDatabase* db, const lfCamera* camera, const LensInputM
     return nullptr;
   }
 
-  const lfLens* best       = nullptr;
-  int           best_score = std::numeric_limits<int>::min();
-  for (int i = 0; lenses[i] != nullptr; ++i) {
-    const int score = ScoreLensCandidate(lenses[i], input);
-    if (score > best_score) {
-      best_score = score;
-      best       = lenses[i];
+  const lfLens*             best      = lenses[0];
+  std::tuple<int, int, int> best_rank = RankLensCandidate(best, input);
+  for (int i = 1; lenses[i] != nullptr; ++i) {
+    const auto rank = RankLensCandidate(lenses[i], input);
+    if (rank > best_rank) {
+      best_rank = rank;
+      best      = lenses[i];
     }
   }
 
@@ -747,8 +744,14 @@ auto LensCalibrationResolver::ResolveProfile(const LensInputMeta&          meta,
           ? 1
           : 0;
 
+  result.matched_lens_maker_ = lens->Maker ? lens->Maker : "";
+  result.matched_lens_model_ = lens->Model ? lens->Model : "";
+
   std::cout << "LensCalibrationResolver: lens=\"" << meta.lens_model_ << "\""
+            << " profile=\"" << result.matched_lens_maker_ << " / " << result.matched_lens_model_
+            << "\""
             << " focal=" << meta.focal_length_mm_ << " crop_factor=" << crop_factor
+            << " apply_vignetting=" << runtime.apply_vignetting
             << " apply_distortion=" << runtime.apply_distortion
             << " apply_tca=" << runtime.apply_tca
             << " apply_projection=" << runtime.apply_projection
