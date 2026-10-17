@@ -5,10 +5,12 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <cmath>
 #include <exiv2/exiv2.hpp>
 #include <filesystem>
 #include <future>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <unordered_set>
 #include <utility>
@@ -1339,60 +1341,97 @@ TEST_F(FilterServiceTests, AutoInvalidationOnLink) {
   EXPECT_EQ(result_after->front(), file_id);
 }
 
-// A fake SemanticSearchProvider that records its calls and returns a fixed
-// result set, used to verify the semantic-search seam (5B/5C) without starting
-// the Rust runtime. The concrete provider is 5D.
+// A fake SemanticSearchProvider that records its calls and returns fixed embeddings, used to
+// verify the semantic search path through SleeveFilterService without starting the sidecar.
 class FakeSemanticSearchProvider : public SemanticSearchProvider {
  public:
-  std::vector<FuzzySearchMatch> matches_{};
-  mutable bool                  was_called_           = false;
-  mutable std::wstring          last_query_           = {};
-  mutable sl_element_id_t       last_folder_id_       = 0;
-  mutable size_t                last_offset_          = 0;
-  mutable size_t                last_limit_           = 0;
+  SemanticQueryEmbedding embedding_{};
+  int                    call_count_ = 0;
+  std::wstring           last_query_{};
 
-  [[nodiscard]] auto Search(sl_element_id_t folder_id, const std::wstring& query, size_t offset,
-                            size_t limit) const -> std::vector<FuzzySearchMatch> override {
-    was_called_     = true;
-    last_query_     = query;
-    last_folder_id_ = folder_id;
-    last_offset_    = offset;
-    last_limit_     = limit;
-    return matches_;
+  [[nodiscard]] auto EmbedQuery(const std::wstring& query) -> SemanticQueryEmbedding override {
+    ++call_count_;
+    last_query_ = query;
+    return embedding_;
   }
 };
 
+auto OneHotEmbedding(size_t index) -> std::vector<float> {
+  std::vector<float> embedding(kSemanticEmbeddingDim, 0.0F);
+  embedding.at(index) = 1.0F;
+  return embedding;
+}
+
+auto EmbeddingWithSimilarity(size_t auxiliary, float similarity) -> std::vector<float> {
+  std::vector<float> embedding(kSemanticEmbeddingDim, 0.0F);
+  embedding.at(0)         = similarity;
+  embedding.at(auxiliary) = std::sqrt(1.0F - (similarity * similarity));
+  return embedding;
+}
+
 TEST_F(FilterServiceTests, SemanticSearchProviderDelegatesWhenRegistered) {
   ProjectService project(db_path_, meta_path_, ProjectOpenMode::kCreateNew);
-  ASSERT_NE(CreateSyntheticFile(project, L"semantic_seam.dng", "Nikon D850"), 0u);
+  const auto     weak_id   = CreateSyntheticFile(project, L"semantic_weak.dng", "Nikon D850");
+  const auto     strong_id = CreateSyntheticFile(project, L"semantic_strong.dng", "Nikon D850");
+  const auto     middle_id = CreateSyntheticFile(project, L"semantic_middle.dng", "Nikon D850");
+  ASSERT_NE(weak_id, 0u);
+  ASSERT_NE(strong_id, 0u);
+  ASSERT_NE(middle_id, 0u);
+
+  constexpr const char* kModelKey = "mobileclip-provider-test";
+  auto                  semantic  = semantic_test::StoresOf(*project.GetStorage());
+  RegisterSemanticSearchModel(semantic, kModelKey);
+  const auto store = [&](sl_element_id_t file_id, std::vector<float> embedding) {
+    std::string error;
+    ASSERT_TRUE(semantic.embeddings_.UpsertImageEmbedding(
+        SemanticImageEmbeddingRecord{.file_id_   = file_id,
+                                     .image_id_  = FindImageId(project, file_id),
+                                     .model_key_ = kModelKey,
+                                     .embedding_ = std::move(embedding)},
+        &error))
+        << error;
+  };
+  store(weak_id, EmbeddingWithSimilarity(1, 0.5F));
+  store(strong_id, EmbeddingWithSimilarity(2, 0.9F));
+  store(middle_id, EmbeddingWithSimilarity(3, 0.7F));
 
   SleeveFilterService filter_service(project.GetStorage());
 
-  // No provider registered: the seam reports unavailable and returns nothing.
+  // No provider registered: the search reports nothing and the embedding call fails.
   EXPECT_FALSE(filter_service.HasSemanticSearchProvider());
-  EXPECT_TRUE(filter_service.SearchFolderSemantic(0, L"sunset over mountains", 0, 10).empty());
+  EXPECT_TRUE(filter_service.SearchFolderSemantic(0, L"sunset over mountains", 0, 10).rows_.empty());
+  EXPECT_THROW(static_cast<void>(filter_service.EmbedSemanticQuery(L"sunset")), std::runtime_error);
 
-  auto fake = std::make_shared<FakeSemanticSearchProvider>();
-  fake->matches_.push_back(FuzzySearchMatch{.file_id_   = 4242,
-                                            .image_id_  = 7,
-                                            .file_name_ = "semantic_hit.dng"});
+  auto fake        = std::make_shared<FakeSemanticSearchProvider>();
+  fake->embedding_ = SemanticQueryEmbedding{.model_key_ = kModelKey,
+                                            .dimension_ = kSemanticEmbeddingDim,
+                                            .query_     = OneHotEmbedding(0),
+                                            .neutral_   = OneHotEmbedding(kSemanticEmbeddingDim - 1)};
   filter_service.SetSemanticSearchProvider(fake);
-
   EXPECT_TRUE(filter_service.HasSemanticSearchProvider());
-  const auto rows = filter_service.SearchFolderSemantic(0, L"sunset over mountains", 0, 10);
-  ASSERT_EQ(rows.size(), 1u);
-  EXPECT_EQ(rows.front().file_id_, 4242u);
-  EXPECT_EQ(rows.front().image_id_, 7u);
-  EXPECT_EQ(rows.front().file_name_, "semantic_hit.dng");
-  EXPECT_TRUE(fake->was_called_);
+
+  // The provider receives the trimmed query once; the storage ranks the files by relevance.
+  const auto ranked = filter_service.SearchFolderSemantic(0, L"  sunset over mountains ", 0, 10);
+  EXPECT_EQ(fake->call_count_, 1);
   EXPECT_EQ(fake->last_query_, L"sunset over mountains");
-  EXPECT_EQ(fake->last_offset_, 0u);
-  EXPECT_EQ(fake->last_limit_, 10u);
+  ASSERT_EQ(ranked.rows_.size(), 3u);
+  EXPECT_EQ(ranked.total_, 3u);
+  EXPECT_EQ(ranked.rows_[0].file_id_, strong_id);
+  EXPECT_EQ(ranked.rows_[1].file_id_, middle_id);
+  EXPECT_EQ(ranked.rows_[2].file_id_, weak_id);
+
+  // The display rows keep the rank order, and a page carries the total of all kept files.
+  const auto page = filter_service.SearchFolderSemanticRows(0, L"sunset over mountains", 1, 1);
+  EXPECT_EQ(fake->call_count_, 2);
+  EXPECT_EQ(page.total_, 3u);
+  ASSERT_EQ(page.rows_.size(), 1u);
+  EXPECT_EQ(page.rows_.front().file_id_, middle_id);
+  EXPECT_EQ(page.rows_.front().file_name_, "semantic_middle.dng");
 
   // Clearing the provider restores the unavailable state.
   filter_service.SetSemanticSearchProvider(nullptr);
   EXPECT_FALSE(filter_service.HasSemanticSearchProvider());
-  EXPECT_TRUE(filter_service.SearchFolderSemantic(0, L"sunset over mountains", 0, 10).empty());
+  EXPECT_TRUE(filter_service.SearchFolderSemantic(0, L"sunset over mountains", 0, 10).rows_.empty());
 }
 
 TEST_F(FilterServiceTests, LabelQueryUsesOrdinaryPathNotSemanticProvider) {
@@ -1419,13 +1458,13 @@ TEST_F(FilterServiceTests, LabelQueryUsesOrdinaryPathNotSemanticProvider) {
   const auto rows = filter_service.SearchFolder(0, L"landscape", 0, 10);
   ASSERT_EQ(rows.size(), 1u);
   EXPECT_EQ(rows.front().file_id_, landscape_id);
-  EXPECT_FALSE(fake->was_called_);
+  EXPECT_EQ(fake->call_count_, 0);
 
   // The Chinese surface form of the same label also uses the ordinary path.
   const auto zh_rows = filter_service.SearchFolder(0, L"风景", 0, 10);
   ASSERT_EQ(zh_rows.size(), 1u);
   EXPECT_EQ(zh_rows.front().file_id_, landscape_id);
-  EXPECT_FALSE(fake->was_called_);
+  EXPECT_EQ(fake->call_count_, 0);
 }
 
 TEST_F(FilterServiceTests, StatsBarAndSearchMergeUnderOneCompiledPredicate) {

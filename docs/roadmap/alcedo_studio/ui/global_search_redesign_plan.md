@@ -2,7 +2,7 @@
 
 Date: 2026-10-17
 
-Status: planned. No phase has implementation evidence.
+Status: Phase GS1 complete (2026-10-17, completion record in Phase GS1). GS2 to GS5 planned.
 
 Source revision of the audit: `main` at `ada6f002c`.
 
@@ -232,12 +232,16 @@ Rule:
 
 Constants (owned by `SemanticVectorSearch`):
 
-| Constant | Initial value | Final value source |
+| Constant | Initial value | Value after the Phase GS1 calibration |
 | --- | --- | --- |
-| `kMinRelevanceZ` | 2.0 | Phase GS1 calibration step |
-| `kMinQuerySimilarity` | none | Phase GS1 calibration step |
-| `kMinScopeStatisticsCount` | 30 | Fixed |
-| neutral text | `a photo` | Fixed |
+| `kMinRelevanceZ` | 2.0 | 1.0 |
+| `kMinQuerySimilarity` | none | 0.0855 (SigLIP2 embeddings) |
+| `kMinScopeStatisticsCount` | 30 | 30 (fixed) |
+| neutral text | `a photo` | `a photo` (fixed) |
+
+The SQL computes `c` and `b` as cosine similarities from inner products: the text vectors are
+scaled to unit length, `|x| = sqrt(x . x)`, `c = x . q / |x|`, and `r = x . (q - n) / |x|`.
+The result does not depend on the length of the stored vectors.
 
 The rule is deterministic for one scope, one model, and one query. Each page and each Library
 read gives the same order. A different page size does not change the kept set.
@@ -472,7 +476,7 @@ Read `AGENTS.md` and the applicable skills again before each phase. These rules 
 
 | Phase | Result | Main modules | Dependency | Expected diff | Status |
 | --- | --- | --- | --- | ---: | --- |
-| GS1 | Calibrated relevance over the folder scope; query embedding cache; no HNSW | `SemanticVectorSearch`, provider, cache, package backend | none | 900–1400 | planned |
+| GS1 | Calibrated relevance over the folder scope; query embedding cache; no HNSW | `SemanticVectorSearch`, provider, cache, package backend | none | 900–1400 | complete (2026-10-17) |
 | GS2 | Natural-language results in the Library in relevance order; simpler `SearchSession` | `ElementStore`, `LibraryModule`, `SearchController`, `SearchSession`, Inspector card | GS1 | 1100–1700 | planned |
 | GS3 | Recent searches, recommendation apply, and `thumbUrl` in `SearchController` | `SearchController` | GS2 | 400–700 | planned |
 | GS4 | New search palette with previews and the settings side panel | `SearchPalette.qml`, `AppDialogs.qml` | GS3 | 900–1300 | planned |
@@ -625,11 +629,11 @@ Release benchmark: reconfigure `build/release` with `-DALCEDO_BUILD_TESTS=ON`, b
 
 **Exit criteria**
 
-- [ ] All named tests pass, except tests that need environment variables. Report each of them as run or skipped.
-- [ ] The calibration record has the chosen constants and the printed table.
-- [ ] The release benchmark p50 is at or below 80 ms.
-- [ ] No source file calls `EnsureVectorSearchIndex` or `CREATE INDEX ... USING HNSW`.
-- [ ] `search.query` with a nonsense query returns `matches: []` and `total: 0`.
+- [x] All named tests pass, except tests that need environment variables. Report each of them as run or skipped.
+- [x] The calibration record has the chosen constants and the printed table.
+- [x] The release benchmark p50 is at or below 80 ms.
+- [x] No source file calls `EnsureVectorSearchIndex` or `CREATE INDEX ... USING HNSW`.
+- [x] `search.query` with a nonsense query returns `matches: []` and `total: 0`.
 
 **Expected diff**
 
@@ -638,7 +642,165 @@ Release benchmark: reconfigure `build/release` with `-DALCEDO_BUILD_TESTS=ON`, b
 **Completion record**
 
 ```text
-(empty — fill when the phase is complete; use Section 13)
+Phase / date / status: GS1 / 2026-10-17 / complete.
+Source revision and branch: main at f3dc848b7; branch fix/semantic-search-calibrated-relevance.
+Actual changed modules: SemanticVectorSearch (+ semantic_records, semantic_tables,
+  semantic_score_elbow comment); SemanticQueryEmbeddingCache (new library);
+  SemanticSearchProvider / ProjectSemanticSearchProvider; SleeveFilterService;
+  project_pack::DropHnswIndexesOfOlderProject; SearchController RunSearchPageRequest.
+Implemented behavior:
+  - Relevance rule of Section 2.5 in one SQL statement; the order is (relevance DESC,
+    file_id ASC); paging and the total come from that statement (COUNT(*) OVER ()).
+  - Query and neutral text embedded once per (model key, trimmed text); LRU of 64 entries.
+  - No HNSW index is created; LoadProject drops an existing one and fails when it cannot.
+  - search.query reports the real total and has_more for natural-language queries.
+API differences from Sections 5 and 6 (recorded, not hidden):
+  - SemanticSearchProvider has only EmbedQuery. Search was removed from the provider:
+    SleeveFilterService::SearchFolderSemantic calls EmbedSemanticQuery and then
+    SemanticVectorSearch::SearchImageEmbeddings. GS2 uses the same split (embedding from
+    the provider, relevance select from storage).
+  - SearchFolderSemanticRows returns SearchResultPage {total_, rows_}.
+  - SemanticVectorSearch::ReadRelevanceScores (new) returns c, b, r, z, and kept for every
+    scored file. The calibration test uses it.
+  - SleeveFilterService::BuildSemanticRelevanceSelect is not added; GS2 adds it with its
+    first caller.
+Explicitly unimplemented items: none of GS1. GS2 to GS5 are not started.
+Primary success call chain:
+  search.query (semantic) -> SearchSession::Replace -> RunSearchPageRequest [worker]
+    -> SleeveFilterService::SearchFolderSemanticRows -> SearchFolderSemantic
+    -> EmbedSemanticQuery (trim) -> ProjectSemanticSearchProvider::EmbedQuery
+         cache(model, query) / cache(model, "a photo"); miss -> EncodeText:
+         lease + StartAndWait when needed + model check + EmbedText + ValidateSearchEmbedding
+    -> SemanticVectorSearch::SearchImageEmbeddings -> BuildRelevanceSelect (one statement)
+    -> ElementStore::ListSearchResultRows(file ids in rank order)
+    -> response {rows, total, hasMore}
+Primary failure and restore call chain:
+  EncodeText: runtime start fails / model mismatch / invalid vector -> std::runtime_error
+    -> SemanticQueryEmbeddingCache stores no entry
+    -> RunSearchPageRequest sets semanticUnavailable + semanticErrorText
+    -> search.query returns semantic_unavailable = true and semantic_error = message.
+  LoadProject: HNSW read, vss load, or DROP INDEX fails -> std::runtime_error -> the project
+    does not open (no partially opened project).
+Build and test commands with exit codes:
+  cmd /c scripts\msvc_env.cmd --build --preset win_debug --parallel 4 --target
+    SemanticStorageControllerTest SemanticQueryEmbeddingCacheTest FilterServiceTest
+    SemanticRelevanceCalibrationTest AlbumBackendSearchWorkerTest SearchSessionTest
+    LibrarySearchColumnsTest LibrarySearchBenchmarkTest AiSidecarRuntimeServiceTest
+    alcedo_main                                                              -> 0
+  ctest --test-dir build/debug -R "SemanticStorageControllerTest|SemanticQueryEmbeddingCacheTest|
+    FilterServiceTest|SemanticRelevanceCalibrationTest|AlbumBackendSearchWorkerTest|
+    SearchSessionTest|LibrarySearchColumnsTest|LibrarySearchBenchmarkTest|
+    AiSidecarRuntimeServiceTest" --output-on-failure                         -> 0
+Discovered / passed / failed / skipped counts: 120 discovered; 116 passed; 0 failed;
+  2 skipped (LiveRelevanceKeepsListedPhotosAndRejectsNonsenseQueries and the live runtime
+  test, no environment in ctest); 4 disabled benchmarks not run by ctest.
+  Named tests, all passed: RelevanceKeepsOnlyFilesAboveTheZLimit, UnrelatedQueryKeepsNoFiles,
+  NeutralSimilarityDemotesFilesThatMatchEveryText, FolderScopeKeepsChildrenThatRankLowInTheProject,
+  SmallScopeUsesOnlyTheSimilarityLimit, PagesOfOneQueryJoinToTheFullOrderedResult,
+  FilesWithoutReadyEmbeddingAreNotResults, Supports768DimensionalModelStorageAndSearch,
+  OlderProjectHnswIndexIsDroppedOnOpen, RelevanceRanksWithinRootAndFolderScope,
+  PackedSnapshotSucceedsAfterRelevanceSearch (SemanticStorageControllerTest);
+  CachedTextIsNotEncodedAgain, CacheKeyIncludesTheModelKey, TextIsNotLowercased,
+  LeastRecentlyUsedEntryIsRemovedAtCapacity, FailedEncodeStoresNoEntry
+  (SemanticQueryEmbeddingCacheTest); SemanticSearchProviderDelegatesWhenRegistered
+  (FilterServiceTest). VssSearchCutsOffWeakTailBeforePaging is removed.
+  LiveRelevanceKeepsListedPhotosAndRejectsNonsenseQueries: run directly with the
+  environment below, final constants -> PASSED (240 s).
+Manual verification (with the first constant 0.0793, before the time-test calibration):
+  alcedo-cli session start --headless on a copy of bug_reproduce.alcd
+  (649 SigLIP2 embeddings, older HNSW index) with a settings directory that enables
+  natural-language search. The project opened (index dropped).
+  search.query "a plate of sushi" and "quarterly tax invoice spreadsheet" -> matches [],
+  total 0. "a Chinese pavilion with curved roofs" limit 5 -> total 15, has_more true, the
+  top rows are the pavilion photos; offset 5 -> 5 rows, total 15, and no new sidecar
+  embedding request in the host log (4 requests for 3 queries + the neutral text).
+Performance or resource evidence:
+  LibrarySearchBenchmarkTest.DISABLED_RelevanceSelectOver20000Embeddings, win_release with
+  ALCEDO_BUILD_TESTS=ON (set back to OFF): 20 000 synthetic 512-dimensional embeddings in
+  one folder, page of 120, final constants: p50 55.5 ms / 56.9 ms (two runs), p95 64.6 ms /
+  79.1 ms, 419 kept. Target p50 <= 80 ms: met. (With the first constant 0.0793: p50 52.9 ms /
+  53.7 ms, 552 kept.)
+  Measured during the work: array_cosine_similarity twice with an inner join of the vectors
+  161 ms; with a materialized CTE 100.6 ms. DuckDB 1.2.1 runs 20 000 rows (one row group)
+  on one thread, one 512-dimensional product costs about 18 ms, and an inner join that
+  carries the vectors builds its hash table on the embedding rows (about 50 ms). The final
+  statement computes three inner products in a projection over the embedding scan and joins
+  only scalars to the scope. Consequence: the scan cost follows the number of ready
+  embeddings of the model in the project, not the scope size.
+Calibration constants and table (GS1 only):
+  Environment: ALCEDO_SEMANTIC_CALIBRATION_PROJECT = time-test.alcd (195 SigLIP2-256
+  embeddings of 768 values, a varied set: city streets and skylines, animals, vehicles,
+  portraits, concerts, landscapes, snow, night scenes), chosen by the maintainer;
+  ALCEDO_SEMANTIC_CALIBRATION_QUERIES = 25 positive queries (2 in Chinese) with 39 listed
+  files and 8 nonsense queries; ALCEDO_SEMANTIC_CALIBRATION_MODEL_DIR = local model directory;
+  ALCEDO_MIND_BINARY = release alcedo_mind.exe. The query file was written by the implementing
+  agent from contact sheets of the embedded previews, not by the maintainer. The listed files
+  are clear examples, not every match.
+  Chosen: kMinQuerySimilarity 0.0855, kMinRelevanceZ 1.0 (kMinScopeStatisticsCount 30).
+  Feasible region over all 195 x 33 scores: kMinQuerySimilarity in [0.0817, 0.0894] with
+  kMinRelevanceZ in [0, 1.8]. The highest c of a nonsense-query file is 0.0816 ("qwzx vplk
+  mrrt", z 2.19); the lowest c of a listed file is 0.0894 ("樱花"). 0.0855 is the midpoint
+  (margin 0.0039 on each side). The lowest z of a listed file is 1.80 (broad query "a snowy
+  park by a lake in winter"); kMinRelevanceZ 1.0 also keeps the broad query of the first
+  calibration (z 1.12).
+  | query                                           | kept | listed min c | listed min z |
+  | a squirrel                                      |    2 |       0.1437 |        6.066 |
+  | an owl perched on a branch                      |    1 |       0.1341 |        5.423 |
+  | a red race car on a track                       |    1 |       0.1347 |        4.693 |
+  | a cowboy riding a horse                         |    2 |       0.1212 |        5.034 |
+  | cherry blossom trees                            |   10 |       0.1169 |        2.900 |
+  | wind turbines                                   |    2 |       0.1448 |        5.314 |
+  | a city skyline at night                         |    2 |       0.1151 |        3.145 |
+  | a man standing next to an elephant              |    1 |       0.1531 |        5.752 |
+  | a woman playing electric guitar on stage        |    1 |       0.1340 |        5.255 |
+  | a city bus with passengers wearing face masks   |    9 |       0.1387 |        3.438 |
+  | sand dunes in front of mountains                |    5 |       0.1642 |        4.224 |
+  | a flower shop                                   |    2 |       0.1388 |        4.282 |
+  | a vintage streetcar                             |    9 |       0.1461 |        4.096 |
+  | a snowy park by a lake in winter                |   19 |       0.1001 |        1.801 |
+  | a hot air balloon over red rock canyons         |    1 |       0.1795 |        6.539 |
+  | a protest march escorted by police motorcycles  |    1 |       0.1635 |        5.985 |
+  | an old airplane in a museum hangar              |    1 |       0.1293 |        4.541 |
+  | a portrait of a woman with tattoos              |    1 |       0.1363 |        6.443 |
+  | a couple posing in front of a waterfall         |    2 |       0.1651 |        5.546 |
+  | a vintage Mercedes car parked on the street     |    7 |       0.1213 |        2.890 |
+  | a red boat in a harbor at dusk                  |    2 |       0.1582 |        4.214 |
+  | a woman on a rope bridge in the forest          |    1 |       0.1509 |        4.832 |
+  | a man taking a photo with a camera              |    3 |       0.1558 |        4.572 |
+  | 一辆公交车 (a bus)                               |   10 |       0.1134 |        3.315 |
+  | 樱花 (cherry blossoms)                           |    6 |       0.0894 |        3.071 |
+  | nonsense query                                  | kept | top-1 c | top-1 r | top-1 z |
+  | quarterly tax invoice spreadsheet               |    0 |  0.0344 | -0.0304 |   3.108 |
+  | an astronaut walking on the moon                |    0 |  0.0753 |  0.0118 |   3.339 |
+  | a plate of sushi                                |    0 |  0.0434 | -0.0289 |   3.047 |
+  | a cat sleeping on a laptop keyboard             |    0 |  0.0350 | -0.0234 |   3.541 |
+  | qwzx vplk mrrt                                  |    0 |  0.0816 |  0.0164 |   2.185 |
+  | 一碗牛肉面 (a bowl of beef noodles)              |    0 |  0.0584 | -0.0059 |   3.601 |
+  | an underwater coral reef with tropical fish     |    0 |  0.0305 | -0.0335 |   2.742 |
+  | a newborn baby in a hospital crib               |    0 |  0.0495 | -0.0089 |   4.087 |
+  Ranking by r against ranking by c (mean rank of the listed files): equal for 21 queries,
+  r better for 2, c better for 2; mean 1.8 (r) against 1.6 (c). The neutral text does not
+  change the ranking on this set either. Stop condition 3 of Section 12 ("r ranks worse than
+  c") is not met clearly; the result is recorded for a later review.
+  First calibration (superseded): bug_reproduce.alcd (649 SigLIP2-256 embeddings of one trip,
+  most photos waterfalls and forest) gave the feasible region kMinQuerySimilarity in
+  [0.07875, 0.08] and the first constant 0.0793. On time-test.alcd that constant keeps 2 files
+  for "qwzx vplk mrrt". The two feasible regions do not overlap: with 0.0855, listed files of
+  3 of the 9 bug_reproduce queries ("two people taking a selfie" 0.0807, "rocky mountain peaks
+  under a cloudy sky" 0.0825, "a Chinese pavilion with curved roofs" 0.0844) fall below the
+  limit. The maintainer chose the varied project as the reference because bug_reproduce
+  is not representative.
+Evidence path: build/tmp/global_search_gs1/ and build/tmp/global_search_gs1b/ (logs removed
+  after the phase).
+Remaining defects or unavailable platforms:
+  - The constants are calibrated on SigLIP2 only, with a 0.0039 margin on c, and the c
+    limit depends on the photo set (the two calibration projects have no common feasible
+    value). Other model profiles (for example jina-clip-v2) are not calibrated. Follow-up
+    issue.
+  - Scan cost follows the project embedding count, not the folder size. Follow-up issue.
+  - macOS not built or tested in this phase.
+  - Cold sidecar start on Enter still blocks the worker (Section 12, known behavior; the
+    residency plan owns it).
 ```
 
 ### Phase GS2 — Natural-language results in the Library

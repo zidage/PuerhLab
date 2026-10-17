@@ -25,8 +25,6 @@ namespace alcedo::semantic_tables {
 [[nodiscard]] auto ImageEmbeddingTable(int dim) -> const char*;
 /// SemanticLabelPrototype or SemanticLabelPrototype768.
 [[nodiscard]] auto LabelPrototypeTable(int dim) -> const char*;
-/// Name of the HNSW index on the image embedding table of @p dim.
-[[nodiscard]] auto ImageEmbeddingIndex(int dim) -> const char*;
 
 /// Field descriptor of a selected column (only the type is used when decoding).
 [[nodiscard]] auto Column(const char* name, duckorm::DuckDBType type) -> duckorm::DuckFieldDesc;

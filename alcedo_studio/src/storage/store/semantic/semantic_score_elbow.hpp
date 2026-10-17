@@ -2,8 +2,9 @@
 //  SPDX-License-Identifier: GPL-3.0-only
 //  Additional permission under GPLv3 section 7 applies; see the LICENSE file.
 
-// Private to the semantic stores: the score cutoff shared by vector search (over many files)
-// and label assignment (over a few prototypes).
+// Private to the semantic stores: the score cutoff of label assignment (over the scores of a
+// few label prototypes). Natural-language search uses the relevance rule of
+// SemanticVectorSearch instead.
 
 #pragma once
 
