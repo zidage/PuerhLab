@@ -1,0 +1,1091 @@
+# Global Search Redesign Plan
+
+Date: 2026-10-17
+
+Status: planned. No phase has implementation evidence.
+
+Source revision of the audit: `main` at `ada6f002c`.
+
+Primary owner: Alcedo Studio library search (search palette, Library search results, and
+natural-language ranking).
+
+Tracking issue: [#423](https://github.com/zidage/AlcedoStudio/issues/423). Sub-issues: [#420](https://github.com/zidage/AlcedoStudio/issues/420) (GS1), [#421](https://github.com/zidage/AlcedoStudio/issues/421) (GS2), [#422](https://github.com/zidage/AlcedoStudio/issues/422) (GS3 to GS5). Related: [#424](https://github.com/zidage/AlcedoStudio/issues/424) (sidecar residency).
+
+Affected areas:
+
+- `qml/GlobalSearchDialog.qml` (search palette)
+- `ui/alcedo_main/album_backend/search_controller`, `search_session`, `library_module`,
+  `stats_engine`
+- `ui/alcedo_main/automation/commands/search_commands` (`search.query`)
+- `app/sleeve_filter_service`, `app/project_service` (`ProjectSemanticSearchProvider`),
+  `app/album_browse_service`, `app/project_package_backend`
+- `storage/store/semantic/semantic_vector_search`, `semantic_score_elbow`
+- `storage/store/sleeve/element_store`, `storage/store/sleeve/album_query`
+- `qml/AlbumInspectorPanel.qml` (search filter card)
+
+Related plans:
+
+- [Semantic Generation and Search Integration Plan](../ai/semantic_generation_search_plan.md).
+  This plan replaces its sections "Search and vector index behavior" and "Search UI Flow" for
+  search ranking and the search palette. Its Phase 5f records the semantic apply to the album grid
+  as complete, but the current source has no semantic apply path. Phase GS2 adds that path.
+- [Library Search Performance, Recall, and Project Size Plan](../storage/library_search_and_project_size_plan.md).
+  This plan depends on its match set (Phase S8) and its search worker (Phase S5). That plan
+  excludes natural-language ranking. This plan adds it.
+- [CLI, MCP, and Shared-Session Automation Plan](../automation/cli_mcp_automation_plan.md).
+  This plan changes `SearchSession`, which `search.query` uses. The `search.query` response
+  fields stay the same.
+- [AI Sidecar Runtime Residency Plan](../ai/ai_sidecar_runtime_residency_plan.md). That plan
+  keeps the sidecar and its text encoder loaded between searches. This plan does not depend on
+  it. Without it, the first natural-language search after an idle period starts the sidecar.
+
+## 1. Decision record
+
+### 1.1 Product goal
+
+The global search palette becomes a launcher, not a result browser. It shows a small number of
+commands, structured filters, and photo previews. The complete result set opens in the Library.
+Natural-language (CLIP) search returns only photos that match the query clearly. When no photo
+matches clearly, the result is empty.
+
+### 1.2 Approved decisions
+
+1. **The palette shows previews, not a list.** The palette shows up to three photo previews in
+   one row. Each preview has a thumbnail from the thumbnail service and a file name label below
+   it. The palette has no result list, no paging, and no "Load more" control.
+2. **Enter opens the Library.** Enter and the "View all" action apply the search to the
+   Library and close the palette. This is the same operation for both search routes.
+3. **Natural-language search runs only on Enter.** Typing does not start the sidecar. For a
+   natural-language query, the palette shows a hint in place of the photo previews. Enter applies
+   the natural-language search to the Library. The Library shows the results in relevance order.
+   The palette does not show natural-language previews.
+4. **The palette shows no result count.** Only the filter rows show a count. That count is the
+   existing statistics bucket count.
+5. **Mouse first.** Hover highlights a row. A click runs the row. The keyboard supports only the
+   text field, Up and Down to move the row highlight, Enter, and Escape.
+6. **No action panel.** The palette has no secondary action menu for a row or a photo.
+7. **Search settings are a collapsible side panel.** The panel is at the right side of the
+   palette. It holds the search field check boxes and the natural-language switch. Its open state
+   persists.
+8. **Natural-language search and field search stay mutually exclusive.** The natural-language
+   switch disables the field check boxes, as today. Rank fusion (for example reciprocal rank
+   fusion) is not part of this plan. Reason: the field search is a Boolean filter with no rank,
+   and fusion needs a CLIP query for each typed query.
+9. **Scope is the current folder, direct children only.** The search does not include
+   subfolders. This is the current `BuildScopedFileQuery` scope.
+10. **An empty result is correct.** When no photo passes the relevance rule, the Library shows
+    its "No Matching Photos" state. The search does not add the nearest photos to fill the
+    result.
+11. **The relevance rule replaces the elbow cutoff for search.** Search uses an exact scan of the
+    folder scope with a calibrated relevance score (Section 2.5). Search does not use the HNSW
+    index. The label assignment keeps `semantic_score_elbow`.
+12. **Sidecar residency is a separate plan.** Idle time, encoder loading, and prewarm are in the
+    [AI Sidecar Runtime Residency Plan](../ai/ai_sidecar_runtime_residency_plan.md).
+
+### 1.3 Rejected options
+
+Do not add these items again:
+
+- an action panel (Tab or Ctrl+K menu) for rows or photos;
+- a result count or "x–y of z" text in the palette;
+- debounced natural-language preview while the user types;
+- rank fusion of field search and natural-language search;
+- recursive subfolder scope;
+- a minimum result count for natural-language search;
+- a pill, chip, or badge for the active route or the active search (see the `alcedo-qml-ui`
+  skill).
+
+## 2. Product design specification
+
+### 2.1 Palette layout
+
+The palette is a modal panel at the center of the window, with the current blurred backdrop.
+
+```text
++--------------------------------------------------------------------+-------------------+
+| [search icon]  mountain sunset          Natural language  [gear] Esc| Search settings   |
++--------------------------------------------------------------------+                   |
+| COMMANDS                                                           | Search in         |
+|   [icon] Search photos for "mountain sunset"                 Enter | [x] File name     |
+|                                                                    | [x] EXIF info     |
+| FILTERS                                                            | [x] AI description|
+|   [camera icon] Camera   Canon EOS R5                          128 | [x] AI tags       |
+|   [lens icon]   Lens     RF 24-70mm F2.8                        42 | ----------------- |
+|                                                                    | Natural language  |
+| PHOTOS                                                  View all > |   search   [on]   |
+|   +-------------+  +-------------+  +-------------+                | (reason text when |
+|   |  thumbnail  |  |  thumbnail  |  |  thumbnail  |                |  check boxes are  |
+|   +-------------+  +-------------+  +-------------+                |  disabled)        |
+|   IMG_0412.CR3     IMG_0415.CR3     IMG_0533.CR3                    |                   |
++--------------------------------------------------------------------+-------------------+
+| Enter  Search                                          Esc  Close                       |
++-----------------------------------------------------------------------------------------+
+```
+
+- The palette width is `min(window width - 56, 960)` when the side panel is closed. The side
+  panel adds 260 px. The palette height fits its content, up to `window height - 72`.
+- The side panel opens and closes with the settings button in the input row. The palette keeps
+  its left edge position when the panel opens.
+- All colors, spacing, radii, type sizes, and icon sizes come from `appTheme` and `DESIGN.md`.
+  The palette uses the Basic style. It does not import `QtQuick.Controls.Material`.
+
+### 2.2 Sections and rows
+
+The palette shows these sections in this order. A section with no rows is hidden.
+
+**Empty query**
+
+| Section | Rows | Click result |
+| --- | --- | --- |
+| Recent searches | Up to 5 recent applied queries, newest first | Puts the query in the field and applies it to the Library |
+| Filters | Up to 8 rows from `SearchRecommendations` | `StatsEngine::ToggleStatsFilter(category, label)`, then close |
+
+**Query with text**
+
+| Section | Rows | Click result |
+| --- | --- | --- |
+| Commands | One row: `Search photos for "<query>"`. For the natural-language route: `Search photos by meaning for "<query>"`. | Same as Enter |
+| Filters | Up to 4 recommendation rows whose label contains the query (case-insensitive) | `ToggleStatsFilter(category, label)`, then close |
+| Photos | Field route: up to 3 previews from the search preview request. Natural-language route: the text "Press Enter to search by meaning." | Preview click: `ApplyExactSearch(elementId)`, then close |
+
+Row rules:
+
+- A row shows an icon, a title, and an optional trailing value. A filter row shows the category
+  name, the value, and the count as three separate labels. Do not join them with a separator
+  character.
+- The Commands row shows the text `Enter` at its right end.
+- The Photos section header shows "View all" at its right end. "View all" does the same as
+  Enter.
+- A photo preview has a 4:3 thumbnail with `PreserveAspectCrop` and the file name below it. The
+  file name elides in the middle. The thumbnail uses the `k512` tier.
+
+Recent searches:
+
+- `SearchController` owns the list. It stores at most 5 entries in `QSettings` key
+  `search/recentQueries`.
+- A query enters the list when the Library accepts it (`AcceptLibrarySearch`). Exact-file
+  searches (photo click) do not enter the list.
+- An entry stores the query text and the route (`fuzzy` or `semantic`). Applying an entry uses
+  its stored route. The natural-language switch does not change a stored entry.
+- A repeated query moves to the top. The list has no duplicates.
+
+### 2.3 Routes, Enter, and focus
+
+- The route of a query comes from `SearchSession::RouteFor`: `empty`, `fuzzy`, or `semantic`.
+  The rule stays the same: `semantic` needs the natural-language switch and the classifier route
+  `semantic`.
+- The input row shows the text "Natural language" at its right side when the route is
+  `semantic`. It is plain muted text. It is not a pill.
+- Typing restarts a 140 ms debounce. After the debounce, a `fuzzy` query requests the preview
+  rows. A `semantic` query requests nothing.
+- Enter with an empty query does nothing.
+- Enter with a `fuzzy` query calls `SearchController::ApplyFuzzySearch(query)` and closes the
+  palette.
+- Enter with a `semantic` query calls `SearchController::ApplySemanticSearch(query)`.
+  - If the call returns an error text, the palette stays open and shows the text in the Photos
+    section. The errors are: the query is too long, no semantic model is active, and no semantic
+    search provider exists.
+  - If the call returns an empty text, the palette closes. The Library runs the search.
+- Up and Down move the row highlight across the Commands and Filters rows. The mouse hover moves
+  the same highlight. Enter runs the highlighted row. The Commands row is highlighted when the
+  query changes.
+- Escape and a click outside the palette close it. The text "Esc" in the input row also closes
+  it on click.
+- The text field has focus when the palette opens.
+
+### 2.4 Settings side panel
+
+- Title: "Search settings".
+- Group "Search in": check boxes "File name", "EXIF info", "AI description", "AI tags". They
+  call the existing `SetSearchField*Enabled` operations.
+- A divider, then the switch "Natural language search". It calls
+  `SetNaturalLanguageSearchEnabled` and updates `InteractionPolicyController`.
+- When the switch is on, the check boxes are disabled, and the panel shows
+  `searchFieldFiltersReason` below them.
+- A change re-runs the preview of the current query.
+- The open state persists in `QSettings` key `search/settingsPanelOpen`. Default: closed.
+- Controls use `ThemeCheckBox.qml` and a Basic-style switch from the shared components. The
+  panel does not use Material controls.
+
+### 2.5 Natural-language relevance rule
+
+Definitions:
+
+- **Model**: the active semantic model of the project, with key `model_key`.
+- **Query embedding** `q`: the text embedding of the trimmed query text for the model.
+- **Neutral embedding** `n`: the text embedding of the fixed text `a photo` for the model.
+- **Scored file**: a direct child file of the scope folder that has a `ready` image embedding
+  `x` for the model. A file without such an embedding is never a natural-language result.
+- **Query similarity** `c = array_cosine_similarity(x, q)`.
+- **Neutral similarity** `b = array_cosine_similarity(x, n)`.
+- **Relevance** `r = c - b`.
+- **Scope statistics**: `N` is the number of scored files. `mu` and `sigma` are the mean and the
+  population standard deviation of `r` over the scored files.
+
+Rule:
+
+1. Compute `c`, `b`, and `r` for each scored file in one exact scan of the scope.
+2. Keep a file when `c >= kMinQuerySimilarity` and one of these is true:
+   - `N < kMinScopeStatisticsCount`;
+   - `sigma > 0` and `(r - mu) / sigma >= kMinRelevanceZ`.
+3. Order the kept files by `r` descending, then by file id ascending.
+
+Constants (owned by `SemanticVectorSearch`):
+
+| Constant | Initial value | Final value source |
+| --- | --- | --- |
+| `kMinRelevanceZ` | 2.0 | Phase GS1 calibration step |
+| `kMinQuerySimilarity` | none | Phase GS1 calibration step |
+| `kMinScopeStatisticsCount` | 30 | Fixed |
+| neutral text | `a photo` | Fixed |
+
+The rule is deterministic for one scope, one model, and one query. Each page and each Library
+read gives the same order. A different page size does not change the kept set.
+
+### 2.6 Library result view
+
+- After `ApplySemanticSearch`, the Library shows the kept files of the current folder.
+- Without a selected photo sort, the photo order is relevance descending, then file id
+  ascending. This applies in flat mode and inside each group. The group order does not change.
+- A selected photo sort replaces the relevance order. The kept set does not change.
+- Inspector statistics, select all, the file position read, and the page reads use the same kept
+  set.
+- The Inspector search filter card shows the query text. For a natural-language search it also
+  shows the line "Natural language" below the query, as a separate label. The existing clear
+  button clears the search.
+- A change of the current folder keeps the active search and evaluates it for the new folder.
+  This is the current behavior for field search.
+- If the embedding or the ranking fails, the Library keeps its accepted content. It shows the
+  existing error row "Library query failed: <reason>" with Retry. The search does not become
+  active.
+
+### 2.7 Palette states
+
+| State | Display |
+| --- | --- |
+| Empty query, no recent searches, no recommendations | Text "Type to search photos" |
+| Field query, preview loading | Photos section shows three placeholder frames |
+| Field query, no preview rows | Photos section shows "No matching photos in this folder" |
+| Field query, preview error | Photos section shows the error text from `SearchSession` |
+| Semantic query | Photos section shows "Press Enter to search by meaning." |
+| Semantic Enter rejected | Photos section shows the returned error text |
+| Thumbnail missing source | The preview frame shows the current "!" mark with the tooltip |
+
+## 3. Scope
+
+### 3.1 Included work by module
+
+| Module | Responsibility |
+| --- | --- |
+| `SemanticVectorSearch` | Owns the relevance rule and its SQL. Exact scan of the scope. No HNSW index. |
+| `SemanticQueryEmbeddingCache` (proposed) | Least-recently-used cache of text embeddings per model and text. |
+| `ProjectSemanticSearchProvider` | Embeds the query and the neutral text through the cache and the sidecar. |
+| `SleeveFilterService` | Exposes the query embedding and the relevance select to the Library path. |
+| `ElementStore` and `AlbumBrowseService` | Join the relevance select into the match set and order by relevance. |
+| `SearchController` and `LibraryModule` | Apply a natural-language search to the Library; keep the accepted embedding; keep recent searches. |
+| `SearchSession` | Field preview of up to three rows; `Replace` for `search.query`. No sliding window. |
+| `SearchPalette.qml` (proposed) | The new palette. It replaces `GlobalSearchDialog.qml`. |
+| `AlbumInspectorPanel.qml` | The "Natural language" line in the search filter card. |
+| `project_package_backend` | Drops an HNSW index of an older project when it opens. |
+
+### 3.2 Exclusions
+
+- Sidecar idle time, lazy encoder loading, and prewarm. The
+  [AI Sidecar Runtime Residency Plan](../ai/ai_sidecar_runtime_residency_plan.md) owns them.
+- Ranking of field search results. Field preview rows keep the file id order of
+  `ListSearchResultPage`.
+- A keyboard shortcut to open the palette. The
+  [Configurable Keyboard Shortcut Registry Plan](configurable_keyboard_shortcut_registry_plan.md)
+  owns shortcuts.
+- An automation command that applies a search to the Library.
+- Removal of the packaged DuckDB `vss` extension. Older projects need it to drop their HNSW
+  index.
+
+## 4. Current source audit
+
+All paths are under `alcedo_studio/src` unless stated otherwise.
+
+| Area | Current owner and path | Current behavior | Required change |
+| --- | --- | --- | --- |
+| Vector ranking | `SemanticVectorSearch::SearchImageEmbeddings`, `storage/store/semantic/semantic_vector_search.cpp:64-147` | HNSW top-K (`max(512, offset + limit)`) over the whole table with `array_distance`, then a join to the folder scope, then `semantic_score_elbow::CutoffScore`, then paging in C++. | Exact scan of the scope with the relevance rule. Paging in SQL. |
+| Score cutoff | `semantic_score_elbow::CutoffScore`, `storage/store/semantic/semantic_score_elbow.cpp:21-58` | A flat span keeps the whole sample. Without a clear elbow it keeps the top 35 % of the span. No absolute limit. | Search stops using it. Label assignment keeps it. |
+| Folder recall | Same file, `nearest` CTE then `JOIN scoped` | The folder filter runs after the global top-K. A small folder can lose matches that rank below 512 in the whole project. | The scope filter runs before the score. |
+| Page stability | Same file, `RequestedCandidateLimit` and `FilterAndPageCandidates` | The cutoff is recomputed on each page from a candidate pool whose size depends on the offset. Pages after 512 rows can repeat or skip rows. | One rule for all pages. |
+| HNSW index | `SemanticVectorSearch::EnsureVectorSearchIndex` (same file, :149-182); `project_pack::EnsureVssExtensionForExistingHnswIndexes`, `app/project_package_backend.cpp:482`, called at `app/project_service.cpp:607` | Search creates the index. Project open loads `vss` when an index exists. | Search does not create it. Project open drops an existing index. |
+| Query embedding | `ProjectSemanticSearchProvider::Search`, `app/project_service.cpp:167-275` | Embeds the text on every call, including every page. No cache. | Cache by model key and text. Embed the neutral text once per model. |
+| Semantic page total | `RunSearchPageRequest`, `ui/alcedo_main/album_backend/search_controller.cpp:164-180` | `total = offset + rows + 1` when a page is full. | The relevance query returns the real total for `search.query`. |
+| Library apply | `RunLibraryQuery`, `ui/alcedo_main/album_backend/library_module.cpp:447-468`; `SearchController::ApplyFuzzySearch`, `search_controller.cpp:407-418` | Only `BuildFuzzySearchWhere` (SQL) and the exact file filter. No natural-language apply. | Add the natural-language apply path. |
+| Library order | `AlbumQueryOptions`, `include/sleeve/album_query.hpp:66-74`; `storage/store/sleeve/album_query.cpp` | No relevance order. Without a sort the order is file id. | Relevance order when a natural-language search is active and no sort is selected. |
+| Match set | `MatchSetTable`, `storage/store/sleeve/element_store.cpp:141-169`; used by `ReadAlbumQuery` (:804), `ReadAlbumFilePosition` (:838), `ReadAlbumFileIds` (:903), `BuildFolderStats` (:782) | One TEMP table per operation from the scope and the filter. No relevance column. | Optional join to the relevance select and a `relevance` column. |
+| Palette window | `SearchSession`, `include/ui/alcedo_main/album_backend/search_session.hpp:48-139` | Page size 24, window 48, `LoadMore`, `LoadPrevious`, prepend and append. | Preview of 3 rows. `Replace` stays for `search.query`. |
+| Palette preview thumbnails | `SearchController::SetSearchPreviewThumbnailVisible`, `search_controller.cpp:501-713` | `image://alcedo-thumb/...` URLs in the shared `ThumbnailImageStore`. Pins through `ThumbnailService`. Tier from `maxEdge`. The names `dataUrl` and `thumb_data_url` are from an older design. | Keep the path. Use `maxEdge` 512. Rename `dataUrl` to `thumbUrl` in touched signatures. |
+| Recommendations | `StatsEngine::BuildSearchRecommendations`, `ui/alcedo_main/album_backend/stats_engine.cpp:189-200` | Rows `{category, categoryLabel, label, query, count}` for camera, date, lens, label. The palette applies a row as fuzzy text. | Apply a row with `ToggleStatsFilter(category, label)`. |
+| Palette | `qml/GlobalSearchDialog.qml` (1240 lines) | Full list with paging, settings popup, Material controls, Search button. | Replace (Section 2). |
+| Active search display | `qml/AlbumInspectorPanel.qml:244-330` | "SEARCH FILTER" card with the query and a clear button. | Add the "Natural language" line. |
+| `search.query` | `ui/alcedo_main/automation/commands/search_commands.cpp:60-150` | Calls `SearchSession::Replace`; limit maximum `kWindowCapacity`; result has `total` and `has_more`. | Same fields. The limit maximum becomes `SearchSession::kMaxPageRows` (48). |
+
+Current tests (target names in `alcedo_studio/tests`):
+
+- `SemanticStorageControllerTest` (`storage/semantic_storage_controller_test.cpp`):
+  `VssSearchRanksWithinRootAndFolderScope`, `PackedSnapshotSucceedsAfterVectorSearchIndex`,
+  `VssSearchCutsOffWeakTailBeforePaging`, `Supports768DimensionalModelStorageAndSearch`,
+  `AssignsElbowTruncatedLabelsByScoreDistribution`.
+- `FilterServiceTest`: `SemanticSearchProviderDelegatesWhenRegistered`,
+  `LabelQueryUsesOrdinaryPathNotSemanticProvider`, `StatsBarAndSearchMergeUnderOneCompiledPredicate`.
+- `SearchSessionTest`: `ResponseWithOldRequestIdIsIgnored`, `AppendBeyondCapacityDropsLeadingRows`,
+  `SemanticQueryWaitsForSubmitWhenNaturalLanguageSearchIsOn`.
+- `AlbumBackendSearchWorkerTest`: five tests, including
+  `ApplyFuzzySearchQueriesOnTheWorkerAndKeepsInspectorFilters` and `SearchSqlNeverRunsOnTheUiThread`.
+- `GlobalSearchDialogQmlTest`: six tests, including
+  `ScrolledSearchResultsRenderPreviewThumbnailsAndReopenStillWorks`.
+- `LibrarySearchColumnsTest`, `LibrarySearchRecallTest`, `LibrarySearchBenchmarkTest` (disabled
+  benchmarks).
+- `AutomationSearchE2ETest`: `FuzzySearchFindsImportedFileName`.
+
+## 5. Target architecture
+
+### 5.1 Owners
+
+| Owner | Input | Output | Changes | Reads only | Lifetime | Errors |
+| --- | --- | --- | --- | --- | --- | --- |
+| `SemanticVectorSearch` | scope folder id, `SemanticQueryEmbedding` | relevance select (`SqlFragment`), ranked page | nothing | embedding tables | per `Storage` | `std::runtime_error` with the DuckDB message; model not registered; dimension mismatch |
+| `SemanticQueryEmbeddingCache` (proposed) | model key, text, encoder callback | embedding vector | its entries | nothing | per `ProjectSemanticSearchProvider` | the encoder error, passed through; no entry on failure |
+| `ProjectSemanticSearchProvider` | query text | `SemanticQueryEmbedding` (query and neutral vectors, model key, dimension) | cache entries; sidecar lease while it embeds | active model, runtime status | per project | runtime start failure, model mismatch, embedding validation failure |
+| `SleeveFilterService` | query text, folder | `SemanticQueryEmbedding`; relevance select; result rows | nothing | provider, storage | per project | provider missing; provider error |
+| `ElementStore` | scope, filter, relevance select, options | album page, groups, statistics, ids, position | its TEMP match set | element, image, embedding tables | per operation | DuckDB error |
+| `SearchController` | palette and automation calls | pending and accepted `LibrarySearchInput`; recent searches | accepted search state; `QSettings` keys | classifier, provider presence | per application module host | synchronous rejection text from `ApplySemanticSearch` |
+| `LibraryModule` | `LibraryQueryInput` | published library state | accepted content | search input | per application module host | `queryError` with Retry |
+
+### 5.2 New value type
+
+`SemanticQueryEmbedding` holds `model_key_`, `dimension_`, `query_` (`std::vector<float>`), and
+`neutral_` (`std::vector<float>`). It is the output of an embedding operation, not a copy of
+an owner's state. The Library keeps the accepted value in the accepted search state, so later
+page reads, statistics, and select all do not call the sidecar again. The accepted search state
+releases it when the search is cleared or replaced. No code writes it back to an owner.
+
+### 5.3 Primary success call chain (natural-language apply)
+
+```text
+Search palette Enter
+  -> SearchController::ApplySemanticSearch(query)        [GUI thread]
+       classify, too-long check, provider check -> "" (accepted)
+       pending_search_ = {display_query_, semantic_text_}
+       LibraryModule::RequestLibraryRefresh()
+  -> SearchRequestWorker kApply -> RunLibraryQuery       [query worker]
+       SleeveFilterService::EmbedSemanticQuery(text)
+         -> ProjectSemanticSearchProvider::EmbedQuery
+              cache hit, or lease + StartAndWait + EmbedText (query, then neutral once)
+       SemanticVectorSearch::BuildRelevanceSelect(folder, embedding)
+       AlbumBrowseService::ReadAlbumQuery(folder, stats filter, options, model, read, relevance)
+         -> ElementStore::ReadAlbumQuery
+              MatchSetTable(scope JOIN relevance select) -> page ordered by relevance
+  -> LibraryModule::PublishRefresh                        [GUI thread]
+       SearchController::AcceptLibrarySearch(input, output) stores the embedding
+       recent searches updated; SearchStateChanged; grid and Inspector update
+```
+
+### 5.4 Primary failure chain (natural-language apply)
+
+```text
+RunLibraryQuery: EmbedQuery throws (runtime start failed / model mismatch / bad vector)
+  -> output.error_ = message
+  -> LibraryModule::PublishRefresh: SetQueryError(message); accepted content stays;
+     the pending search stays for Retry; AcceptLibrarySearch is not called
+  -> LibraryWorkspace shows "Library query failed: <message>" with Retry
+```
+
+No other path runs. The search does not change to field search, and it does not use a stored
+older embedding of another model.
+
+## 6. File and API map
+
+### 6.1 Current files that change
+
+| File | Phase | Change |
+| --- | --- | --- |
+| `include/storage/store/semantic/semantic_vector_search.hpp`, `storage/store/semantic/semantic_vector_search.cpp` | GS1 | Relevance rule; exact scan; remove `EnsureVectorSearchIndex` |
+| `include/storage/store/semantic/semantic_records.hpp` | GS1 | `SemanticQueryEmbedding` |
+| `storage/store/semantic/semantic_tables.hpp` and `.cpp` | GS1 | Remove `ImageEmbeddingIndex` when no caller is left |
+| `app/project_service.cpp` | GS1 | Provider uses the cache and `EmbedQuery`; HNSW drop at open |
+| `include/app/project_package_backend.hpp`, `app/project_package_backend.cpp` | GS1 | `DropHnswIndexesOfOlderProject` replaces `EnsureVssExtensionForExistingHnswIndexes` |
+| `include/app/sleeve_filter_service.hpp`, `app/sleeve_filter_service.cpp` | GS1, GS2 | `SemanticSearchProvider::EmbedQuery`; `EmbedSemanticQuery`; `BuildSemanticRelevanceSelect` |
+| `include/storage/store/sleeve/element_store.hpp`, `storage/store/sleeve/element_store.cpp`, `storage/store/sleeve/album_query.cpp`, `include/storage/store/sleeve/album_query_sql.hpp` | GS2 | Relevance join and order |
+| `include/sleeve/album_query.hpp` | GS2 | Order rule documentation for relevance |
+| `include/app/album_browse_service.hpp`, `app/album_browse_service.cpp` | GS2 | Pass the relevance select |
+| `include/ui/alcedo_main/album_backend/search_controller.hpp`, `.../search_controller.cpp` | GS2, GS3 | `ApplySemanticSearch`; accepted embedding; recent searches; recommendation apply |
+| `include/ui/alcedo_main/album_backend/search_session.hpp`, `.../search_session.cpp` | GS2 | Remove the window; preview of 3 rows |
+| `include/ui/alcedo_main/album_backend/library_module.hpp`, `.../library_module.cpp` | GS2 | Semantic branch in `RunLibraryQuery` and page reads |
+| `ui/alcedo_main/album_backend/stats_engine.cpp` | GS2 | Statistics with the relevance select |
+| `ui/alcedo_main/automation/commands/search_commands.cpp` | GS2 | New limit constant; new `ResponseApplied` signature |
+| `ui/alcedo_main/qml/GlobalSearchDialog.qml` | GS2, GS3, GS5 | Minimal compile change (GS2); recommendation apply (GS3); deleted (GS5) |
+| `ui/alcedo_main/qml/AppDialogs.qml`, `ui/alcedo_main/CMakeLists.txt` | GS4, GS5 | Instantiate and register `SearchPalette`; remove the old file entry |
+| `ui/alcedo_main/qml/AlbumInspectorPanel.qml` | GS2 | "Natural language" line |
+| `ui/alcedo_main/DESIGN.md`, AppTheme sources | GS4 | New palette tokens, if a value is missing |
+
+### 6.2 Proposed files
+
+| File | Phase | Responsibility |
+| --- | --- | --- |
+| `include/app/semantic_query_embedding_cache.hpp`, `app/semantic_query_embedding_cache.cpp` | GS1 | LRU cache of text embeddings |
+| `alcedo_studio/tests/app/semantic_query_embedding_cache_test.cpp` | GS1 | Cache tests, target `SemanticQueryEmbeddingCacheTest` registered in `alcedo_studio/tests/app/CMakeLists.txt` |
+| `ui/alcedo_main/qml/SearchPalette.qml` | GS4 | The new search palette |
+
+### 6.3 Proposed APIs
+
+| API | Input | Output | Owner and lifetime | Validation | Error | Changes state |
+| --- | --- | --- | --- | --- | --- | --- |
+| `SemanticVectorSearch::BuildRelevanceSelect(folder_id, const SemanticQueryEmbedding&)` | folder id, embedding | `duckorm::SqlFragment` selecting `file_id, image_id, relevance` of kept files | `SemanticVectorSearch`; the fragment is valid for one statement | model registered; vector dimension equals model dimension; finite values | `std::runtime_error` | No |
+| `SemanticVectorSearch::SearchImageEmbeddings(folder_id, const SemanticQueryEmbedding&, offset, limit, error)` | as above, page | `SemanticRankedPage {rows_, total_}` | `SemanticVectorSearch` | as above | `error` text, empty page | No |
+| `SemanticQueryEmbeddingCache::GetOrEmbed(model_key, text, encode)` | model key, trimmed text, `std::function<std::vector<float>()>` | `std::vector<float>` | owned by the provider; capacity 64 | none (the provider validates the vector) | exception of `encode`; no entry is stored | Yes (entries) |
+| `SemanticSearchProvider::EmbedQuery(query)` | query text | `SemanticQueryEmbedding` | provider | provider validates both vectors | `std::runtime_error` | Cache only |
+| `SleeveFilterService::EmbedSemanticQuery(query)` | query text | `SemanticQueryEmbedding` | filter service | provider present | `std::runtime_error` | No |
+| `SleeveFilterService::BuildSemanticRelevanceSelect(folder_id, embedding)` | folder, embedding | `duckorm::SqlFragment` | filter service | delegates to storage | `std::runtime_error` | No |
+| `SearchController::ApplySemanticSearch(query)` (`Q_INVOKABLE`) | query | `QString` error, empty on acceptance | GUI thread | route, length, provider | returned text | Yes (pending search) |
+| `SearchController::RecentSearches()` (`Q_PROPERTY QVariantList recentSearches`) | none | list of `{query, route}` | `SearchController` | none | none | No |
+| `SearchController::ApplyRecentSearch(index)` (`Q_INVOKABLE`) | list index | `QString` error | GUI thread | index range | returned text | Yes |
+
+Each new header includes the headers that define its types. Do not add forward declarations.
+
+## 7. Repository rules that affect this work
+
+Read `AGENTS.md` and the applicable skills again before each phase. These rules apply directly:
+
+- No fallback without authorization. A natural-language failure reports the real error. It does
+  not run field search in its place.
+- Update data through its owner. `SemanticQueryEmbedding` is an operation result (Section 5.2).
+  Do not copy the match set or the search session state for convenience.
+- Do not add a generation, token, or similar mechanism without an executable interleaving. The
+  existing `SearchRequestWorker` latest-wins rule and `SearchSession` request id stay. This plan
+  adds no new consistency mechanism.
+- DuckDB connections come from `DBController` at the operation boundary.
+- QML: Basic style only; `appTheme` tokens; no compound `xx · xx` labels; no new pills, badges,
+  or status dots; register new QML files in `ALCEDO_MAIN_QML_FILES` (`alcedo-qml-ui` skill).
+- Terminology: do not use the prohibited terms of `AGENTS.md` in code, tests, or text.
+- Tests: use the debug build; do not run the full suite; do not run tests in parallel. Offscreen
+  QML tests are not reliable. Verify behavior through the C++ owner tests and report skipped QML
+  coverage.
+- MSVC builds run through the PowerShell tool.
+- LF line endings only.
+
+## 8. Phase summary
+
+| Phase | Result | Main modules | Dependency | Expected diff | Status |
+| --- | --- | --- | --- | ---: | --- |
+| GS1 | Calibrated relevance over the folder scope; query embedding cache; no HNSW | `SemanticVectorSearch`, provider, cache, package backend | none | 900–1400 | planned |
+| GS2 | Natural-language results in the Library in relevance order; simpler `SearchSession` | `ElementStore`, `LibraryModule`, `SearchController`, `SearchSession`, Inspector card | GS1 | 1100–1700 | planned |
+| GS3 | Recent searches, recommendation apply, and `thumbUrl` in `SearchController` | `SearchController` | GS2 | 400–700 | planned |
+| GS4 | New search palette with previews and the settings side panel | `SearchPalette.qml`, `AppDialogs.qml` | GS3 | 900–1300 | planned |
+| GS5 | Remove the old search dialog | `GlobalSearchDialog.qml`, CMake | GS4 | about 1250 removed lines (file deletion) | planned |
+
+## 9. Detailed phases
+
+### Phase GS1 — Calibrated relevance over the folder scope
+
+Issue: [#420](https://github.com/zidage/AlcedoStudio/issues/420).
+
+**Objective and deliverables**
+
+- Natural-language search uses the relevance rule of Section 2.5 with an exact scan of the
+  folder scope.
+- A query that matches no photo clearly returns no rows.
+- The query and the neutral text are embedded once per model and text.
+- Search does not create an HNSW index. An existing HNSW index is dropped at project open.
+- `search.query` returns the real total for a natural-language query.
+
+**Inputs and prerequisites**
+
+- Source at or after `ada6f002c`.
+- A local project with generated embeddings for the calibration step (Step 9).
+
+**Modules, files, and APIs**
+
+- `SemanticVectorSearch`: `BuildRelevanceSelect`, new `SearchImageEmbeddings` signature,
+  constants of Section 2.5. Remove `EnsureVectorSearchIndex`, `RequestedCandidateLimit`,
+  `FilterAndPageCandidates`, and `kMinCandidatePool`.
+- `SemanticQueryEmbeddingCache` (proposed).
+- `SemanticSearchProvider`: add `EmbedQuery`. `Search` returns `SemanticRankedPage`-based rows.
+- `ProjectSemanticSearchProvider` in `app/project_service.cpp`.
+- `project_pack::DropHnswIndexesOfOlderProject` in `app/project_package_backend.cpp`.
+- `RunSearchPageRequest` in `search_controller.cpp`: real total for the semantic route.
+
+**Data rules and invariants**
+
+- Embeddings in storage and from the sidecar are L2-normalized. The relevance SQL uses
+  `array_cosine_similarity`, so the rule does not depend on that normalization.
+- The relevance select reads only `ready` rows of the active model with the model dimension.
+- The scan computes the statistics over the scored files of the scope only.
+- The order key is `(relevance DESC, file_id ASC)`. The total is the kept count.
+- The cache key is `(model_key, trimmed query text)`. The text is not lowercased. The capacity
+  is 64 entries. A hit moves the entry to the front. An insert at capacity removes the least
+  recently used entry. A failed encode stores nothing.
+- The neutral text is a normal cache entry.
+- The provider holds the sidecar lease only while it embeds. A cache hit takes no lease.
+
+**Implementation steps**
+
+1. Add `SemanticQueryEmbedding` to `semantic_records.hpp`. Document its purpose and lifetime at
+   the type (Section 5.2).
+2. Add `SemanticQueryEmbeddingCache` with `GetOrEmbed`. Protect the entries with one
+   `std::mutex`. Reason: the query worker calls it, and the residency plan adds a prewarm call
+   from another thread. Hold the mutex only for the lookup and the insert, not during `encode`.
+3. Add `SemanticSearchProvider::EmbedQuery`. In `ProjectSemanticSearchProvider`, move the
+   runtime start, model check, and `EmbedText` into one private `EncodeText(text)`. `EmbedQuery`
+   calls the cache for the query and for `a photo`. It validates both vectors with
+   `ValidateSearchEmbedding`.
+4. Write `BuildRelevanceSelect`. Use one statement with these CTEs: `scoped` (from
+   `BuildScopedFileQuery(folder_id)`), `scored` (join of `scoped` and the embedding table; `c`,
+   `b`, `r`), `stats` (`count`, `avg`, `stddev_pop` of `r`), and the final select with the keep
+   rule. Pass both vectors as fixed-size array literals, as the current code does.
+5. Rewrite `SearchImageEmbeddings` to run `BuildRelevanceSelect` with
+   `ORDER BY relevance DESC, file_id ASC LIMIT ? OFFSET ?` and `COUNT(*) OVER ()` for the total.
+   Return `SemanticRankedPage`.
+6. Update `ProjectSemanticSearchProvider::Search` and `SleeveFilterService::SearchFolderSemanticRows`
+   to the new page type. Set `response["total"]` and `response["hasMore"]` from the real total
+   in `RunSearchPageRequest`.
+7. Remove `EnsureVectorSearchIndex` and its callers. Remove `ImageEmbeddingIndex` when it has no
+   caller left. Keep `semantic_score_elbow` for label assignment. Update the header comment of
+   `semantic_score_elbow.hpp` so it names only label assignment.
+8. Replace `EnsureVssExtensionForExistingHnswIndexes` with `DropHnswIndexesOfOlderProject`. It
+   reads `duckdb_indexes()` for an HNSW index. If one exists, it loads the packaged `vss`
+   extension and runs `DROP INDEX`. If the load or the drop fails, project open fails with that
+   error. Call it from `LoadProject` at the current call site (`project_service.cpp:607`).
+9. Calibration. Add the test `LiveRelevanceKeepsListedPhotosAndRejectsNonsenseQueries`.
+   It reads `ALCEDO_SEMANTIC_CALIBRATION_PROJECT` (an `.alcd` file) and
+   `ALCEDO_SEMANTIC_CALIBRATION_QUERIES` (a JSON file with positive queries and their expected
+   file names, and nonsense queries). The maintainer provides both files. The test needs the
+   release `alcedo_mind.exe` and the model files, as the current live runtime tests do. It prints `c`,
+   `r`, and the z value of each expected file and of the top 20 files of each query. Choose
+   `kMinQuerySimilarity` and `kMinRelevanceZ` so that every nonsense query keeps zero files and
+   each positive query keeps all its expected files. Record the values and the printed table in
+   the completion record. If no pair of values meets both conditions, stop and update this plan.
+10. Add the benchmark `DISABLED_RelevanceSelectOver20000Embeddings` to
+    `LibrarySearchBenchmarkTest`. It uses 20 000 synthetic 512-dimensional embeddings in one
+    folder.
+
+**Primary success call chain**
+
+```text
+SearchSession::Replace (search.query, semantic) -> RunSearchPageRequest [worker]
+  -> SleeveFilterService::SearchFolderSemanticRows
+  -> ProjectSemanticSearchProvider::Search
+       EmbedQuery -> cache (query), cache (a photo)
+       SemanticVectorSearch::SearchImageEmbeddings -> BuildRelevanceSelect -> page + total
+  -> ElementStore::ListSearchResultRows(file ids in rank order)
+  -> response {rows, total, hasMore}
+```
+
+**Primary failure and restore call chain**
+
+```text
+EncodeText: runtime start fails -> std::runtime_error -> no cache entry
+  -> RunSearchPageRequest sets semanticUnavailable + semanticErrorText
+  -> search.query returns semantic_unavailable = true and semantic_error = message
+```
+
+**Tests and evidence**
+
+| Test (target) | Assertion |
+| --- | --- |
+| `RelevanceKeepsOnlyFilesAboveTheZLimit` (`SemanticStorageControllerTest`) | 100 synthetic files, 5 aligned with `q`: the result is exactly those 5 in descending relevance. |
+| `UnrelatedQueryKeepsNoFiles` (`SemanticStorageControllerTest`) | A query vector orthogonal to all files keeps zero files and total 0. |
+| `NeutralSimilarityDemotesFilesThatMatchEveryText` (`SemanticStorageControllerTest`) | A file with high `c` and equally high `b` ranks below a file with lower `c` and low `b`. |
+| `FolderScopeKeepsChildrenThatRankLowInTheProject` (`SemanticStorageControllerTest`) | 600 strongly aligned files outside the folder and 3 aligned files inside: a folder search returns the 3. This is the regression of the HNSW post-filter. |
+| `SmallScopeUsesOnlyTheSimilarityLimit` (`SemanticStorageControllerTest`) | With 10 scored files, the kept set equals the files with `c >= kMinQuerySimilarity`. |
+| `PagesOfOneQueryJoinToTheFullOrderedResult` (`SemanticStorageControllerTest`) | Pages of size 7 from offset 0 to the end, joined, equal the single page of size 1000. No repeat and no gap. |
+| `FilesWithoutReadyEmbeddingAreNotResults` (`SemanticStorageControllerTest`) | A file with a `pending` row is never returned. |
+| `Supports768DimensionalModelStorageAndSearch` (updated) | The relevance select works for a 768-dimensional model. |
+| `OlderProjectHnswIndexIsDroppedOnOpen` (`SemanticStorageControllerTest` or project service test) | A project file with an HNSW index opens, the index is gone, and a search returns the expected rows. |
+| `CachedTextIsNotEncodedAgain` (`SemanticQueryEmbeddingCacheTest`) | The second `GetOrEmbed` of the same key does not call `encode`. |
+| `CacheKeyIncludesTheModelKey` (`SemanticQueryEmbeddingCacheTest`) | Same text, two model keys: `encode` runs twice. |
+| `LeastRecentlyUsedEntryIsRemovedAtCapacity` (`SemanticQueryEmbeddingCacheTest`) | After 65 inserts and one hit on entry 1, entry 2 is encoded again and entry 1 is not. |
+| `FailedEncodeStoresNoEntry` (`SemanticQueryEmbeddingCacheTest`) | After a throwing `encode`, the next call calls `encode` again. |
+| `SemanticSearchProviderDelegatesWhenRegistered` (`FilterServiceTest`, updated) | The fake provider receives `EmbedQuery` and the rows keep the rank order. |
+| `LiveRelevanceKeepsListedPhotosAndRejectsNonsenseQueries` (runs only when the two environment variables are set) | Step 9. Reported as skipped when the variables are absent. |
+| `DISABLED_RelevanceSelectOver20000Embeddings` (`LibrarySearchBenchmarkTest`, release) | p50 at or below 80 ms. |
+
+Remove or rename: `VssSearchRanksWithinRootAndFolderScope` (becomes
+`RelevanceRanksWithinRootAndFolderScope`), `VssSearchCutsOffWeakTailBeforePaging` (replaced by
+`RelevanceKeepsOnlyFilesAboveTheZLimit`), `PackedSnapshotSucceedsAfterVectorSearchIndex`
+(becomes `PackedSnapshotSucceedsAfterRelevanceSearch`).
+
+**Build and run commands**
+
+```powershell
+Set-Location D:\Projects\pu-erh_lab
+cmd /c scripts\msvc_env.cmd --build --preset win_debug --parallel 4 --target SemanticStorageControllerTest SemanticQueryEmbeddingCacheTest FilterServiceTest AlbumBackendSearchWorkerTest
+$env:PATH = "$PWD\build\debug\vcpkg_installed\x64-windows\debug\bin;$env:PATH"
+ctest --test-dir build/debug -R "SemanticStorageControllerTest|SemanticQueryEmbeddingCacheTest|FilterServiceTest|AlbumBackendSearchWorkerTest|SearchSessionTest" --output-on-failure
+```
+
+Release benchmark: reconfigure `build/release` with `-DALCEDO_BUILD_TESTS=ON`, build only
+`LibrarySearchBenchmarkTest`, run it with `--gtest_also_run_disabled_tests
+--gtest_filter=*RelevanceSelect*`, then set the option back to `OFF`. Put logs under
+`build/tmp/global_search_gs1/`.
+
+**Exit criteria**
+
+- [ ] All named tests pass, except tests that need environment variables. Report each of them as run or skipped.
+- [ ] The calibration record has the chosen constants and the printed table.
+- [ ] The release benchmark p50 is at or below 80 ms.
+- [ ] No source file calls `EnsureVectorSearchIndex` or `CREATE INDEX ... USING HNSW`.
+- [ ] `search.query` with a nonsense query returns `matches: []` and `total: 0`.
+
+**Expected diff**
+
+900–1400 lines (storage and provider 400–600, cache 150, tests 350–600).
+
+**Completion record**
+
+```text
+(empty — fill when the phase is complete; use Section 13)
+```
+
+### Phase GS2 — Natural-language results in the Library
+
+Issue: [#421](https://github.com/zidage/AlcedoStudio/issues/421).
+
+**Objective and deliverables**
+
+- `SearchController::ApplySemanticSearch` applies a natural-language search to the Library.
+- The Library shows the kept files in relevance order when no photo sort is selected.
+- Statistics, select all, and file position use the same kept set.
+- The Inspector search filter card shows "Natural language" for a natural-language search.
+- `SearchSession` has no sliding window. It serves a preview of up to 3 rows and `Replace` for
+  `search.query`.
+
+**Inputs and prerequisites**
+
+- Phase GS1 complete: `EmbedQuery`, `BuildRelevanceSelect`, `SemanticQueryEmbedding`.
+
+**Modules, files, and APIs**
+
+- `LibrarySearchInput` (`search_controller.hpp:38-44`): add `semantic_text_`
+  (`std::optional<std::wstring>`). `semantic_text_`, `pending_text_`, and `filter_` are
+  mutually exclusive.
+- Accepted search state in `SearchController`: add `accepted_semantic_query_`
+  (`std::optional<SemanticQueryEmbedding>`).
+- `LibraryQueryOutput`: add `semantic_query_` (`std::optional<SemanticQueryEmbedding>`).
+- `ElementStore`: `BuildScopedFileQuery`, `MatchSetTable`, `ReadAlbumQuery`,
+  `ReadAlbumFilePosition`, `ReadAlbumFileIds`, `BuildFolderStats` take
+  `const std::optional<duckorm::SqlFragment>& relevance_select`.
+- `AlbumBrowseService::ReadAlbumQuery` and the other forwarding functions take the same
+  parameter.
+- `album_query.cpp`: the order rule for relevance.
+- `SearchSession`: remove `LoadMore`, `LoadPrevious`, `HasPrevious`, `WindowStart`,
+  `kWindowCapacity`, `SubmitSemantic`, and the window logic of `ApplyResponse`. Add
+  `kPreviewRows = 3` and `kMaxPageRows = 48`. `ResponseApplied(requestId, mode)` loses the two
+  count arguments. Keep `Total()` and `HasMore()` as C++ accessors for `search.query`. Remove
+  their `Q_PROPERTY` entries.
+- `search_commands.cpp`: use `kMaxPageRows`; update the `ResponseApplied` connection.
+- `AlbumInspectorPanel.qml`: the "Natural language" line, bound to a new
+  `SearchController` property `activeSearchIsSemantic`.
+
+**Data rules and invariants**
+
+- The match set is built from `scope JOIN relevance_select ON file_id` when the relevance select
+  is present. It has the column `relevance DOUBLE`. Without it, the column is `NULL`.
+- Order: with `sort_field_ == kNone` and a relevance column, photos order by
+  `relevance DESC, file_id ASC` in flat mode and in each group. Group order is unchanged. With a
+  selected sort, the current order rule applies.
+- The stats filter and the relevance select combine with AND (the join plus the WHERE).
+- The kept set is computed once for each `ElementStore` operation, in the match set. No read
+  computes it a second time.
+- Page reads after the apply use `accepted_semantic_query_`. They do not call the provider.
+- A folder change keeps the active search. The next read builds the relevance select for the new
+  folder from the accepted embedding.
+- Clearing the search removes `accepted_semantic_query_`.
+
+**Implementation steps**
+
+1. Add the relevance parameter to `BuildScopedFileQuery`, `MatchSetTable`, and the four
+   `ElementStore` reads. Add the `relevance` column to the match set projection.
+2. Add the relevance order to `album_query.cpp` and document it in `album_query.hpp`.
+3. Forward the parameter through `AlbumBrowseService`.
+4. In `RunLibraryQuery`: when `semantic_text_` is set, call `EmbedSemanticQuery`, store the
+   result in `output.semantic_query_`, build the select with `BuildSemanticRelevanceSelect`, and
+   pass it. When the accepted search has an embedding (page reads, select all, position), build
+   the select from it.
+5. Add `ApplySemanticSearch`. Check, in this order: empty text (return "" and do nothing), route
+   not `semantic` (return the text "This query uses field search."), too long, no provider. Then
+   set the pending search and request a refresh.
+6. In `AcceptLibrarySearch`, store `output.semantic_query_` and set `activeSearchIsSemantic`.
+7. Make `StatsEngine::RefreshStats` pass the relevance select of the accepted search.
+8. Simplify `SearchSession`. `Preview(query)` requests `kPreviewRows` rows for the `fuzzy`
+   route and sets `awaitingSubmit` for the `semantic` route.
+9. Update `search_commands.cpp`.
+10. Add the "Natural language" line to `AlbumInspectorPanel.qml`.
+11. Make the current dialog compile against the new `SearchSession` with the smallest change:
+    remove its Load more and Load previous controls. Phase GS4 replaces the dialog.
+
+**Primary success call chain**
+
+Section 5.3.
+
+**Primary failure and restore call chain**
+
+Section 5.4. A relevance SQL failure follows the same chain with the DuckDB message.
+
+**Tests and evidence**
+
+| Test (target) | Assertion |
+| --- | --- |
+| `SemanticApplyShowsKeptFilesInRelevanceOrder` (`AlbumBackendSearchWorkerTest`, fake provider) | After the apply, the published grid ids equal the relevance order of the synthetic embeddings. |
+| `SemanticApplyKeepsInspectorFilters` (`AlbumBackendSearchWorkerTest`) | With a camera stats filter, the grid shows only kept files of that camera. |
+| `SelectedSortReplacesRelevanceOrder` (`LibrarySearchColumnsTest` or `ElementStore` test) | With capture-time sort, the same set appears in capture-time order. |
+| `GroupedSemanticResultKeepsGroupOrderAndRanksInsideGroups` (`ElementStore` test) | Groups keep their order; photos in each group are in relevance order. |
+| `SemanticStatsCountOnlyKeptFiles` (`ElementStore` test) | Bucket counts equal the counts of the kept set. |
+| `SemanticSelectAllReturnsTheKeptSet` (`ElementStore` test) | `ReadAlbumFileIds` returns exactly the kept ids. |
+| `SemanticPageReadsDoNotCallTheProvider` (`AlbumBackendSearchWorkerTest`) | After the apply, scrolling pages calls `EmbedQuery` zero more times. |
+| `SemanticApplyFailureKeepsAcceptedContentAndReportsError` (`AlbumBackendSearchWorkerTest`) | A throwing provider leaves the earlier grid, sets `queryError`, and `activeSearchQuery` is unchanged. |
+| `ApplySemanticSearchRejectsTooLongQueryWithoutRefresh` (`AlbumBackendSearchWorkerTest`) | The returned text is not empty and no library refresh starts. |
+| `FolderChangeReevaluatesActiveSemanticSearch` (`AlbumBackendSearchWorkerTest`) | After a folder change, the grid shows kept files of the new folder; the provider is not called. |
+| `ClearSearchRemovesSemanticOrder` (`AlbumBackendSearchWorkerTest`) | After clear, the order is file id. |
+| `PreviewRequestsThreeRowsForFieldQuery` (`SearchSessionTest`) | `Preview` requests limit 3. |
+| `SemanticQueryWaitsForSubmitWhenNaturalLanguageSearchIsOn` (`SearchSessionTest`, updated) | No request for a semantic preview. |
+| `AppendBeyondCapacityDropsLeadingRows` (`SearchSessionTest`) | Removed with the window. |
+| `FuzzySearchFindsImportedFileName` (`AutomationSearchE2ETest`) | Still passes with the same response fields. |
+
+**Build and run commands**
+
+```powershell
+Set-Location D:\Projects\pu-erh_lab
+cmd /c scripts\msvc_env.cmd --build --preset win_debug --parallel 4 --target AlbumBackendSearchWorkerTest SearchSessionTest LibrarySearchColumnsTest LibrarySearchRecallTest SemanticStorageControllerTest FilterServiceTest alcedo_main
+$env:PATH = "$PWD\build\debug\vcpkg_installed\x64-windows\debug\bin;$env:PATH"
+ctest --test-dir build/debug -R "AlbumBackendSearchWorkerTest|SearchSessionTest|LibrarySearchColumnsTest|LibrarySearchRecallTest|SemanticStorageControllerTest|FilterServiceTest" --output-on-failure
+```
+
+Run `AutomationSearchE2ETest` when the automation targets are built. Record it as not run when
+they are not built.
+
+**Exit criteria**
+
+- [ ] All named tests pass.
+- [ ] Manual check in `alcedo_main`: a natural-language Enter shows the kept photos in
+      relevance order, the Inspector card shows "Natural language", and clear restores the
+      folder.
+- [ ] `SearchSession` has no window code and no `LoadMore` or `LoadPrevious`.
+- [ ] `search.query` response fields are unchanged.
+
+**Expected diff**
+
+1100–1700 lines (storage 300–450, Library and search controller 300–450, session 150–250 net,
+tests 350–550).
+
+**Completion record**
+
+```text
+(empty — fill when the phase is complete; use Section 13)
+```
+
+### Phase GS3 — Palette data in SearchController
+
+Issue: [#422](https://github.com/zidage/AlcedoStudio/issues/422).
+
+**Objective and deliverables**
+
+- `SearchController` keeps the recent searches (Section 2.2).
+- `SearchController` exposes the palette operations: `ApplyRecentSearch`,
+  `ApplyRecommendation(category, label)`, and `MatchingRecommendations(query, limit)`.
+- The preview thumbnail signal names the URL `thumbUrl`.
+- The current dialog uses the new operations, so the behavior is testable before the new palette.
+
+**Inputs and prerequisites**
+
+- Phase GS2 complete.
+
+**Modules, files, and APIs**
+
+- `search_controller.hpp` and `.cpp`:
+  - `Q_PROPERTY(QVariantList recentSearches READ RecentSearches NOTIFY RecentSearchesChanged)`;
+  - `Q_INVOKABLE QString ApplyRecentSearch(int index)`;
+  - `Q_INVOKABLE void ApplyRecommendation(const QString& category, const QString& label)`, which
+    calls `StatsEngine::ToggleStatsFilter(category, label)`;
+  - `Q_INVOKABLE QVariantList MatchingRecommendations(const QString& query, int limit)`, which
+    returns the `SearchRecommendations` rows whose label contains the query, case-insensitive;
+  - recent list update in `AcceptLibrarySearch`;
+  - rename the argument `dataUrl` to `thumbUrl` in `SearchPreviewThumbnailUpdated` and
+    `searchPreviewThumbnailUpdated`, and `thumb_data_url` in touched search code.
+- `GlobalSearchDialog.qml`: `applyRecommendation` calls `ApplyRecommendation`. No other change.
+
+**Data rules and invariants**
+
+- Recent searches: Section 2.2. The `QSettings` value is a list of maps `{query, route}`.
+- `SearchController` reads the list once at construction and writes it after each change.
+- A stored entry with an unknown route is skipped on read.
+
+**Implementation steps**
+
+1. Add the recent list, its read, its write, and the update in `AcceptLibrarySearch`.
+2. Add `ApplyRecentSearch`. For route `semantic` it calls `ApplySemanticSearch` and returns its
+   text. For route `fuzzy` it calls `ApplyFuzzySearch` and returns an empty text.
+3. Add `ApplyRecommendation` and `MatchingRecommendations`.
+4. Rename the thumbnail URL arguments.
+5. Change `applyRecommendation` in the current dialog.
+
+**Primary success call chain**
+
+```text
+ApplyFuzzySearch("R5") -> Library refresh -> PublishRefresh -> AcceptLibrarySearch
+  -> recent list {R5, fuzzy} at index 0 -> QSettings write -> RecentSearchesChanged
+```
+
+**Primary failure and restore call chain**
+
+```text
+ApplyRecentSearch(index out of range) -> returns "This recent search does not exist."
+  -> no state change
+```
+
+**Tests and evidence**
+
+| Test (target `AlbumBackendSearchWorkerTest`) | Assertion |
+| --- | --- |
+| `RecentSearchAddsAcceptedQueryAtTheTop` | After two applies, the list is newest first, with routes. |
+| `RecentSearchMovesARepeatedQueryWithoutDuplicate` | A repeated query has one entry, at the top. |
+| `RecentSearchKeepsAtMostFiveEntries` | After six applies, the oldest entry is gone. |
+| `ExactFileSearchIsNotARecentSearch` | `ApplyExactSearch` does not change the list. |
+| `FailedSearchIsNotARecentSearch` | A semantic apply with a throwing provider does not change the list. |
+| `RecentSearchesPersistInSettings` | A new controller reads the same list from `search/recentQueries`. |
+| `RecentSemanticSearchUsesItsStoredRoute` | With the natural-language switch off, a stored semantic entry still applies a natural-language search. |
+| `RecommendationAppliesStatsFilter` | `ApplyRecommendation("camera", X)` sets the camera stats filter `X` and starts one refresh. |
+| `MatchingRecommendationsFilterByLabel` | The query `r5` returns the camera row `Canon EOS R5` and no unrelated row. |
+
+**Build and run commands**
+
+```powershell
+Set-Location D:\Projects\pu-erh_lab
+cmd /c scripts\msvc_env.cmd --build --preset win_debug --parallel 4 --target AlbumBackendSearchWorkerTest alcedo_main
+$env:PATH = "$PWD\build\debug\vcpkg_installed\x64-windows\debug\bin;$env:PATH"
+ctest --test-dir build/debug -R "AlbumBackendSearchWorkerTest" --output-on-failure
+```
+
+**Exit criteria**
+
+- [ ] All named tests pass.
+- [ ] No search source file uses the names `dataUrl` or `thumb_data_url` for the preview URL.
+
+**Expected diff**
+
+400–700 lines (controller 200–300, tests 200–350, dialog 10).
+
+**Completion record**
+
+```text
+(empty — fill when the phase is complete; use Section 13)
+```
+
+### Phase GS4 — New search palette
+
+Issue: [#422](https://github.com/zidage/AlcedoStudio/issues/422).
+
+**Objective and deliverables**
+
+- The proposed file `qml/SearchPalette.qml` implements Section 2.1 to Section 2.4 and
+  Section 2.7.
+- `AppDialogs.qml` instantiates `SearchPalette` in place of `GlobalSearchDialog`. It keeps
+  `id: globalSearchDialogObj`, `objectName: "globalSearchDialog"`, the alias, and
+  `openFromCollection()`, so `Main.qml` does not change.
+- The text field keeps `objectName: "globalSearchField"`.
+
+**Inputs and prerequisites**
+
+- Phase GS3 complete.
+- Read `ui/alcedo_main/DESIGN.md` and the `alcedo-qml-ui` skill.
+
+**Modules, files, and APIs**
+
+- `qml/SearchPalette.qml` (proposed). Register it in `ALCEDO_MAIN_QML_FILES`.
+- `qml/AppDialogs.qml`: instantiate `SearchPalette`.
+- AppTheme and `DESIGN.md`: add a token only if no current token fits. Add each new token to
+  both in the same change.
+- `GlobalSearchDialogQmlTest`: point the tests to the new structure.
+
+**Data rules and invariants**
+
+- The palette requests preview thumbnails only for visible preview frames, with `maxEdge` 512.
+  It releases each thumbnail when the frame is destroyed or the query changes. It uses the
+  current `SetSearchPreviewThumbnailVisible` and `CancelSearchPreviewThumbnails` operations.
+- The palette holds no search state except the text, the highlight index, and the side panel
+  open state.
+- The palette reads routes and preview rows only from `SearchSession`. It does not classify a
+  query.
+
+**Implementation steps**
+
+1. Write the palette shell: input row, sections column, side panel, footer. Use the Basic style
+   and `appTheme` tokens.
+2. Write the Recent searches, Commands, Filters, and Photos sections.
+3. Write the preview frame as an inline component nested in the root object (an inline
+   component at file level does not compile with `qmlcachegen`). Bind the thumbnail pin to the
+   frame lifetime.
+4. Write the highlight rule (Up, Down, hover) and Enter (Section 2.3).
+5. Write the side panel with `ThemeCheckBox` and the switch. Persist its state in
+   `search/settingsPanelOpen`.
+6. Write the states of Section 2.7.
+7. Change `AppDialogs.qml` to instantiate `SearchPalette`.
+8. Update `GlobalSearchDialogQmlTest`.
+
+**Primary success call chain**
+
+```text
+type "R5" -> debounce 140 ms -> SearchSession::Preview -> worker -> 3 rows
+  -> Photos section shows 3 frames -> SetSearchPreviewThumbnailVisible(id, image, true, 512)
+  -> SearchPreviewThumbnailUpdated(id, thumbUrl) -> frame shows the image
+Enter -> ApplyFuzzySearch("R5") -> close -> Library refresh -> recent searches updated
+```
+
+**Primary failure and restore call chain**
+
+```text
+semantic Enter -> ApplySemanticSearch returns "Natural language search is not available yet"
+  -> palette stays open -> Photos section shows the text -> no Library refresh
+```
+
+**Tests and evidence**
+
+| Test (target `GlobalSearchDialogQmlTest`) | Assertion |
+| --- | --- |
+| `FieldQueryShowsThreePreviewThumbnails` | Three frames show `image://alcedo-thumb/` sources. |
+| `SemanticQueryShowsEnterHintAndNoPreviews` | The hint text is visible and no preview request is sent. |
+| `RecommendationRowAppliesStatsFilterAndCloses` | A click on a camera row sets the camera stats filter and closes the palette. |
+| `RejectedSemanticEnterKeepsPaletteOpen` | With no provider, Enter shows the error text and the palette stays open. |
+| `SettingsPanelStatePersists` | The panel is open on reopen after it was open. |
+| `PreviewThumbnailsRenderAfterReopen` (renamed from `ScrolledSearchResultsRenderPreviewThumbnailsAndReopenStillWorks`) | Thumbnails show after close and reopen. |
+| `NaturalLanguageSwitchStateIsReadOnOpen` (renamed from the current test of the switch sync on open) | The check boxes are disabled on open when the persisted switch is on. |
+
+QML tests can fail for offscreen input reasons. Record such a failure with its cause. Do not
+weaken the assertion. The C++ tests of GS2 and GS3 are the required evidence for behavior.
+
+**Build and run commands**
+
+```powershell
+Set-Location D:\Projects\pu-erh_lab
+cmd /c scripts\msvc_env.cmd --build --preset win_debug --parallel 4 --target GlobalSearchDialogQmlTest alcedo_main
+$env:PATH = "$PWD\build\debug\vcpkg_installed\x64-windows\debug\bin;$env:PATH"
+ctest --test-dir build/debug -R "GlobalSearchDialogQmlTest" --output-on-failure
+```
+
+**Exit criteria**
+
+- [ ] QML test results are recorded, with the cause of each failure.
+- [ ] `SearchPalette.qml` has no `QtQuick.Controls.Material` import and no literal color, size,
+      or spacing value that has an `appTheme` token.
+- [ ] Manual check in `alcedo_main`: side panel open and closed, a narrow window, a field query,
+      a natural-language query, a recommendation row, a recent search, and a photo click.
+- [ ] Screenshots of the states of Section 2.7 are in the completion record.
+
+**Expected diff**
+
+900–1300 lines (palette 700–950, tests 150–300, theme and design text 0–50).
+
+**Completion record**
+
+```text
+(empty — fill when the phase is complete; use Section 13)
+```
+
+### Phase GS5 — Remove the old search dialog
+
+Issue: [#422](https://github.com/zidage/AlcedoStudio/issues/422).
+
+**Objective and deliverables**
+
+- `qml/GlobalSearchDialog.qml` is deleted and removed from `ALCEDO_MAIN_QML_FILES`.
+- No source, test, or document refers to the old dialog file, except history records in plans.
+
+**Inputs and prerequisites**
+
+- Phase GS4 complete, with its manual check done.
+
+**Implementation steps**
+
+1. Delete the file and its CMake entry.
+2. Search for `GlobalSearchDialog` in `alcedo_studio/src`, `alcedo_studio/tests`, and `docs`.
+   Change each reference to the palette file to `SearchPalette`, except completion records. The
+   test target name `GlobalSearchDialogQmlTest` can stay.
+3. Build `alcedo_main` and `GlobalSearchDialogQmlTest`.
+
+**Tests and evidence**
+
+- `alcedo_main` builds, and the palette opens from the Collections panel (manual check).
+- `GlobalSearchDialogQmlTest` results are the same as at the end of GS4.
+
+**Exit criteria**
+
+- [ ] A search for `GlobalSearchDialog.qml` has no match outside history records.
+- [ ] The build passes.
+
+**Expected diff**
+
+About 1250 removed lines and fewer than 30 other changed lines. The phase is a file deletion.
+It is separate from GS4 so that GS4 stays below 2000 changed lines.
+
+**Completion record**
+
+```text
+(empty — fill when the phase is complete; use Section 13)
+```
+
+## 10. Cross-phase acceptance matrix
+
+| Behavior | Expected result | Phase |
+| --- | --- | --- |
+| Nonsense natural-language query | Library shows "No Matching Photos". | GS1, GS2 |
+| Clear natural-language query in a large folder | Library shows the matching photos first. | GS1, GS2 |
+| Natural-language query in a small subfolder | Matching photos of that folder appear even when other folders have stronger matches. | GS1 |
+| Scroll through a long natural-language result | No repeated and no missing photo. | GS1, GS2 |
+| Repeat the same natural-language query | No sidecar call for the embedding. | GS1 |
+| Runtime start failure on Enter | Library shows the error row with Retry; earlier content stays. | GS2 |
+| Too-long query on Enter | Palette shows the error; Library does not change. | GS2, GS4 |
+| Change folder with an active natural-language search | New folder shows its kept photos in relevance order. | GS2 |
+| Select a sort with an active natural-language search | Same photos in the selected order. | GS2 |
+| Field query in the palette | Up to 3 previews; Enter applies the field search. | GS4 |
+| Recent search with the switch off | A stored natural-language entry still runs a natural-language search. | GS3 |
+| Recommendation row | The stats filter is set; the palette closes. | GS3, GS4 |
+| Older project with an HNSW index | Opens; the index is dropped; search works. | GS1 |
+| `search.query` | Same fields; real total for natural-language queries. | GS1, GS2 |
+
+## 11. Build and evidence rules
+
+- Presets: `win_debug` for tests; `win_release` with `-DALCEDO_BUILD_TESTS=ON` only for the
+  benchmark, then set back to `OFF`. macOS: `macos_debug` with `-DALCEDO_BUILD_TESTS=ON` when a
+  macOS check is required.
+- Evidence and logs: `build/tmp/global_search_<phase>/`. Remove them when the phase is complete.
+- Record each test as passed, failed, skipped, or not run. A skipped test is not a pass. An
+  unavailable benchmark is not a zero.
+- Do not run the full test suite. Run the named targets and their direct caller suites.
+
+## 12. Risks and stop conditions
+
+| Risk | Signal | Response |
+| --- | --- | --- |
+| Exact scan is too slow on large folders | GS1 benchmark p50 above 80 ms at 20 000 embeddings | Stop. Update the plan with the measurement. Do not keep HNSW as a silent second path. |
+| No constant pair separates nonsense queries from positive queries | GS1 Step 9 | Stop. Report the table and update the relevance rule. |
+| The neutral text does not help the chosen model | Calibration shows `r` ranks worse than `c` | Stop. Report the table. Change the rule in the plan before code. |
+| Match set join changes the cost of field search | `LibrarySearchBenchmarkTest` field apply regresses | The relevance join must not run when the select is absent. Fix before completion. |
+| Cold sidecar start on Enter blocks the GUI thread | Manual check | Known current behavior of `StartAndWait` from the worker. The residency plan fixes it. Record it in the completion record. |
+| `search.query` behavior change | `AutomationSearchE2ETest` | Keep the fields. Fix before completion. |
+
+Stop implementation when a required owner API does not exist, when the source audit no longer
+matches the branch, when a phase can pass 2000 changed lines, or when an operation needs a
+fallback that the user did not authorize. Update this plan before work continues.
+
+## 13. Completion record template
+
+```text
+Phase / date / status:
+Source revision and branch:
+Actual changed modules:
+Implemented behavior:
+Explicitly unimplemented items:
+Primary success call chain:
+Primary failure and restore call chain:
+Build and test commands with exit codes:
+Discovered / passed / failed / skipped counts:
+Manual verification:
+Performance or resource evidence, if required:
+Calibration constants and table (GS1 only):
+Evidence path:
+Remaining defects or unavailable platforms:
+```
