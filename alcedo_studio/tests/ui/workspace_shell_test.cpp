@@ -166,7 +166,7 @@ void SeedLibraryThumbnails(ApplicationModuleHost& host, int count, int content_h
     // Empty data URL: the grid renders placeholder cards (no decode attempt) so
     // the async QQuickImage decode-failure warning never fires. Routing, scroll,
     // and filter tests do not depend on thumbnail pixels.
-    item.thumb_data_url = QString();
+    item.thumb_url      = QString();
     items.push_back(item);
   }
   host.library()->view_state().all_images_  = items;

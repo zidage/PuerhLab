@@ -66,8 +66,18 @@ class SearchController final : public QObject {
   Q_PROPERTY(bool searchFieldAiTagsEnabled READ SearchFieldAiTagsEnabled WRITE
                  SetSearchFieldAiTagsEnabled NOTIFY SearchStateChanged)
   Q_PROPERTY(SearchSession* session READ session CONSTANT)
+  /// Recent searches that the library accepted, newest first: maps {query, route}, route
+  /// `fuzzy` or `semantic`. At most kMaxRecentSearches entries, kept in QSettings.
+  Q_PROPERTY(QVariantList recentSearches READ RecentSearches NOTIFY RecentSearchesChanged)
+  /// Open state of the settings side panel of the search palette, kept in QSettings.
+  /// Default: closed.
+  Q_PROPERTY(bool searchSettingsPanelOpen READ SearchSettingsPanelOpen WRITE
+                 SetSearchSettingsPanelOpen NOTIFY SearchSettingsPanelOpenChanged)
 
  public:
+  /// Largest number of recent searches.
+  static constexpr int kMaxRecentSearches = 5;
+
   SearchController(ProjectModule* project, LibraryModule* library, FolderController* folders,
                    StatsEngine* stats, QObject* parent = nullptr);
   ~SearchController() override;
@@ -90,8 +100,26 @@ class SearchController final : public QObject {
   [[nodiscard]] bool SearchFieldExifEnabled() const;
   [[nodiscard]] bool SearchFieldAiDescriptionEnabled() const;
   [[nodiscard]] bool SearchFieldAiTagsEnabled() const;
+  [[nodiscard]] bool SearchSettingsPanelOpen() const;
+  void               SetSearchSettingsPanelOpen(bool open);
 
   Q_INVOKABLE QVariantList SearchRecommendations(int limit = 12);
+  /// The SearchRecommendations rows whose label contains @p query (case-insensitive), in the
+  /// same order, at most @p limit rows. An empty query matches no row.
+  Q_INVOKABLE QVariantList MatchingRecommendations(const QString& query, int limit = 4);
+  /// Set the Inspector statistics filter of one recommendation row (StatsEngine::
+  /// ToggleStatsFilter). A filter that already has this value stays set; the text search stays.
+  Q_INVOKABLE void         ApplyRecommendation(const QString& category, const QString& label);
+  [[nodiscard]] auto       RecentSearches() const -> QVariantList;
+  /**
+   * @brief Apply the recent search at @p index with its stored route.
+   *
+   * @details A `fuzzy` entry calls ApplyFuzzySearch and returns "". A `semantic` entry applies a
+   * natural-language search with the checks of ApplySemanticSearch except the route check: the
+   * natural-language switch does not change a stored entry. Returns the rejection reason, or
+   * "This recent search does not exist." for an index out of range; a rejection changes nothing.
+   */
+  Q_INVOKABLE QString      ApplyRecentSearch(int index);
   /// Queue a typing preview page on the search worker and return its request id. The result
   /// arrives as SearchResponseReady on the UI thread, only while no newer preview or submit
   /// request exists. A semantic query returns `awaitingSubmit` without searching.
@@ -140,24 +168,40 @@ class SearchController final : public QObject {
   /// Search part of the next library refresh: the pending applied search when one exists,
   /// else the accepted search filter.
   [[nodiscard]] auto       LibrarySearch() const -> LibrarySearchInput;
-  /// Install the search of an accepted library refresh without emitting. @p used is the input
-  /// that refresh read; @p filter is the filter it built (empty: the query has no terms, so
-  /// no search is active); @p semantic_query is the embedding of a natural-language search,
-  /// kept for the later reads of that search. Returns true when the search state changed; the
-  /// caller emits SearchStateChanged after every owner of the result is installed.
+  /// Install the search of an accepted library refresh without emitting SearchStateChanged.
+  /// @p used is the input that refresh read; @p filter is the filter it built (empty: the query
+  /// has no terms, so no search is active); @p semantic_query is the embedding of a
+  /// natural-language search, kept for the later reads of that search. An accepted field or
+  /// natural-language query becomes the newest recent search (RecentSearchesChanged is emitted
+  /// here: the list does not depend on the library result). Returns true when the search state
+  /// changed; the caller emits SearchStateChanged after every owner of the result is installed.
   auto AcceptLibrarySearch(const LibrarySearchInput& used, const std::optional<FilterNode>& filter,
                            const std::optional<SemanticQueryEmbedding>& semantic_query) -> bool;
 
  signals:
   void SearchStateChanged();
-  void SearchPreviewThumbnailUpdated(uint elementId, const QString& dataUrl, bool loading,
+  void RecentSearchesChanged();
+  void SearchSettingsPanelOpenChanged();
+  void SearchPreviewThumbnailUpdated(uint elementId, const QString& thumbUrl, bool loading,
                                      bool missingSource, const QString& errorText);
-  void searchPreviewThumbnailUpdated(uint elementId, const QString& dataUrl, bool loading,
+  void searchPreviewThumbnailUpdated(uint elementId, const QString& thumbUrl, bool loading,
                                      bool missingSource, const QString& errorText);
   void SearchResponseReady(qulonglong requestId, const QString& mode, const QVariantMap& response);
   void searchResponseReady(qulonglong requestId, const QString& mode, const QVariantMap& response);
 
  private:
+  /// One recent search: the query text and its route.
+  struct RecentSearch {
+    QString query_;
+    bool    semantic_ = false;
+  };
+
+  /// Checks of ApplySemanticSearch after the route check, then the pending search and the
+  /// library refresh. @p trimmed is not empty.
+  auto ApplySemanticText(const QString& trimmed) -> QString;
+  /// Put @p query at the top of the recent searches (no duplicate, at most
+  /// kMaxRecentSearches), write them to QSettings, and emit RecentSearchesChanged.
+  void RecordRecentSearch(const QString& query, bool semantic);
   void RequestSearchPreviewThumbnail(uint elementId, uint imageId, uint maxEdge = 192);
   /// Result rows for QML: display columns from the query row plus the thumbnail state that
   /// LibraryModule already holds. Runs no SQL and no image pool read.
@@ -182,11 +226,18 @@ class SearchController final : public QObject {
   std::optional<SemanticQueryEmbedding>                accepted_semantic_query_{};
   /// Applied search that waits for its library refresh; the change description only.
   std::optional<LibrarySearchInput> pending_search_{};
+  /// Newest first; read from QSettings once at construction, written after each change.
+  std::vector<RecentSearch>         recent_searches_{};
   bool                      natural_language_search_enabled_  = false;
+  /// Read from QSettings once at construction, written after each change.
+  bool                      search_settings_panel_open_       = false;
   std::uint64_t             search_preview_generation_        = 0;
   std::uint64_t             search_preview_request_sequence_  = 0;
   std::unordered_map<ThumbnailCacheKey, image_id_t>    search_preview_visible_thumbnails_{};
   std::unordered_map<ThumbnailCacheKey, std::uint64_t> search_preview_thumbnail_requests_{};
+  /// Previews whose ThumbnailService pin this controller holds, with their image URL. Only
+  /// these pins are released: the Library grid can pin the same key.
+  std::unordered_map<ThumbnailCacheKey, QString>       search_preview_pinned_thumbnails_{};
   /// The library query worker owned by LibraryModule. Preview requests run there; the
   /// destructor waits until no preview job runs.
   SearchRequestWorker*                                 worker_ = nullptr;

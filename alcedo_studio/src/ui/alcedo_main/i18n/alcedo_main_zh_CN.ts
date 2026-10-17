@@ -1574,6 +1574,10 @@ Alcedo 将改用 %1。</translation>
         <source>No semantic model is active.</source>
         <translation>没有已激活的语义模型。</translation>
     </message>
+    <message>
+        <source>This recent search does not exist.</source>
+        <translation>此最近搜索不存在。</translation>
+    </message>
 </context>
 <context>
     <name>AgentSessionCard</name>

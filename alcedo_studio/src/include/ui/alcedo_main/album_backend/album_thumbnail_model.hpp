@@ -78,8 +78,8 @@ class AlbumThumbnailModel : public QAbstractListModel {
   void appendPage(const std::vector<AlbumItem>& newItems);
 
   /// Patch thumbnail state for a single row — emits dataChanged.
-  void updateThumbnailState(sl_element_id_t elementId, const QString& dataUrl,
-                            bool loading, bool missingSource, const QString& errorText);
+  void updateThumbnailState(sl_element_id_t elementId, const QString& thumbUrl, bool loading,
+                            bool missingSource, const QString& errorText);
 
   /// Patch rating for the currently loaded row — emits dataChanged for Rating only.
   bool updateRating(sl_element_id_t elementId, image_id_t imageId, int rating);
@@ -109,8 +109,8 @@ class AlbumThumbnailModel : public QAbstractListModel {
   void totalCountChanged();
   void hasMoreChanged();
   void loadingChanged();
-  void thumbnailUpdated(uint elementId, const QString& dataUrl, bool loading,
-                        bool missingSource, const QString& errorText);
+  void thumbnailUpdated(uint elementId, const QString& thumbUrl, bool loading, bool missingSource,
+                        const QString& errorText);
 
  private:
   QVariant roleValue(const AlbumItem& item, int role) const;

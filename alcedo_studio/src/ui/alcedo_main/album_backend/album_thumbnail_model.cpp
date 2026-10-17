@@ -74,7 +74,7 @@ QVariant AlbumThumbnailModel::roleValue(const AlbumItem& item, int role) const {
     case Accent:
       return item.accent;
     case ThumbUrl:
-      return item.thumb_data_url;
+      return item.thumb_url;
     case ThumbLoading:
       return item.thumb_loading;
     case ThumbMissingSource:
@@ -179,7 +179,7 @@ void AlbumThumbnailModel::appendPage(const std::vector<AlbumItem>& newItems) {
   emit countChanged();
 }
 
-void AlbumThumbnailModel::updateThumbnailState(sl_element_id_t elementId, const QString& dataUrl,
+void AlbumThumbnailModel::updateThumbnailState(sl_element_id_t elementId, const QString& thumbUrl,
                                                bool loading, bool missingSource,
                                                const QString& errorText) {
   const int row = rowByElementId(elementId);
@@ -193,19 +193,19 @@ void AlbumThumbnailModel::updateThumbnailState(sl_element_id_t elementId, const 
   }
 
   auto& item = rows_[static_cast<size_t>(row)];
-  if (item.thumb_data_url == dataUrl && item.thumb_loading == loading &&
+  if (item.thumb_url == thumbUrl && item.thumb_loading == loading &&
       item.thumb_missing_source == missingSource && item.thumb_error_text == errorText) {
     return;
   }
 
-  item.thumb_data_url = dataUrl;
+  item.thumb_url            = thumbUrl;
   item.thumb_loading = loading;
   item.thumb_missing_source = missingSource;
   item.thumb_error_text = errorText;
 
   const QModelIndex idx = index(row);
   emit dataChanged(idx, idx, {ThumbUrl, ThumbLoading, ThumbMissingSource, ThumbErrorText});
-  emit thumbnailUpdated(static_cast<uint>(elementId), dataUrl, loading, missingSource, errorText);
+  emit thumbnailUpdated(static_cast<uint>(elementId), thumbUrl, loading, missingSource, errorText);
 }
 
 bool AlbumThumbnailModel::updateRating(sl_element_id_t elementId, image_id_t imageId, int rating) {
@@ -298,7 +298,7 @@ QVariantList AlbumThumbnailModel::getThumbnailStatesInRange(int firstIndex, int 
     result.push_back(QVariantMap{
         {"elementId", static_cast<uint>(item.element_id)},
         {"imageId", static_cast<uint>(item.image_id)},
-        {"thumbUrl", item.thumb_data_url},
+        {"thumbUrl", item.thumb_url},
         {"thumbLoading", item.thumb_loading},
     });
   }

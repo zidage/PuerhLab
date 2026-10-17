@@ -40,9 +40,8 @@ class ThumbnailManager {
                         int retryAttempt = 0);
   /// Request every pinned tier of @p elementId again. Returns false when no tier is pinned.
   [[nodiscard]] bool RefreshCurrentThumbnail(sl_element_id_t elementId, image_id_t imageId);
-  void               UpdateThumbnailState(sl_element_id_t elementId, const QString& dataUrl,
-                                          bool loading, bool missingSource,
-                                          const QString& errorText = {});
+  void UpdateThumbnailState(sl_element_id_t elementId, const QString& thumbUrl, bool loading,
+                            bool missingSource, const QString& errorText = {});
   [[nodiscard]] bool IsThumbnailPinned(sl_element_id_t elementId) const;
   void               RemoveThumbnailState(sl_element_id_t elementId, image_id_t imageId);
   void               ReleaseVisibleThumbnailPins();

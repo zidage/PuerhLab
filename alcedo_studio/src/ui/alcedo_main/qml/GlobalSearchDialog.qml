@@ -240,7 +240,7 @@ Dialog {
         if (!searchController || !row) {
             return
         }
-        searchController.ApplyFuzzySearch(row.query ? String(row.query) : String(row.label))
+        searchController.ApplyRecommendation(String(row.category), String(row.label))
         close()
     }
 
@@ -270,13 +270,13 @@ Dialog {
         target: searchController
         ignoreUnknownSignals: true
 
-        function onSearchPreviewThumbnailUpdated(elementId, dataUrl, loading, missingSource, errorText) {
+        function onSearchPreviewThumbnailUpdated(elementId, thumbUrl, loading, missingSource, errorText) {
             if (!dialog.visibleResultContains(elementId)) {
                 return
             }
             const next = Object.assign({}, dialog.previewThumbs)
             next[String(Number(elementId))] = {
-                url: dataUrl ? String(dataUrl) : "",
+                url: thumbUrl ? String(thumbUrl) : "",
                 loading: loading === true,
                 missingSource: missingSource === true,
                 errorText: errorText ? String(errorText) : ""
@@ -953,11 +953,11 @@ Dialog {
             target: dialog.searchController
             ignoreUnknownSignals: true
 
-            function onSearchPreviewThumbnailUpdated(updatedElementId, dataUrl, loading, missingSource, errorText) {
+            function onSearchPreviewThumbnailUpdated(updatedElementId, thumbUrl, loading, missingSource, errorText) {
                 if (Number(updatedElementId) !== row.elementId) {
                     return
                 }
-                row.liveThumbUrl = dataUrl ? String(dataUrl) : ""
+                row.liveThumbUrl = thumbUrl ? String(thumbUrl) : ""
                 row.liveThumbLoading = loading === true
                 row.liveThumbMissingSource = missingSource === true
                 row.liveThumbErrorText = errorText ? String(errorText) : ""

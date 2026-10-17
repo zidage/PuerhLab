@@ -118,12 +118,11 @@ void LibraryModule::NotifyThumbnailsChanged() {
 
 void LibraryModule::NotifyCountsChanged() { emit CountsChanged(); }
 
-void LibraryModule::EmitThumbnailUpdated(uint elementId, const QString& dataUrl, bool loading,
+void LibraryModule::EmitThumbnailUpdated(uint elementId, const QString& thumbUrl, bool loading,
                                          bool missingSource, const QString& errorText) {
-  emit ThumbnailUpdated(elementId, dataUrl, loading, missingSource, errorText);
-  emit thumbnailUpdated(elementId, dataUrl, loading, missingSource, errorText);
+  emit ThumbnailUpdated(elementId, thumbUrl, loading, missingSource, errorText);
+  emit thumbnailUpdated(elementId, thumbUrl, loading, missingSource, errorText);
 }
-
 
 auto LibraryModule::FilterInfo() const -> QString {
   return stats_->FormatPhotoInfo(ShownCount(), TotalCount());
