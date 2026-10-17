@@ -80,7 +80,22 @@
 #define CE_TF_APPLE_LOG            21
 #define CE_TF_NIKON_NLOG           22
 #define CE_TF_DJI_DLOG             23
-#define CE_TF_COUNT                24
+#define CE_TF_CANON_CLOG           24
+#define CE_TF_CINEON               25
+#define CE_TF_ARRI_LOGC3_EI160     26
+#define CE_TF_ARRI_LOGC3_EI200     27
+#define CE_TF_ARRI_LOGC3_EI250     28
+#define CE_TF_ARRI_LOGC3_EI320     29
+#define CE_TF_ARRI_LOGC3_EI400     30
+#define CE_TF_ARRI_LOGC3_EI500     31
+#define CE_TF_ARRI_LOGC3_EI640     32
+#define CE_TF_ARRI_LOGC3_EI1000    33
+#define CE_TF_ARRI_LOGC3_EI1280    34
+#define CE_TF_ARRI_LOGC3_EI1600    35
+#define CE_TF_LEICA_LLOG           36
+#define CE_TF_KINEFINITY_KINELOG3  37
+#define CE_TF_GOPRO_GPLOG2         38
+#define CE_TF_COUNT                39
 
 // ---------------------------------------------------------------------------------------------
 // exp(u) - 1 and log(1 + v) without cancellation (W. Kahan's compensated forms: the rounding of
@@ -176,6 +191,72 @@ CE_INLINE float CeLogCameraDecode(float y, float inv_k, float log_offset, float 
   13.4387837511409f, 0.385536998692443f, 0.18f, 0.0522722750251688f, 0.149658137915835f, \
       0.186301101345163f, 0.0928093569961373f
 
+// ARRI LogC3 at the other exposure indices: b, c and d of the "Linear Scene Exposure Factor"
+// table for SUP 3.x in the same ARRI document (EI 160 to 1600; the document has no formula
+// above EI 1600). a is 1 / 0.18 for every EI. As for EI 800, cut is where a * x + b = 1 / 9 and
+// the linear segment is the tangent at cut; it matches the table's e within 1.1e-5 and its f
+// within 1e-6.
+#define CE_ARRI_LOGC3_EI160_ARGS_ENC                                                            \
+  0.0809879059134549f, 0.381991f, 5.55555555555556f, 0.080216f, 0.00556112f, 5.84204251166616f, \
+      0.0927771127780049f
+#define CE_ARRI_LOGC3_EI160_ARGS_DEC                                                      \
+  12.3475226173723f, 0.381991f, 0.18f, 0.080216f, 0.125265412230482f, 0.171173009782635f, \
+      0.0927771127780049f
+#define CE_ARRI_LOGC3_EI200_ARGS_ENC                                                            \
+  0.0800760860565886f, 0.382478f, 5.55555555555556f, 0.076621f, 0.00620822f, 5.77626861238191f, \
+      0.0927824664668119f
+#define CE_ARRI_LOGC3_EI200_ARGS_DEC                                                      \
+  12.4881228497271f, 0.382478f, 0.18f, 0.076621f, 0.128642812791574f, 0.173122142875492f, \
+      0.0927824664668119f
+#define CE_ARRI_LOGC3_EI250_ARGS_ENC                                                            \
+  0.0791642661997224f, 0.382966f, 5.55555555555556f, 0.072941f, 0.00687062f, 5.71049471309767f, \
+      0.0927865741669621f
+#define CE_ARRI_LOGC3_EI250_ARGS_DEC                                                      \
+  12.6319619697745f, 0.382966f, 0.18f, 0.072941f, 0.132021213352665f, 0.175116176485793f, \
+      0.0927865741669621f
+#define CE_ARRI_LOGC3_EI320_ARGS_ENC                                                            \
+  0.0781555146842524f, 0.383508f, 5.55555555555556f, 0.068768f, 0.00762176f, 5.63772867265478f, \
+      0.0927914651137031f
+#define CE_ARRI_LOGC3_EI320_ARGS_DEC                                                      \
+  12.7950024261243f, 0.383508f, 0.18f, 0.068768f, 0.135760880001796f, 0.177376397138514f, \
+      0.0927914651137031f
+#define CE_ARRI_LOGC3_EI400_ARGS_ENC                                                            \
+  0.0772436948273862f, 0.383999f, 5.55555555555556f, 0.064901f, 0.00831782f, 5.57195477337053f, \
+      0.0927957637098513f
+#define CE_ARRI_LOGC3_EI400_ARGS_DEC                                                      \
+  12.9460404792218f, 0.383999f, 0.18f, 0.064901f, 0.139142280562888f, 0.179470229151751f, \
+      0.0927957637098513f
+#define CE_ARRI_LOGC3_EI500_ARGS_ENC                                                          \
+  0.07633187497052f, 0.384493f, 5.55555555555556f, 0.060939f, 0.00903098f, 5.50618087408628f, \
+      0.0928004717737241f
+#define CE_ARRI_LOGC3_EI500_ARGS_DEC                                                     \
+  13.1006869723324f, 0.384493f, 0.18f, 0.060939f, 0.14252668112398f, 0.181614084765413f, \
+      0.0928004717737241f
+#define CE_ARRI_LOGC3_EI640_ARGS_ENC                                                           \
+  0.0753234244850457f, 0.38504f, 5.55555555555556f, 0.056443f, 0.00984026f, 5.43343654836749f, \
+      0.0928039652011629f
+#define CE_ARRI_LOGC3_EI640_ARGS_DEC                                                    \
+  13.2760825312521f, 0.38504f, 0.18f, 0.056443f, 0.146270393530602f, 0.18404558350837f, \
+      0.0928039652011629f
+#define CE_ARRI_LOGC3_EI1000_ARGS_ENC                                                           \
+  0.0734997847713133f, 0.386036f, 5.55555555555556f, 0.047996f, 0.01136072f, 5.30188874979899f, \
+      0.0928139210951686f
+#define CE_ARRI_LOGC3_EI1000_ARGS_DEC                                                     \
+  13.6054820175514f, 0.386036f, 0.18f, 0.047996f, 0.153047194652785f, 0.188612030012495f, \
+      0.0928139210951686f
+#define CE_ARRI_LOGC3_EI1280_ARGS_ENC                                                         \
+  0.0724910332558433f, 0.38659f, 5.55555555555556f, 0.043137f, 0.01223534f, 5.2291227093561f, \
+      0.0928187670512231f
+#define CE_ARRI_LOGC3_EI1280_ARGS_DEC                                                    \
+  13.7948095796992f, 0.38659f, 0.18f, 0.043137f, 0.156798861301916f, 0.191236667330596f, \
+      0.0928187670512231f
+#define CE_ARRI_LOGC3_EI1600_ARGS_ENC                                                          \
+  0.0715792133989771f, 0.387093f, 5.55555555555556f, 0.038625f, 0.0130475f, 5.16334881007186f, \
+      0.0928234682635954f
+#define CE_ARRI_LOGC3_EI1600_ARGS_DEC                                                    \
+  13.970536312352f, 0.387093f, 0.18f, 0.038625f, 0.160192261863008f, 0.193672757116342f, \
+      0.0928234682635954f
+
 // ARRI LogC4 ("ARRI LogC4 Logarithmic Color Space Specification", ARRI 2022), OCIO 2.5.1
 // builtin ARRI_LOGC4_to_ACES2065-1 parameters (base 2).
 #define CE_ARRI_LOGC4_ARGS_ENC                                                              \
@@ -256,6 +337,33 @@ CE_INLINE float CeLogCameraDecode(float y, float inv_k, float log_offset, float 
   12.9427633661764f, 0.58455504907396f, 1.01091791346543f, 0.0108f, 0.138583970393138f, \
       0.165956278135242f, 0.0929045490709614f
 
+// Kodak Cineon printing density ("Grayscale Transformations of Cineon Digital Film Data", Kodak
+// v1.1: 0.002 density per 10-bit code value, negative gamma 0.6), with black at code 95 and
+// linear 1.0 at code 685 as in the OCIO 2.5.1 builtin RED_REDLOGFILM-RWG_to_ACES2065-1:
+// (685 + 300 * log10(x * (1 - b) + b)) / 1023, b = 10^((95 - 685) / 300). The curve has no
+// linear segment; below code value 0 it continues on its tangent there.
+#define CE_CINEON_ARGS_ENC                                                          \
+  0.0882785911038068f, 0.669599217986315f, 0.989202248376723f, 0.0107977516232771f, \
+      -0.00565081943945688f, 24.1906958133749f, 0.136697254156207f
+#define CE_CINEON_ARGS_DEC                                                             \
+  11.3277748035659f, 0.669599217986315f, 1.01091561573075f, 0.0107977516232771f, 0.0f, \
+      0.041338207371741f, 0.136697254156207f
+
+// Leica L-Log ("L-Log Reference Manual" V1.9, Leica Camera 2026, sections 4.1 and 4.2):
+// 0.27 * log10(1.3 * x + 0.0115) + 0.6 above 0.006, 8 * x + 0.09 below; the decode switches
+// at 0.138.
+#define CE_LEICA_LLOG_ARGS_ENC 0.0812780988292749f, 0.6f, 1.3f, 0.0115f, 0.006f, 8.0f, 0.09f
+#define CE_LEICA_LLOG_ARGS_DEC \
+  12.3034373884717f, 0.6f, 0.769230769230769f, 0.0115f, 0.138f, 0.125f, 0.09f
+
+// Kinefinity KineLOG3 ("KineLOG3 Technical Specifications", Kinefinity 2025):
+// log10(a * x + 1) * b * c + d above cut, (x - cut) / s below; the decode switches at 0.
+// a 66.64, b 0.296, c 0.907136, d 0.092864, cut -0.008239, s 0.017178.
+#define CE_KINEFINITY_KINELOG3_ARGS_ENC \
+  0.0808302432594058f, 0.092864f, 66.64f, 1.0f, -0.008239f, 58.2139946443125f, 0.479625101874491f
+#define CE_KINEFINITY_KINELOG3_ARGS_DEC \
+  12.3716069589291f, 0.092864f, 0.0150060024009604f, 1.0f, 0.0f, 0.017178f, 0.479625101874491f
+
 // ---------------------------------------------------------------------------------------------
 // Camera curves with their own segment forms
 // ---------------------------------------------------------------------------------------------
@@ -313,6 +421,53 @@ CE_INLINE float CeCanonClog3Decode(float y) {
     v = (CE_POW(10.0f, (y - 0.12240537f) / CE_CANON_CLOG3_SLOPE) - 1.0f) / CE_CANON_CLOG3_GAIN;
   }
   return v * 0.9f;
+}
+
+// Canon Log ("Canon-Log Transfer Characteristic", L. Thorpe, Canon U.S.A. 2012-06-20):
+// 0.529136 * log10(10.1596 * x + 1) + 0.0730597 with x relative to 90% reflectance white, in
+// legal-range code values; here as full-range 10-bit code values (64 + 876 * y) / 1023. Below 0
+// the curve is mirrored about its black level, like Canon Log 2 and Canon's input transforms.
+#define CE_CANON_CLOG_SLOPE  0.453101794721408f
+#define CE_CANON_CLOG_OFFSET 0.125122480156403f
+#define CE_CANON_CLOG_GAIN   10.1596f
+
+CE_INLINE float CeCanonClogEncode(float x) {
+  const float v = x / 0.9f;
+  if (v < 0.0f) {
+    return -CE_CANON_CLOG_SLOPE * (CE_LOG2(1.0f - CE_CANON_CLOG_GAIN * v) / CE_LOG2(10.0f)) +
+           CE_CANON_CLOG_OFFSET;
+  }
+  return CE_CANON_CLOG_SLOPE * (CE_LOG2(CE_CANON_CLOG_GAIN * v + 1.0f) / CE_LOG2(10.0f)) +
+         CE_CANON_CLOG_OFFSET;
+}
+
+CE_INLINE float CeCanonClogDecode(float y) {
+  float v;
+  if (y < CE_CANON_CLOG_OFFSET) {
+    v = -(CE_POW(10.0f, (CE_CANON_CLOG_OFFSET - y) / CE_CANON_CLOG_SLOPE) - 1.0f) /
+        CE_CANON_CLOG_GAIN;
+  } else {
+    v = (CE_POW(10.0f, (y - CE_CANON_CLOG_OFFSET) / CE_CANON_CLOG_SLOPE) - 1.0f) /
+        CE_CANON_CLOG_GAIN;
+  }
+  return v * 0.9f;
+}
+
+// GoPro GP-Log2 (GoPro Labs "GP-Log2"): log(599 * L + 1) / log(600), mirrored about 0 below 0.
+// L is 0 at black and 1 at clipped white, and 18% grey is L = 0.0517, so scene reflectance x is
+// L * 0.18 / 0.0517.
+#define CE_GOPRO_GPLOG2_SCALE   0.287222222222222f
+#define CE_GOPRO_GPLOG2_LN_BASE 6.39692965521615f
+
+CE_INLINE float CeGoproGplog2Encode(float x) {
+  const float l = x * CE_GOPRO_GPLOG2_SCALE;
+  const float m = CeLog1p(599.0f * (l < 0.0f ? -l : l)) * (1.0f / CE_GOPRO_GPLOG2_LN_BASE);
+  return l < 0.0f ? -m : m;
+}
+
+CE_INLINE float CeGoproGplog2Decode(float y) {
+  const float l = CeExpm1((y < 0.0f ? -y : y) * CE_GOPRO_GPLOG2_LN_BASE) * (1.0f / 599.0f);
+  return (y < 0.0f ? -l : l) * (1.0f / CE_GOPRO_GPLOG2_SCALE);
 }
 
 // Apple Log ("Apple Log Profile White Paper", Apple 2023), as in the OCIO 2.5.1 builtin
@@ -516,6 +671,36 @@ CE_INLINE float CeEncode(int tf, float x) {
       return CeNikonNlogEncode(x);
     case CE_TF_DJI_DLOG:
       return CeLogCameraEncode(x, CE_DJI_DLOG_ARGS_ENC);
+    case CE_TF_CANON_CLOG:
+      return CeCanonClogEncode(x);
+    case CE_TF_CINEON:
+      return CeLogCameraEncode(x, CE_CINEON_ARGS_ENC);
+    case CE_TF_ARRI_LOGC3_EI160:
+      return CeLogCameraEncode(x, CE_ARRI_LOGC3_EI160_ARGS_ENC);
+    case CE_TF_ARRI_LOGC3_EI200:
+      return CeLogCameraEncode(x, CE_ARRI_LOGC3_EI200_ARGS_ENC);
+    case CE_TF_ARRI_LOGC3_EI250:
+      return CeLogCameraEncode(x, CE_ARRI_LOGC3_EI250_ARGS_ENC);
+    case CE_TF_ARRI_LOGC3_EI320:
+      return CeLogCameraEncode(x, CE_ARRI_LOGC3_EI320_ARGS_ENC);
+    case CE_TF_ARRI_LOGC3_EI400:
+      return CeLogCameraEncode(x, CE_ARRI_LOGC3_EI400_ARGS_ENC);
+    case CE_TF_ARRI_LOGC3_EI500:
+      return CeLogCameraEncode(x, CE_ARRI_LOGC3_EI500_ARGS_ENC);
+    case CE_TF_ARRI_LOGC3_EI640:
+      return CeLogCameraEncode(x, CE_ARRI_LOGC3_EI640_ARGS_ENC);
+    case CE_TF_ARRI_LOGC3_EI1000:
+      return CeLogCameraEncode(x, CE_ARRI_LOGC3_EI1000_ARGS_ENC);
+    case CE_TF_ARRI_LOGC3_EI1280:
+      return CeLogCameraEncode(x, CE_ARRI_LOGC3_EI1280_ARGS_ENC);
+    case CE_TF_ARRI_LOGC3_EI1600:
+      return CeLogCameraEncode(x, CE_ARRI_LOGC3_EI1600_ARGS_ENC);
+    case CE_TF_LEICA_LLOG:
+      return CeLogCameraEncode(x, CE_LEICA_LLOG_ARGS_ENC);
+    case CE_TF_KINEFINITY_KINELOG3:
+      return CeLogCameraEncode(x, CE_KINEFINITY_KINELOG3_ARGS_ENC);
+    case CE_TF_GOPRO_GPLOG2:
+      return CeGoproGplog2Encode(x);
     default:
       return x;
   }
@@ -572,6 +757,36 @@ CE_INLINE float CeDecode(int tf, float x) {
       return CeNikonNlogDecode(x);
     case CE_TF_DJI_DLOG:
       return CeLogCameraDecode(x, CE_DJI_DLOG_ARGS_DEC);
+    case CE_TF_CANON_CLOG:
+      return CeCanonClogDecode(x);
+    case CE_TF_CINEON:
+      return CeLogCameraDecode(x, CE_CINEON_ARGS_DEC);
+    case CE_TF_ARRI_LOGC3_EI160:
+      return CeLogCameraDecode(x, CE_ARRI_LOGC3_EI160_ARGS_DEC);
+    case CE_TF_ARRI_LOGC3_EI200:
+      return CeLogCameraDecode(x, CE_ARRI_LOGC3_EI200_ARGS_DEC);
+    case CE_TF_ARRI_LOGC3_EI250:
+      return CeLogCameraDecode(x, CE_ARRI_LOGC3_EI250_ARGS_DEC);
+    case CE_TF_ARRI_LOGC3_EI320:
+      return CeLogCameraDecode(x, CE_ARRI_LOGC3_EI320_ARGS_DEC);
+    case CE_TF_ARRI_LOGC3_EI400:
+      return CeLogCameraDecode(x, CE_ARRI_LOGC3_EI400_ARGS_DEC);
+    case CE_TF_ARRI_LOGC3_EI500:
+      return CeLogCameraDecode(x, CE_ARRI_LOGC3_EI500_ARGS_DEC);
+    case CE_TF_ARRI_LOGC3_EI640:
+      return CeLogCameraDecode(x, CE_ARRI_LOGC3_EI640_ARGS_DEC);
+    case CE_TF_ARRI_LOGC3_EI1000:
+      return CeLogCameraDecode(x, CE_ARRI_LOGC3_EI1000_ARGS_DEC);
+    case CE_TF_ARRI_LOGC3_EI1280:
+      return CeLogCameraDecode(x, CE_ARRI_LOGC3_EI1280_ARGS_DEC);
+    case CE_TF_ARRI_LOGC3_EI1600:
+      return CeLogCameraDecode(x, CE_ARRI_LOGC3_EI1600_ARGS_DEC);
+    case CE_TF_LEICA_LLOG:
+      return CeLogCameraDecode(x, CE_LEICA_LLOG_ARGS_DEC);
+    case CE_TF_KINEFINITY_KINELOG3:
+      return CeLogCameraDecode(x, CE_KINEFINITY_KINELOG3_ARGS_DEC);
+    case CE_TF_GOPRO_GPLOG2:
+      return CeGoproGplog2Decode(x);
     default:
       return x;
   }

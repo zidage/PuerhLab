@@ -122,7 +122,8 @@ auto DecodeAcescc(const LutRgb& acescc) -> LutRgb {
 /// True when the transfer function of scene encoding @p encoding returns every channel of
 /// @p linear through encode then decode. Apple Log clips below its R0, and the published F-Log
 /// constants leave a 1e-4 code step at the break, so a narrow linear band below 0.00089 decodes
-/// on the other side of it. Neither is a property of the bake.
+/// on the other side of it; Leica's L-Log has a 9e-4 step at 0.006 in the same way. None is a
+/// property of the bake.
 auto CurveReturnsLinear(const ColorEncoding& encoding, const LutRgb& linear) -> bool {
   const int tf = static_cast<int>(encoding.transfer_);
   return std::all_of(linear.begin(), linear.end(), [tf](float x) {
@@ -147,16 +148,24 @@ TEST(LutBakeTest, IdentityLutIsNoOpForEveryEqualSceneEncodingPair) {
     const auto                  composite = BakeLmtCompositeTable(identity, encoding, encoding);
     const auto                  to_encoding =
         color::GamutConversionMatrix(color::ColorGamutId::Ap1, encoding.gamut_);
-    std::size_t represented = 0, within_span = 0;
+    std::size_t represented = 0, within_span = 0, low_in_gamut = 0, low_in_gamut_represented = 0;
     float       worst_within_span = 0.0f, worst = 0.0f;
     for (std::size_t b = 0; b < kEdge; ++b) {
       for (std::size_t g = 0; g < kEdge; ++g) {
         for (std::size_t r = 0; r < kEdge; ++r) {
-          const LutRgb node = NodeCode(r, g, b);
+          const LutRgb node             = NodeCode(r, g, b);
+          const LutRgb linear           = Multiply(to_encoding, DecodeAcescc(node));
+          // Nodes up to ACEScc 0.5 (about 4.6 stops above middle grey) inside the encoding's
+          // gamut. Colors outside a narrow gamut such as Rec.709 have negative linear values,
+          // which the curve may clip below its black: that is the gamut, not the curve's range.
+          const bool   low_and_in_gamut = std::max({node[0], node[1], node[2]}) <= 0.5f &&
+                                        std::min({linear[0], linear[1], linear[2]}) >= 0.0f;
+          if (low_and_in_gamut) ++low_in_gamut;
           // Outside the LUT domain the LUT clamps, as every 3D LUT does: no identity there.
           if (!InsideUnitCube(conversion.AcesccToLutInput(node))) continue;
-          if (!CurveReturnsLinear(encoding, Multiply(to_encoding, DecodeAcescc(node)))) continue;
+          if (!CurveReturnsLinear(encoding, linear)) continue;
           ++represented;
+          if (low_and_in_gamut) ++low_in_gamut_represented;
           const float error = MaxAbsDifference(CompositeNode(composite, r, g, b), node);
           worst             = std::max(worst, error);
           if (Span(node) <= kSceneFloatSpan) {
@@ -168,10 +177,14 @@ TEST(LutBakeTest, IdentityLutIsNoOpForEveryEqualSceneEncodingPair) {
     }
     std::cout << "[scene identity " << encoding.id_ << "] represented " << represented << ", worst "
               << worst << "; span <= " << kSceneFloatSpan << ": " << within_span << ", worst "
-              << worst_within_span << '\n';
-    // Every scene encoding represents at least the ACEScc range up to 0.5 (about 4.6 stops
-    // above middle grey) inside its unit cube.
-    EXPECT_GT(within_span, kEdge * kEdge * kEdge / 8);
+              << worst_within_span << "; in gamut up to 0.5: " << low_in_gamut_represented << " of "
+              << low_in_gamut << '\n';
+    // Every scene encoding represents the ACEScc range up to 0.5 inside its unit cube for the
+    // colors inside its gamut. The 1% allowance is the curves' own round-trip gaps
+    // (CurveReturnsLinear), not the bake.
+    EXPECT_GT(low_in_gamut, kEdge * kEdge * kEdge / 64);
+    EXPECT_GE(static_cast<double>(low_in_gamut_represented), 0.99 * low_in_gamut)
+        << low_in_gamut_represented << " of " << low_in_gamut;
     EXPECT_LE(worst_within_span, 1.0e-4f);
     EXPECT_LE(worst, kSceneFloatLimitError);
   }

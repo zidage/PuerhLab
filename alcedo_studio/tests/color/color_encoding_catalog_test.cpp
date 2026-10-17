@@ -125,16 +125,21 @@ auto NLogFormula(double y) -> double {
 auto DLogFormula(double x) -> double {
   return x <= 0.0078 ? 6.025 * x + 0.0929 : 0.256663 * std::log10(0.9892 * x + 0.0108) + 0.584555;
 }
+auto LLogFormula(double x) -> double {
+  return x <= 0.006 ? 8.0 * x + 0.09 : 0.27 * std::log10(1.3 * x + 0.0115) + 0.6;
+}
 
 // Fujifilm "F-Log Data Sheet" Ver.1.2 and "F-Log2 Data Sheet" Ver.1.1, section 2-2; Nikon
 // "N-Log Specification Document" 1.0.0 gives only the formula, and Nikon's N-Log technical guide
 // places 18% grey at 10-bit code 372 (0% and 90% are the formula's values); DJI "White Paper on
-// D-Log and D-Gamut" (2017), 18% at 408 and 90% at 586.
-const std::array<VendorCase, 4> kVendorCases = {{
+// D-Log and D-Gamut" (2017), 18% at 408 and 90% at 586; Leica "L-Log Reference Manual" V1.9,
+// Table 1.
+const std::array<VendorCase, 5> kVendorCases = {{
     {"Fujifilm F-Log", CE_TF_FUJIFILM_FLOG, {95, 470, 705}, &FLogFormula},
     {"Fujifilm F-Log2", CE_TF_FUJIFILM_FLOG2, {95, 400, 570}, &FLog2Formula},
     {"Nikon N-Log", CE_TF_NIKON_NLOG, {127, 372, 603}, &NLogFormula},
     {"DJI D-Log", CE_TF_DJI_DLOG, {95, 408, 586}, &DLogFormula},
+    {"Leica L-Log", CE_TF_LEICA_LLOG, {92, 445, 634}, &LLogFormula},
 }};
 
 TEST(ColorEncodingCatalog, CurvesWithoutOcioBuiltinMatchVendorCodeValues) {
@@ -149,6 +154,105 @@ TEST(ColorEncodingCatalog, CurvesWithoutOcioBuiltinMatchVendorCodeValues) {
       EXPECT_EQ(static_cast<int>(std::lround(code * 1023.0f)), c.code_10bit_[i]) << kReflectance[i];
     }
   }
+}
+
+TEST(ColorEncodingCatalog, CanonLogMatchesThorpeFormulaAnd8BitCodeValues) {
+  // "Canon-Log Transfer Characteristic" (Canon U.S.A. 2012), figure 9: the formula in legal-range
+  // code values with x relative to 90% white, and 8-bit codes 32, 88 and 153 at 0%, 18% and 90%.
+  constexpr std::array<double, 3> kReflectance = {0.0, 0.18, 0.90};
+  constexpr std::array<int, 3>    kCode8Bit    = {32, 88, 153};
+  for (std::size_t i = 0; i < kReflectance.size(); ++i) {
+    const double ire  = 0.529136 * std::log10(10.1596 * kReflectance[i] / 0.9 + 1.0) + 0.0730597;
+    const float  code = CeEncode(CE_TF_CANON_CLOG, static_cast<float>(kReflectance[i]));
+    EXPECT_NEAR(code, (64.0 + 876.0 * ire) / 1023.0, 1.0 / 4096.0) << kReflectance[i];
+    EXPECT_EQ(static_cast<int>(std::lround(code * 1023.0f / 4.0f)), kCode8Bit[i])
+        << kReflectance[i];
+  }
+}
+
+TEST(ColorEncodingCatalog, CineonMatchesOcioRedLogFilmInputTransformOnNeutralCodeValues) {
+  // RED_REDLOGFILM-RWG_to_ACES2065-1 is the Cineon curve then REDWideGamutRGB to AP0. A neutral
+  // stays neutral through the matrix, so the curve is the output over the matrix row sum.
+  const auto   processor = BuiltinProcessor("RED_REDLOGFILM-RWG_to_ACES2065-1");
+  const auto   matrix    = GamutConversionMatrix(ColorGamutId::RedWideGamutRgb, ColorGamutId::Ap0);
+  const double row_sum   = matrix[3] + matrix[4] + matrix[5];
+  float        worst = 0.0f, worst_at = 0.0f;
+  for (const float code : CodeValues()) {
+    const float ours  = static_cast<float>(CeDecode(CE_TF_CINEON, code) * row_sum);
+    const float ocio  = ApplyGrey(processor, code);
+    const float error = std::abs(ours - ocio) / std::fmax(std::abs(ocio), 1e-2f);
+    if (error > worst) {
+      worst    = error;
+      worst_at = code;
+    }
+  }
+  EXPECT_LE(worst, 1e-5f) << "worst at code value " << worst_at;
+  // Black at code 95 and linear 1.0 at code 685.
+  EXPECT_NEAR(CeEncode(CE_TF_CINEON, 0.0f) * 1023.0f, 95.0f, 1e-3f);
+  EXPECT_NEAR(CeEncode(CE_TF_CINEON, 1.0f) * 1023.0f, 685.0f, 1e-3f);
+}
+
+TEST(ColorEncodingCatalog, ArriLogC3MatchesTheDocumentParametersAtEveryExposureIndex) {
+  // "ALEXA Log C Curve - Usage in VFX" (ARRI 2017), SUP 3.x "Linear Scene Exposure Factor"
+  // table: b, c, d, e, f per EI; a is 5.555556 and cut is where a * x + b = 1 / 9.
+  struct ArriEi {
+    int    transfer_;
+    double b_, c_, d_, e_, f_;
+  };
+  constexpr std::array<ArriEi, 11> kTable = {{
+      {CE_TF_ARRI_LOGC3_EI160, 0.080216, 0.269036, 0.381991, 5.842037, 0.092778},
+      {CE_TF_ARRI_LOGC3_EI200, 0.076621, 0.266007, 0.382478, 5.776265, 0.092782},
+      {CE_TF_ARRI_LOGC3_EI250, 0.072941, 0.262978, 0.382966, 5.710494, 0.092786},
+      {CE_TF_ARRI_LOGC3_EI320, 0.068768, 0.259627, 0.383508, 5.637732, 0.092791},
+      {CE_TF_ARRI_LOGC3_EI400, 0.064901, 0.256598, 0.383999, 5.571960, 0.092795},
+      {CE_TF_ARRI_LOGC3_EI500, 0.060939, 0.253569, 0.384493, 5.506188, 0.092800},
+      {CE_TF_ARRI_LOGC3_EI640, 0.056443, 0.250219, 0.385040, 5.433426, 0.092805},
+      {CE_TF_ARRI_LOGC3_EI800, 0.052272, 0.247190, 0.385537, 5.367655, 0.092809},
+      {CE_TF_ARRI_LOGC3_EI1000, 0.047996, 0.244161, 0.386036, 5.301883, 0.092814},
+      {CE_TF_ARRI_LOGC3_EI1280, 0.043137, 0.240810, 0.386590, 5.229121, 0.092819},
+      {CE_TF_ARRI_LOGC3_EI1600, 0.038625, 0.237781, 0.387093, 5.163350, 0.092824},
+  }};
+  for (const auto& ei : kTable) {
+    SCOPED_TRACE(ei.transfer_);
+    const double a     = 5.555556;
+    const double cut   = (1.0 / 9.0 - ei.b_) / a;
+    float        worst = 0.0f;
+    for (const float x : color_encoding_test::LinearValues()) {
+      const double expected =
+          x > cut ? ei.c_ * std::log10(a * x + ei.b_) + ei.d_ : ei.e_ * x + ei.f_;
+      worst = std::fmax(worst, static_cast<float>(std::abs(CeEncode(ei.transfer_, x) - expected)));
+    }
+    // The table rounds to 6 decimals; its e is the tangent at cut within 1.1e-5.
+    EXPECT_LE(worst, 2e-6f);
+  }
+}
+
+TEST(ColorEncodingCatalog, KineLog3MatchesKinefinityFormulaAndReferenceIre) {
+  // "KineLOG3 Technical Specifications" (Kinefinity 2025): 18% grey at IRE 39.2, 90% at 57.2.
+  const auto formula = [](double x) {
+    return x >= -0.008239 ? std::log10(66.64 * x + 1.0) * 0.296 * 0.907136 + 0.092864
+                          : (x + 0.008239) / 0.017178;
+  };
+  for (const double x : {-0.02, -0.005, 0.0, 0.01, 0.18, 0.9, 10.0}) {
+    EXPECT_NEAR(CeEncode(CE_TF_KINEFINITY_KINELOG3, static_cast<float>(x)), formula(x), 1e-6) << x;
+  }
+  EXPECT_NEAR(CeEncode(CE_TF_KINEFINITY_KINELOG3, 0.18f) * 100.0f, 39.2f, 0.05f);
+  EXPECT_NEAR(CeEncode(CE_TF_KINEFINITY_KINELOG3, 0.90f) * 100.0f, 57.2f, 0.05f);
+}
+
+TEST(ColorEncodingCatalog, GpLog2MatchesGoProFormulaAndMirrorsBelowZero) {
+  // GoPro Labs "GP-Log2": log(599 * L + 1) / log(600) with 18% grey at L = 0.0517, about code
+  // value 554 of 1023, mirrored about 0 for negative values.
+  for (const double x : {0.0, 0.01, 0.18, 1.0, 3.0}) {
+    const double l = x * 0.0517 / 0.18;
+    EXPECT_NEAR(CeEncode(CE_TF_GOPRO_GPLOG2, static_cast<float>(x)),
+                std::log(599.0 * l + 1.0) / std::log(600.0), 1e-6)
+        << x;
+    EXPECT_EQ(CeEncode(CE_TF_GOPRO_GPLOG2, static_cast<float>(-x)),
+              -CeEncode(CE_TF_GOPRO_GPLOG2, static_cast<float>(x)))
+        << x;
+  }
+  EXPECT_EQ(std::lround(CeEncode(CE_TF_GOPRO_GPLOG2, 0.18f) * 1023.0f), 554);
 }
 
 TEST(ColorEncodingCatalog, HlgMatchesBt2100InverseOetfOn4096CodeValues) {
@@ -252,6 +356,27 @@ TEST(ColorEncodingCatalog, Rec2020ToAp0MatrixMatchesOcioAppleLogInputTransform) 
   }
 }
 
+TEST(ColorEncodingCatalog, FGamutCToAp0MatrixMatchesFujifilmInputTransform) {
+  // FUJIFILM_IDT_F-Log2C_Ver.1.10.ctl (Fujifilm 2026): F-Gamut C to AP0 with CAT02.
+  constexpr Matrix33d kFujifilm = {0.84089501562825,  0.02752756409115,  0.13157742028060,
+                                   0.00092026357010,  1.00739011387088,  -0.00831037744099,
+                                   -0.00055982840886, -0.00077644453594, 1.00133627294480};
+  const auto          ours      = GamutConversionMatrix(ColorGamutId::FGamutC, ColorGamutId::Ap0);
+  for (std::size_t i = 0; i < 9; ++i) {
+    EXPECT_NEAR(ours[i], kFujifilm[i], 1e-6) << i;
+  }
+}
+
+TEST(ColorEncodingCatalog, KinefinityWideGamutToXyzMatchesKinefinityMatrix) {
+  // "KineLOG3 Technical Specifications" (Kinefinity 2025), to 4 decimals.
+  constexpr Matrix33d kKinefinity = {0.6879,  0.1979, 0.0646,  0.2073, 1.0622,
+                                     -0.2696, 0.0134, -0.3349, 1.4106};
+  const auto          ours        = RgbToXyzMatrix(ColorGamutId::KinefinityWideGamut);
+  for (std::size_t i = 0; i < 9; ++i) {
+    EXPECT_NEAR(ours[i], kKinefinity[i], 5e-5) << i;
+  }
+}
+
 TEST(ColorEncodingCatalog, CieXyzRgbToXyzIsTheIdentity) {
   const auto m = RgbToXyzMatrix(ColorGamutId::CieXyz);
   for (std::size_t i = 0; i < 9; ++i) {
@@ -283,7 +408,7 @@ TEST(ColorEncodingCatalog, EncodingIdsAreUniqueLowerCaseAndFoundById) {
       EXPECT_EQ(encoding.peak_luminance_nits_, 0.0f);
     }
   }
-  EXPECT_EQ(ids.size(), 26u);
+  EXPECT_EQ(ids.size(), 50u);
   ASSERT_NE(FindColorEncoding(kDefaultColorEncodingId), nullptr);
   EXPECT_EQ(FindColorEncoding(kDefaultColorEncodingId)->transfer_, TransferFunctionId::Acescc);
   EXPECT_EQ(FindColorEncoding(kDefaultColorEncodingId)->gamut_, ColorGamutId::Ap1);

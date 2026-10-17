@@ -27,8 +27,12 @@ constexpr float                      kAcesX = 0.32168f, kAcesY = 0.33767f;
 // "S-Gamut3.Cine/S-Log3 Technical Summary"; Panasonic "V-Log/V-Gamut Reference Manual"; Canon
 // "Cinema Gamut" (Academy CSC.Canon); RED "REDWideGamutRGB and Log3G10" white paper;
 // Blackmagic "Generation 5 Color Science"; Blackmagic "DaVinci Wide Gamut Intermediate"; DJI
-// "D-Log and D-Gamut" white paper.
-constexpr std::array<ColorGamut, 22> kGamuts = {{
+// "D-Log and D-Gamut" white paper; Fujifilm "F-Log2 C Data Sheet" Ver.1.0 (F-Gamut C; Fujifilm's
+// F-Log2 C input transform Ver.1.10 adapts it to ACES with CAT02); Apple Wide Gamut from the
+// "Apple Log 2 White Paper" as in the OCIO 2.6.0 builtin APPLE_LOG-APPLEWG_to_ACES2065-1
+// (Bradford); Kinefinity "KineLOG3 Technical Specifications" (Kinefinity Wide Gamut, no stated
+// adaptation).
+constexpr std::array<ColorGamut, 25> kGamuts = {{
     {ColorGamutId::Ap0,
      "ACES AP0",
      {0.7347f, 0.2653f, 0.0f, 1.0f, 0.0001f, -0.0770f, kAcesX, kAcesY},
@@ -118,6 +122,18 @@ constexpr std::array<ColorGamut, 22> kGamuts = {{
      "D-Gamut",
      {0.71f, 0.31f, 0.21f, 0.88f, 0.09f, -0.08f, kD65X, kD65Y},
      ChromaticAdaptation::Cat02},
+    {ColorGamutId::FGamutC,
+     "F-Gamut C",
+     {0.7347f, 0.2653f, 0.0263f, 0.9737f, 0.1173f, -0.0224f, kD65X, kD65Y},
+     ChromaticAdaptation::Cat02},
+    {ColorGamutId::AppleWideGamut,
+     "Apple Wide Gamut",
+     {0.725f, 0.301f, 0.221f, 0.814f, 0.068f, -0.076f, kD65X, kD65Y},
+     ChromaticAdaptation::Bradford},
+    {ColorGamutId::KinefinityWideGamut,
+     "Kinefinity Wide Gamut",
+     {0.7571f, 0.2282f, 0.2139f, 1.1480f, 0.0536f, -0.2236f, kD65X, kD65Y},
+     ChromaticAdaptation::Cat02},
 }};
 
 constexpr bool                       GamutsAreInIdOrder() {
@@ -135,12 +151,37 @@ using T                                            = TransferFunctionId;
 using CR                                           = ColorReferral;
 
 // F-Gamut (Fujifilm F-Log/F-Log2 data sheets, section 3) and the N-Log gamut (Nikon N-Log
-// specification, section 3) have the ITU-R BT.2020 primaries and white.
-constexpr std::array<ColorEncoding, 26> kEncodings = {{
+// specification, section 3) have the ITU-R BT.2020 primaries and white. Apple Log 2 is the Apple
+// Log curve with Apple Wide Gamut, and F-Log2 C the F-Log2 curve with F-Gamut C. The Canon
+// cameras offer Canon Log, Canon Log 2 and Canon Log 3 with their BT.2020 and BT.709 gamut
+// settings; Leica records L-Log in BT.2020 (BT.709 on the SL Typ 601). Cineon has no primaries
+// of its own: REDLogFilm is Cineon with REDWideGamutRGB, and the Rec.709 and Rec.2020 pairs follow
+// grading software.
+constexpr std::array<ColorEncoding, 50> kEncodings = {{
     {"acescc", G::Ap1, T::Acescc, CR::SceneReferred, 0.0f, "ACEScc (AP1)"},
     {"acescct", G::Ap1, T::Acescct, CR::SceneReferred, 0.0f, "ACEScct (AP1)"},
+    {"arri_logc3_ei160_awg3", G::ArriWideGamut3, T::ArriLogC3Ei160, CR::SceneReferred, 0.0f,
+     "ARRI LogC3 (EI 160) / ARRI Wide Gamut 3"},
+    {"arri_logc3_ei200_awg3", G::ArriWideGamut3, T::ArriLogC3Ei200, CR::SceneReferred, 0.0f,
+     "ARRI LogC3 (EI 200) / ARRI Wide Gamut 3"},
+    {"arri_logc3_ei250_awg3", G::ArriWideGamut3, T::ArriLogC3Ei250, CR::SceneReferred, 0.0f,
+     "ARRI LogC3 (EI 250) / ARRI Wide Gamut 3"},
+    {"arri_logc3_ei320_awg3", G::ArriWideGamut3, T::ArriLogC3Ei320, CR::SceneReferred, 0.0f,
+     "ARRI LogC3 (EI 320) / ARRI Wide Gamut 3"},
+    {"arri_logc3_ei400_awg3", G::ArriWideGamut3, T::ArriLogC3Ei400, CR::SceneReferred, 0.0f,
+     "ARRI LogC3 (EI 400) / ARRI Wide Gamut 3"},
+    {"arri_logc3_ei500_awg3", G::ArriWideGamut3, T::ArriLogC3Ei500, CR::SceneReferred, 0.0f,
+     "ARRI LogC3 (EI 500) / ARRI Wide Gamut 3"},
+    {"arri_logc3_ei640_awg3", G::ArriWideGamut3, T::ArriLogC3Ei640, CR::SceneReferred, 0.0f,
+     "ARRI LogC3 (EI 640) / ARRI Wide Gamut 3"},
     {"arri_logc3_awg3", G::ArriWideGamut3, T::ArriLogC3Ei800, CR::SceneReferred, 0.0f,
      "ARRI LogC3 (EI 800) / ARRI Wide Gamut 3"},
+    {"arri_logc3_ei1000_awg3", G::ArriWideGamut3, T::ArriLogC3Ei1000, CR::SceneReferred, 0.0f,
+     "ARRI LogC3 (EI 1000) / ARRI Wide Gamut 3"},
+    {"arri_logc3_ei1280_awg3", G::ArriWideGamut3, T::ArriLogC3Ei1280, CR::SceneReferred, 0.0f,
+     "ARRI LogC3 (EI 1280) / ARRI Wide Gamut 3"},
+    {"arri_logc3_ei1600_awg3", G::ArriWideGamut3, T::ArriLogC3Ei1600, CR::SceneReferred, 0.0f,
+     "ARRI LogC3 (EI 1600) / ARRI Wide Gamut 3"},
     {"arri_logc4_awg4", G::ArriWideGamut4, T::ArriLogC4, CR::SceneReferred, 0.0f,
      "ARRI LogC4 / ARRI Wide Gamut 4"},
     {"sony_slog3_sgamut3cine", G::SGamut3Cine, T::SonySLog3, CR::SceneReferred, 0.0f,
@@ -151,22 +192,48 @@ constexpr std::array<ColorEncoding, 26> kEncodings = {{
      "Fujifilm F-Log / F-Gamut"},
     {"fujifilm_flog2_fgamut", G::Rec2020, T::FujifilmFLog2, CR::SceneReferred, 0.0f,
      "Fujifilm F-Log2 / F-Gamut"},
+    {"fujifilm_flog2c_fgamutc", G::FGamutC, T::FujifilmFLog2, CR::SceneReferred, 0.0f,
+     "Fujifilm F-Log2 C / F-Gamut C"},
     {"panasonic_vlog_vgamut", G::VGamut, T::PanasonicVLog, CR::SceneReferred, 0.0f,
      "Panasonic V-Log / V-Gamut"},
+    {"canon_clog_rec2020", G::Rec2020, T::CanonCLog, CR::SceneReferred, 0.0f,
+     "Canon Log / Rec.2020"},
+    {"canon_clog_rec709", G::Rec709, T::CanonCLog, CR::SceneReferred, 0.0f, "Canon Log / Rec.709"},
     {"canon_clog2_cinemagamut", G::CinemaGamut, T::CanonCLog2, CR::SceneReferred, 0.0f,
      "Canon Log 2 / Cinema Gamut"},
+    {"canon_clog2_rec2020", G::Rec2020, T::CanonCLog2, CR::SceneReferred, 0.0f,
+     "Canon Log 2 / Rec.2020"},
     {"canon_clog3_cinemagamut", G::CinemaGamut, T::CanonCLog3, CR::SceneReferred, 0.0f,
      "Canon Log 3 / Cinema Gamut"},
+    {"canon_clog3_rec2020", G::Rec2020, T::CanonCLog3, CR::SceneReferred, 0.0f,
+     "Canon Log 3 / Rec.2020"},
+    {"canon_clog3_rec709", G::Rec709, T::CanonCLog3, CR::SceneReferred, 0.0f,
+     "Canon Log 3 / Rec.709"},
     {"red_log3g10_rwg", G::RedWideGamutRgb, T::RedLog3G10, CR::SceneReferred, 0.0f,
      "RED Log3G10 / REDWideGamutRGB"},
+    {"red_logfilm_rwg", G::RedWideGamutRgb, T::Cineon, CR::SceneReferred, 0.0f,
+     "RED REDLogFilm / REDWideGamutRGB"},
     {"blackmagic_film_gen5_bmdwg", G::BlackmagicWideGamutGen5, T::BlackmagicFilmGen5,
      CR::SceneReferred, 0.0f, "Blackmagic Film Gen 5 / Blackmagic Wide Gamut Gen 5"},
     {"davinci_intermediate_dwg", G::DaVinciWideGamut, T::DaVinciIntermediate, CR::SceneReferred,
      0.0f, "DaVinci Intermediate / DaVinci Wide Gamut"},
     {"apple_log_rec2020", G::Rec2020, T::AppleLog, CR::SceneReferred, 0.0f, "Apple Log / Rec.2020"},
+    {"apple_log2_applewg", G::AppleWideGamut, T::AppleLog, CR::SceneReferred, 0.0f,
+     "Apple Log 2 / Apple Wide Gamut"},
     {"nikon_nlog_rec2020", G::Rec2020, T::NikonNLog, CR::SceneReferred, 0.0f,
      "Nikon N-Log / Rec.2020"},
     {"dji_dlog_dgamut", G::DGamut, T::DjiDLog, CR::SceneReferred, 0.0f, "DJI D-Log / D-Gamut"},
+    {"leica_llog_rec2020", G::Rec2020, T::LeicaLLog, CR::SceneReferred, 0.0f,
+     "Leica L-Log / Rec.2020"},
+    {"leica_llog_rec709", G::Rec709, T::LeicaLLog, CR::SceneReferred, 0.0f,
+     "Leica L-Log / Rec.709"},
+    {"kinefinity_kinelog3_kwg", G::KinefinityWideGamut, T::KinefinityKineLog3, CR::SceneReferred,
+     0.0f, "Kinefinity KineLOG3 / Kinefinity Wide Gamut"},
+    {"gopro_gplog2_rec2020", G::Rec2020, T::GoproGpLog2, CR::SceneReferred, 0.0f,
+     "GoPro GP-Log2 / Rec.2020"},
+    {"cineon_rec709", G::Rec709, T::Cineon, CR::SceneReferred, 0.0f, "Cineon Film Log / Rec.709"},
+    {"cineon_rec2020", G::Rec2020, T::Cineon, CR::SceneReferred, 0.0f,
+     "Cineon Film Log / Rec.2020"},
     {"rec709_bt1886", G::Rec709, T::Bt1886, CR::DisplayReferred, 100.0f, "Rec.709 BT.1886"},
     {"rec709_srgb", G::Rec709, T::Srgb, CR::DisplayReferred, 100.0f, "Rec.709 sRGB"},
     {"rec709_gamma22", G::Rec709, T::Gamma22, CR::DisplayReferred, 100.0f, "Rec.709 Gamma 2.2"},
