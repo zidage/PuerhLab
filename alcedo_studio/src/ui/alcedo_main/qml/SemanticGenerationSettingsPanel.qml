@@ -264,6 +264,7 @@ ColumnLayout {
         property bool enabled: panel.hasController
         readonly property var entries: [
             { value: 0, label: qsTr("Unload after use") },
+            { value: 30, label: qsTr("30 seconds") },
             { value: 60, label: qsTr("1 minute") },
             { value: 300, label: qsTr("5 minutes") },
             { value: 900, label: qsTr("15 minutes") },
@@ -271,12 +272,12 @@ ColumnLayout {
         ]
         property int currentIndex: {
             const seconds = panel.hasController ? panel.semanticController.sidecarIdleStopSeconds
-                                                : 300
+                                                : 30
             for (let i = 0; i < entries.length; ++i) {
                 if (entries[i].value === seconds)
                     return i
             }
-            return 2
+            return 1
         }
         function selectIndex(index) {
             if (panel.hasController && index >= 0 && index < entries.length)

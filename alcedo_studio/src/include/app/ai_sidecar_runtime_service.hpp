@@ -103,10 +103,11 @@ class AiSidecarRuntimeService final : public QObject {
   ~AiSidecarRuntimeService() override;
 
   auto               StartAndWait(const AiSidecarRuntimeOptions& options) -> bool;
-  // Starts the sidecar on the service's own (UI) thread but pumps the Qt event
-  // loop (excluding socket notifiers) between readiness polls so the UI stays
-  // responsive during a cold boot. MUST be called on the service's thread — the
-  // nested event processing is only valid there. Checkpoints
+  // Starts the sidecar on the service's own (UI) thread and keeps its Qt event
+  // loop running for the whole readiness wait: the poll interval runs a local
+  // event loop, and the blocking Ping/GetModelInfo probe runs on a helper thread
+  // while the event loop runs, so animations do not stutter during a cold boot.
+  // Calls from other threads are queued to the service's thread. Checkpoints
   // RequestCancelStart() each poll and aborts the boot (terminating the
   // process, returning to kStopped) if cancellation is requested. Emits
   // statusChanged() for each state transition, exactly like StartAndWait.

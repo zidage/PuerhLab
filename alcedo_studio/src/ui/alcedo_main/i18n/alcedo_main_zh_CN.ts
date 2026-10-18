@@ -6282,6 +6282,10 @@ Create a new layer above it and draw the Mask there?</source>
         <translation>用后卸载</translation>
     </message>
     <message>
+        <source>30 seconds</source>
+        <translation>30 秒</translation>
+    </message>
+    <message>
         <source>1 minute</source>
         <translation>1 分钟</translation>
     </message>

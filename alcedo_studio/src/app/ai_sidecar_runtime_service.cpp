@@ -225,6 +225,50 @@ auto AddWindowsUserProxyEnvironment(QProcessEnvironment env) -> QProcessEnvironm
 }
 #endif
 
+/// Result of one readiness poll: Ping, then GetModelInfo when Ping succeeds.
+struct ReadinessProbe {
+  bool                      ping_ok_       = false;
+  bool                      model_info_ok_ = false;
+  std::string               ping_error_;
+  AiSidecarRuntimeModelInfo model_info_;
+  std::string               model_info_error_;
+};
+
+auto RunReadinessProbe(const std::shared_ptr<sidecar_client::Client>& client,
+                       std::chrono::milliseconds ping_timeout) -> ReadinessProbe {
+  ReadinessProbe probe;
+  probe.ping_ok_ = client->runtime().Ping(ping_timeout, &probe.ping_error_);
+  if (probe.ping_ok_) {
+    probe.model_info_ok_ = client->semantic().GetModelInfo(
+        std::chrono::milliseconds(500), &probe.model_info_, &probe.model_info_error_);
+  }
+  return probe;
+}
+
+/// Runs the event loop of the current thread for @p duration.
+void PumpEventsFor(std::chrono::milliseconds duration) {
+  QEventLoop loop;
+  QTimer::singleShot(duration, &loop, &QEventLoop::quit);
+  loop.exec();
+}
+
+/// Runs the readiness probe on a helper thread while the event loop of the current thread runs,
+/// so the blocking gRPC calls (up to ping_timeout + 500 ms while the process boots or loads the
+/// model) do not stop the UI. The helper holds its own reference to @p client.
+auto RunProbeWhilePumpingEvents(std::shared_ptr<sidecar_client::Client> client,
+                                std::chrono::milliseconds ping_timeout) -> ReadinessProbe {
+  ReadinessProbe probe;
+  QEventLoop     loop;
+  std::thread    helper([&probe, &loop, client = std::move(client), ping_timeout]() {
+    probe = RunReadinessProbe(client, ping_timeout);
+    // Queued: the quit runs inside loop.exec(), even when the probe ends before exec starts.
+    QMetaObject::invokeMethod(&loop, &QEventLoop::quit, Qt::QueuedConnection);
+  });
+  loop.exec();
+  helper.join();
+  return probe;
+}
+
 }  // namespace
 
 auto ToString(AiSidecarRuntimeState state) -> const char* {
@@ -802,15 +846,36 @@ auto AiSidecarRuntimeService::WaitForReadiness(bool terminate_on_timeout, bool i
   const auto  deadline = std::chrono::steady_clock::now() + options_.startup_timeout;
   std::string last_error;
   while (std::chrono::steady_clock::now() < deadline) {
-    process_.waitForReadyRead(static_cast<int>(options_.health_poll_interval.count()));
+    if (interactive) {
+      // The event loop runs during the poll interval, so the process pipes drain through
+      // their notifiers and the UI keeps painting.
+      PumpEventsFor(options_.health_poll_interval);
+    } else {
+      process_.waitForReadyRead(static_cast<int>(options_.health_poll_interval.count()));
+    }
     RefreshProcessExit();
     if (status_.state == AiSidecarRuntimeState::kFailed) {
       return false;
     }
-    if (client_ && client_->runtime().Ping(options_.health_poll_interval, &last_error)) {
-      AiSidecarRuntimeModelInfo info;
-      std::string               info_error;
-      if (client_->semantic().GetModelInfo(std::chrono::milliseconds(500), &info, &info_error)) {
+    if (interactive && process_.state() == QProcess::NotRunning) {
+      // A Stop() ran from the event loop above.
+      return false;
+    }
+    ReadinessProbe probe;
+    if (client_) {
+      probe = interactive ? RunProbeWhilePumpingEvents(client_, options_.health_poll_interval)
+                          : RunReadinessProbe(client_, options_.health_poll_interval);
+      if (interactive && process_.state() == QProcess::NotRunning) {
+        return false;
+      }
+      if (!probe.ping_ok_) {
+        last_error = probe.ping_error_;
+      }
+    }
+    if (probe.ping_ok_) {
+      const auto& info       = probe.model_info_;
+      const auto& info_error = probe.model_info_error_;
+      if (probe.model_info_ok_) {
         status_.model_info = info;
         SetStatus(AiSidecarRuntimeState::kReady, AiSidecarRuntimeIssue::kNone,
                   "Semantic runtime is ready");
@@ -850,13 +915,6 @@ auto AiSidecarRuntimeService::WaitForReadiness(bool terminate_on_timeout, bool i
                   "Semantic runtime start was cancelled");
         return false;
       }
-      // Pump the UI event loop between polls so the app stays responsive during
-      // a cold boot. Socket notifiers are excluded so the QProcess's own pipe
-      // readers don't race with this thread's blocking waitForReadyRead path
-      // (the readiness poll drains stdout/stderr itself via RefreshProcessExit).
-      // The 16ms budget is roughly one frame — enough to clear paints, timers,
-      // and a queued user input event each iteration without stalling the poll.
-      QCoreApplication::processEvents(QEventLoop::ExcludeSocketNotifiers, 16);
     } else {
       std::this_thread::sleep_for(options_.health_poll_interval);
     }
