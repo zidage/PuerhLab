@@ -541,5 +541,74 @@ TEST_F(EditorSessionRenderControllerTest, RefusalThatArrivesAfterRestoreRoutesOn
   EXPECT_EQ(sched->scheduled().size(), scheduled_before + 1u);
 }
 
+auto ExportRefusalMessage() -> std::string {
+  return std::string(kPresentationSuspendedMessage) + "an export is running";
+}
+
+TEST_F(EditorSessionRenderControllerTest, EditRefusedDuringExportRendersOnceWhenTheExportEnds) {
+  OpenImage();
+  PresentFirstFrame();
+  lifecycle_->MarkFirstFrameReady();
+  auto* sched = dynamic_cast<EditorSessionBootstrapSchedulerPort*>(scheduler_.get());
+  ASSERT_NE(sched, nullptr);
+
+  render_->SetSuspendedForExport(true, lifecycle_->identity(),
+                                 lifecycle_->active_image_load_request(), lifecycle_->state());
+  EXPECT_TRUE(render_->suspended_for_export());
+  EditorRenderCommand settled;
+  settled.reason = EditorRenderReason::SettledAdjustment;
+  const auto edit_request_id =
+      render_->RouteInitialRender(settled, lifecycle_->identity(),
+                                  lifecycle_->active_image_load_request());
+  ASSERT_NE(edit_request_id, 0u);
+  const auto scheduled_before = sched->scheduled().size();
+
+  // The port refused the frame because the export holds the GPU: no failure, no render until
+  // the export ends.
+  coordinator_->NotifySchedulerCompleted(edit_request_id, false, ExportRefusalMessage());
+  EXPECT_EQ(sched->scheduled().size(), scheduled_before);
+  EXPECT_EQ(coordinator_->diagnostics().failed_count, 0u);
+  EXPECT_FALSE(std::any_of(events_.begin(), events_.end(), [](const EditorRenderEvent& event) {
+    return event.kind == EditorRenderEventKind::RenderFailed;
+  }));
+
+  render_->SetSuspendedForExport(false, lifecycle_->identity(),
+                                 lifecycle_->active_image_load_request(), lifecycle_->state());
+  EXPECT_FALSE(render_->suspended_for_export());
+  ASSERT_EQ(sched->scheduled().size(), scheduled_before + 1u);
+  EXPECT_EQ(sched->scheduled().back().intent.frame_role, FrameRole::QualityBase);
+}
+
+TEST_F(EditorSessionRenderControllerTest, ExportEndWhileMinimizedWaitsForTheRestoreToRender) {
+  OpenImage();
+  PresentFirstFrame();
+  lifecycle_->MarkFirstFrameReady();
+  auto* sched = dynamic_cast<EditorSessionBootstrapSchedulerPort*>(scheduler_.get());
+  ASSERT_NE(sched, nullptr);
+
+  render_->SetPresentationSuspended(true, lifecycle_->identity(),
+                                    lifecycle_->active_image_load_request(), lifecycle_->state());
+  render_->SetSuspendedForExport(true, lifecycle_->identity(),
+                                 lifecycle_->active_image_load_request(), lifecycle_->state());
+  EditorRenderCommand settled;
+  settled.reason = EditorRenderReason::SettledAdjustment;
+  const auto edit_request_id =
+      render_->RouteInitialRender(settled, lifecycle_->identity(),
+                                  lifecycle_->active_image_load_request());
+  ASSERT_NE(edit_request_id, 0u);
+  coordinator_->NotifySchedulerCompleted(edit_request_id, false, ExportRefusalMessage());
+  const auto scheduled_before = sched->scheduled().size();
+
+  // The export ended, but the window is still minimized: the viewport would refuse the frame.
+  render_->SetSuspendedForExport(false, lifecycle_->identity(),
+                                 lifecycle_->active_image_load_request(), lifecycle_->state());
+  EXPECT_EQ(sched->scheduled().size(), scheduled_before);
+
+  render_->SetPresentationSuspended(false, lifecycle_->identity(),
+                                    lifecycle_->active_image_load_request(), lifecycle_->state());
+  ASSERT_EQ(sched->scheduled().size(), scheduled_before + 1u);
+  EXPECT_EQ(sched->scheduled().back().intent.frame_role, FrameRole::QualityBase);
+}
+
 }  // namespace
 }  // namespace alcedo

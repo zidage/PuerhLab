@@ -12,7 +12,9 @@
 #include <QVariantMap>
 #include <atomic>
 #include <filesystem>
+#include <functional>
 #include <memory>
+#include <string>
 #include <thread>
 #include <vector>
 
@@ -35,6 +37,20 @@ class ProjectModule;
 class SemanticGenerationController;
 class StatsEngine;
 class IUiStatusSink;
+
+/**
+ * @brief Return path of the GPU resources another renderer releases so an export can use them.
+ *
+ * `release_before_export` runs on the GUI thread after the export queue is built and before the
+ * export renders. It calls its completion once, on any thread, with the real error when the
+ * release failed. `resume_after_export` runs on the GUI thread once when that export ends:
+ * completed, every image failed, or the release failed.
+ */
+struct ExportGpuResourceRelease {
+  using ReleaseCompletion = std::function<void(bool success, std::string error)>;
+  std::function<void(ReleaseCompletion)> release_before_export;
+  std::function<void()>                  resume_after_export;
+};
 
 /// Handles file import and image export workflows.
 class ImportExportHandler final : public QObject {
@@ -88,6 +104,8 @@ class ImportExportHandler final : public QObject {
   /// The policy whose agent control refuses the user imports StartImport and
   /// StartFolderImportAsUser. Null refuses nothing.
   void                    SetInteractionPolicy(InteractionPolicyController* interaction_policy);
+  /// The editor GPU resources each export releases before it renders. Empty releases nothing.
+  void                    SetExportGpuResourceRelease(ExportGpuResourceRelease release);
 
   /// The user import of the Import dialog and file drop. Refused while an automation agent holds
   /// control.
@@ -249,6 +267,11 @@ class ImportExportHandler final : public QObject {
   void              JoinFinalizeThread();
   void              ResetExportProgressState(const i18n::LocalizedText& status);
   void              SetExportFailureState(const i18n::LocalizedText& message);
+  /// Render the queued export tasks; the editor GPU resources are released at this point.
+  void              RenderQueuedExport(int skippedCount);
+  /// End an export whose GPU resource release failed: every queued image fails with @p error.
+  void              FailExportBeforeRender(int queuedCount, int skippedCount,
+                                           const std::string& error);
 
   ProjectModule*    project_              = nullptr;
   LibraryModule*    library_              = nullptr;
@@ -256,6 +279,9 @@ class ImportExportHandler final : public QObject {
   IUiStatusSink*    status_               = nullptr;
   InteractionPolicyController* interaction_policy_ = nullptr;
   ProjectDbWriteBarrier*        barrier_  = nullptr;
+  ExportGpuResourceRelease      export_gpu_resource_release_;
+  /// The running export released the editor GPU resources; FinishExport returns them.
+  bool                          export_gpu_resources_released_ = false;
   StatsEngine*                  stats_    = nullptr;
   NikonHeRecoveryController*    nikon_    = nullptr;
   SemanticGenerationController* semantic_ = nullptr;

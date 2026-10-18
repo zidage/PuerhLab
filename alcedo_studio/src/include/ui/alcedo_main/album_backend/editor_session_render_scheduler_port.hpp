@@ -5,6 +5,7 @@
 #pragma once
 
 #include <condition_variable>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -52,6 +53,21 @@ struct EditorRenderSessionContext {
   std::shared_ptr<alcedo::Image>       image;
   std::shared_ptr<alcedo::ImageBuffer> input;
 };
+
+/**
+ * @brief Outcome of @ref EditorSessionRenderSchedulerPort::ReleaseGpuResourcesForExport.
+ *
+ * The byte counts are @ref alcedo::PipelineExecutor::DeviceResourceBytes of the editor executor
+ * before and after the release; both are 0 when no frame has created the executor.
+ */
+struct EditorGpuResourceRelease {
+  bool        success             = false;
+  std::string error;
+  std::size_t device_bytes_before = 0;
+  std::size_t device_bytes_after  = 0;
+};
+
+using EditorGpuResourceReleaseCompletion = std::function<void(EditorGpuResourceRelease)>;
 
 /**
  * @brief Render description for one editor viewport request.
@@ -119,6 +135,26 @@ class EditorSessionRenderSchedulerPort final : public alcedo::IEditorPipelineSch
                 alcedo::EditorPipelineScheduleCompletion on_complete = {})
       -> std::uint64_t override;
   void               Cancel(std::uint64_t scheduler_job_id) override;
+
+  /**
+   * @brief Release the GPU resources of the editor executor so an export can allocate them.
+   *
+   * From this call until @ref ResumeGpuResourcesAfterExport, the worker refuses every frame with
+   * a message that starts with `kPresentationSuspendedMessage`, so the coordinator reports the
+   * frame as PresentationSuspended and the render controller routes it again after the resume.
+   * Image jobs are rejected. Then one work item on the editor worker releases the executor
+   * binding (published results, texture pool, transient and parameter arenas, neural demosaic
+   * workspace, and the prepared source). It runs after the frame or image job in flight, so the
+   * release never races a render. The bound session context, the history, and the edits stay.
+   *
+   * @p on_released runs once on the editor worker after the release, with the real error if it
+   * failed.
+   */
+  void ReleaseGpuResourcesForExport(EditorGpuResourceReleaseCompletion on_released);
+  /// End the release of @ref ReleaseGpuResourcesForExport: the next frame binds the image again
+  /// and allocates its resources on the same executor.
+  void ResumeGpuResourcesAfterExport();
+  [[nodiscard]] auto gpu_resources_released_for_export() const -> bool;
 
   /**
    * @brief Render the documents of @p request to host pixels on the editor executor, in order.
@@ -217,6 +253,9 @@ class EditorSessionRenderSchedulerPort final : public alcedo::IEditorPipelineSch
   std::uint64_t                              context_payload_load_count_ = 0;
   std::uint64_t                              sink_resolve_count_         = 0;
   bool                                       shutting_down_              = false;
+  /// Set from @ref ReleaseGpuResourcesForExport until @ref ResumeGpuResourcesAfterExport. The
+  /// worker reads it before each frame and image job, so no render allocates during an export.
+  bool                                       released_for_export_        = false;
 };
 
 }  // namespace alcedo::ui

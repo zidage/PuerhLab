@@ -4,6 +4,8 @@
 
 #include "edit/pipeline/pipeline_executor.hpp"
 
+#include <cstddef>
+#include <initializer_list>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -47,6 +49,20 @@ void ReleaseRoleRenderers(Renderers& renderers) {
   if (renderers.batch) {
     renderers.batch->ReleaseBinding();
   }
+}
+
+template <class Renderers>
+auto RoleRendererDeviceBytes(const Renderers& renderers) -> std::size_t {
+  std::size_t bytes = 0;
+  for (const auto* renderer : {renderers.interactive.get(), renderers.batch.get()}) {
+    if (renderer == nullptr) {
+      continue;
+    }
+    const auto resources = renderer->Resources();
+    bytes += resources.texture_pool_used_bytes + resources.transient_capacity_bytes +
+             resources.parameter_capacity_bytes;
+  }
+  return bytes;
 }
 #endif
 
@@ -128,6 +144,20 @@ void PipelineExecutor::ReleaseBinding() {
 #ifdef HAVE_OPENCL
   ReleaseRoleRenderers(opencl_renderers_);
 #endif
+}
+
+auto PipelineExecutor::DeviceResourceBytes() const -> std::size_t {
+  std::size_t bytes = 0;
+#ifdef HAVE_CUDA
+  bytes += RoleRendererDeviceBytes(cuda_renderers_);
+#endif
+#ifdef HAVE_METAL
+  bytes += RoleRendererDeviceBytes(metal_renderers_);
+#endif
+#ifdef HAVE_OPENCL
+  bytes += RoleRendererDeviceBytes(opencl_renderers_);
+#endif
+  return bytes;
 }
 
 };  // namespace alcedo

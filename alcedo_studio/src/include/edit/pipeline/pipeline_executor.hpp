@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -174,6 +175,12 @@ class PipelineExecutor {
    * @pre Caller holds GetRenderLock() or has exclusive access.
    */
   void               ReleaseBinding();
+  /**
+   * @brief GPU bytes the created renderers hold: texture pool, transient arena capacity, and
+   *        parameter arena capacity.
+   * @pre Caller holds GetRenderLock() or has exclusive access.
+   */
+  [[nodiscard]] auto DeviceResourceBytes() const -> std::size_t;
 
 #ifdef HAVE_CUDA
   [[nodiscard]] auto DebugCudaRenderer() -> CudaRenderer* {

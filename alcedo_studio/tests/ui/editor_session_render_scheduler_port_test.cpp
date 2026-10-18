@@ -11,6 +11,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <future>
@@ -36,6 +37,7 @@
 #include "edit/graph/drt_node_model.hpp"
 #include "edit/graph/pipeline_document.hpp"
 #include "edit/graph/pipeline_graph_commands.hpp"
+#include "edit/frame_presentation_types.hpp"
 #include "edit/graph/pipeline_graph_snapshot.hpp"
 #include "edit/operators/models/builtin_type_ids.hpp"
 #include "edit/operators/models/lmt_model.hpp"
@@ -201,6 +203,20 @@ auto ScheduleImagesAndWait(EditorSessionRenderSchedulerPort& scheduler,
   }
   if (result.wait_for(kFrameTimeout) != std::future_status::ready) {
     ADD_FAILURE() << "Image job " << job_id << " did not complete";
+    return std::nullopt;
+  }
+  return result.get();
+}
+
+/// Release the GPU resources of @p scheduler for an export and wait for the release result.
+auto ReleaseForExportAndWait(EditorSessionRenderSchedulerPort& scheduler)
+    -> std::optional<EditorGpuResourceRelease> {
+  auto done   = std::make_shared<std::promise<EditorGpuResourceRelease>>();
+  auto result = done->get_future();
+  scheduler.ReleaseGpuResourcesForExport(
+      [done](EditorGpuResourceRelease release) { done->set_value(std::move(release)); });
+  if (result.wait_for(kFrameTimeout) != std::future_status::ready) {
+    ADD_FAILURE() << "The GPU resource release did not complete";
     return std::nullopt;
   }
   return result.get();
@@ -638,6 +654,52 @@ TEST(EditorSessionRenderSchedulerPortTest,
   EXPECT_EQ(executor->GetFrameSink(), &sink);
 }
 
+// While an export holds the GPU, the port renders nothing: frames are refused as suspended
+// before the sink is attached, and image jobs are rejected. After the resume, the next frame
+// reaches the executor again.
+TEST(EditorSessionRenderSchedulerPortTest, ExportReleaseRefusesFramesAndImageJobsUntilResume) {
+  HeldImage held;
+  auto      scheduler = MakeSchedulerHoldingImage(held);
+  ASSERT_TRUE(held.lease.has_value()) << held.error;
+  RecordingFrameSink sink;
+  scheduler->SetSinkResolver([&sink] { return static_cast<alcedo::IFrameSink*>(&sink); });
+  scheduler->InstallSessionContext(MakeReadyContext(52, 22, 11));
+
+  const auto release = ReleaseForExportAndWait(*scheduler);
+  ASSERT_TRUE(release.has_value());
+  EXPECT_TRUE(release->success) << release->error;
+  // No frame created the executor, so it held no GPU memory.
+  EXPECT_EQ(release->device_bytes_before, 0u);
+  EXPECT_EQ(release->device_bytes_after, 0u);
+  EXPECT_TRUE(scheduler->gpu_resources_released_for_export());
+
+  const auto refused = ScheduleAndWait(*scheduler, MakeRequest(92, 52));
+  ASSERT_TRUE(refused.has_value());
+  EXPECT_FALSE(refused->success);
+  EXPECT_TRUE(alcedo::IsPresentationSuspendedMessage(refused->message)) << refused->message;
+  const auto executor = scheduler->interactive_executor();
+  ASSERT_NE(executor, nullptr);
+  EXPECT_EQ(executor->GetFrameSink(), nullptr);
+
+  const auto preview = held.pipeline_port->CurrentPreview(22);
+  ASSERT_NE(preview, nullptr);
+  std::string error;
+  EXPECT_FALSE(
+      ScheduleImagesAndWait(*scheduler, MakeImageRequest(52, {preview}), &error).has_value());
+  EXPECT_NE(error.find("export"), std::string::npos) << error;
+  // The session context stays bound for the resume.
+  ASSERT_TRUE(scheduler->session_context().has_value());
+  EXPECT_EQ(scheduler->session_context()->element_id, 22u);
+
+  scheduler->ResumeGpuResourcesAfterExport();
+  EXPECT_FALSE(scheduler->gpu_resources_released_for_export());
+  const auto resumed = ScheduleAndWait(*scheduler, MakeRequest(93, 52));
+  ASSERT_TRUE(resumed.has_value());
+  // The fixture has no image bytes, so the render fails, but the port no longer refuses it.
+  EXPECT_FALSE(alcedo::IsPresentationSuspendedMessage(resumed->message)) << resumed->message;
+  EXPECT_EQ(executor->GetFrameSink(), &sink);
+}
+
 TEST(EditorSessionRenderSchedulerPortTest, ViewDrivenReasonsDisableScopeFrameReplacement) {
   const std::array view_reasons = {alcedo::EditorRenderReason::ZoomPan,
                                    alcedo::EditorRenderReason::Resize,
@@ -1055,6 +1117,57 @@ TEST_F(EditorSessionRenderSchedulerPortGpuTest,
   EXPECT_EQ(InteractiveCudaBinding(*executor), std::nullopt);
   EXPECT_EQ(executor->DebugCudaRenderer()->Resources().published_result_count, 0u);
   EXPECT_EQ(executor->DebugCudaRenderer()->DebugDeviceIdentity(), device_identity);
+#endif
+}
+
+// Measures the GPU bytes of the editor executor while the editor is retained, after the export
+// release, while the export runs, and after the resume. The release frees the binding but keeps
+// the device; the resumed frame renders the same pixels on the same executor.
+TEST_F(EditorSessionRenderSchedulerPortGpuTest,
+       ExportReleaseFreesEditorGpuMemoryAndTheResumedFrameMatches) {
+#ifdef HAVE_CUDA
+  const cv::Mat retained_pixels = RenderFrame(720);
+  ASSERT_FALSE(retained_pixels.empty());
+  const auto executor = scheduler_->interactive_executor();
+  ASSERT_NE(executor, nullptr);
+  WaitForQueuedWork(*pipeline_scheduler_);
+  ASSERT_FALSE(HasFatalFailure());
+  const auto retained_bytes  = executor->DeviceResourceBytes();
+  const auto device_identity = executor->DebugCudaRenderer()->DebugDeviceIdentity();
+  ASSERT_GT(retained_bytes, 0u);
+
+  const auto release = ReleaseForExportAndWait(*scheduler_);
+  ASSERT_TRUE(release.has_value());
+  ASSERT_TRUE(release->success) << release->error;
+  EXPECT_EQ(release->device_bytes_before, retained_bytes);
+  EXPECT_LT(release->device_bytes_after, release->device_bytes_before);
+  EXPECT_EQ(InteractiveCudaBinding(*executor), std::nullopt);
+  EXPECT_EQ(executor->DebugCudaRenderer()->Resources().published_result_count, 0u);
+  EXPECT_EQ(executor->DebugCudaRenderer()->DebugDeviceIdentity(), device_identity);
+
+  // A frame during the export allocates nothing.
+  const auto refused = ScheduleAndWait(*scheduler_, MakeRequest(721, kEpoch));
+  ASSERT_TRUE(refused.has_value());
+  EXPECT_TRUE(alcedo::IsPresentationSuspendedMessage(refused->message)) << refused->message;
+  WaitForQueuedWork(*pipeline_scheduler_);
+  ASSERT_FALSE(HasFatalFailure());
+  const auto export_bytes = executor->DeviceResourceBytes();
+  EXPECT_EQ(export_bytes, release->device_bytes_after);
+  EXPECT_EQ(InteractiveCudaBinding(*executor), std::nullopt);
+
+  scheduler_->ResumeGpuResourcesAfterExport();
+  const cv::Mat resumed_pixels = RenderFrame(722);
+  ASSERT_EQ(resumed_pixels.size(), retained_pixels.size());
+  EXPECT_LT(cv::norm(resumed_pixels, retained_pixels, cv::NORM_INF), 2e-5);
+  WaitForQueuedWork(*pipeline_scheduler_);
+  ASSERT_FALSE(HasFatalFailure());
+  const auto resumed_bytes = executor->DeviceResourceBytes();
+  EXPECT_GT(resumed_bytes, release->device_bytes_after);
+  EXPECT_EQ(scheduler_->interactive_executor(), executor);
+
+  std::printf(
+      "editor executor GPU bytes: retained=%zu released=%zu during-export=%zu resumed=%zu\n",
+      retained_bytes, release->device_bytes_after, export_bytes, resumed_bytes);
 #endif
 }
 

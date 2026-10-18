@@ -2398,6 +2398,27 @@ void EditorSessionService::SetPresentationSuspended(bool suspended) {
                                    lifecycle_.active_image_load_request(), lifecycle_.state());
 }
 
+void EditorSessionService::SetSuspendedForExport(bool suspended) {
+  if (!InOwnerReduction()) {
+    EditorSessionCommand command;
+    command.kind                 = EditorSessionCommandKind::SetSuspendedForExport;
+    command.suspended_for_export = suspended;
+    (void)SubmitCommand(std::move(command), [this](const EditorSessionCommand& queued) {
+      SetSuspendedForExport(queued.suspended_for_export);
+      EditorSessionResult accepted;
+      accepted.kind     = EditorSessionResultKind::Accepted;
+      accepted.state    = lifecycle_.state();
+      accepted.identity = lifecycle_.identity();
+      accepted.message  = queued.suspended_for_export ? "Rendering suspended for export"
+                                                      : "Rendering resumed after export";
+      return accepted;
+    });
+    return;
+  }
+  render_.SetSuspendedForExport(suspended, lifecycle_.identity(),
+                                lifecycle_.active_image_load_request(), lifecycle_.state());
+}
+
 auto EditorSessionService::SetAdjustmentProjectionNode(const NodeId& node_id)
     -> EditorSessionResult {
   if (!InOwnerReduction()) {
@@ -2768,8 +2789,8 @@ void EditorSessionService::NotifyRenderResult(const EditorRenderResult& render_r
       frame.identity          = lifecycle_.identity();
       frame.render_request_id = completion.request_id;
       if (deferred) {
-        frame.message = "The viewport is minimized or hidden; the frame is presented when it is "
-                        "shown again";
+        frame.message = "The viewport is minimized or hidden, or an export is running; the frame "
+                        "is presented when rendering resumes";
       } else if (!frame_ready) {
         frame.message = completion.render_result.message.empty() ? std::string("Render failed")
                                                                  : completion.render_result.message;
