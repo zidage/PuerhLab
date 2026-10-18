@@ -450,6 +450,37 @@ ApplicationModuleHost::ApplicationModuleHost(QObject* parent, LifecycleObserver 
       return editor_session_ ? editor_session_->presentation_frame_sink() : nullptr;
     });
   }
+  // An export renders on its own executor. The editor releases its GPU resources before the
+  // export allocates, and allocates them again on its next frame after the export ends.
+  import_export_->SetExportGpuResourceRelease(ExportGpuResourceRelease{
+      .release_before_export =
+          [this](ExportGpuResourceRelease::ReleaseCompletion on_released) {
+            const auto scheduler = editor_session_scheduler_;
+            if (!scheduler) {
+              on_released(true, {});
+              return;
+            }
+            // Queued on the session owner before the port refuses its first frame, so the owner
+            // records every refused frame and routes it again only after the export.
+            if (editor_session_runtime_ && editor_session_runtime_->service) {
+              editor_session_runtime_->service->SetSuspendedForExport(true);
+            }
+            scheduler->ReleaseGpuResourcesForExport(
+                [on_released = std::move(on_released)](EditorGpuResourceRelease release) {
+                  on_released(release.success, std::move(release.error));
+                });
+          },
+      .resume_after_export =
+          [this] {
+            // The port renders again before the owner routes the refused frames.
+            if (editor_session_scheduler_) {
+              editor_session_scheduler_->ResumeGpuResourcesAfterExport();
+            }
+            if (editor_session_runtime_ && editor_session_runtime_->service) {
+              editor_session_runtime_->service->SetSuspendedForExport(false);
+            }
+          },
+  });
   lut_browser_ = std::make_unique<LutLibraryModel>();
   lut_browser_->setLibrary(lut_library_.get());
   RecordConstruction("LutLibraryModel", lut_browser_.get());

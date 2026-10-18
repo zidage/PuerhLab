@@ -32,6 +32,9 @@ using alcedo::diag::editorPresentLog;
 
 namespace {
 
+constexpr const char* kExportRunningMessage =
+    "An export is running; the editor renders again when it ends";
+
 auto RenderTypeForIntent(const alcedo::EditorRenderIntent& intent) -> alcedo::RenderType {
   switch (intent.quality) {
     case alcedo::EditorRenderQuality::Detail:
@@ -210,6 +213,57 @@ void EditorSessionRenderSchedulerPort::ClearSessionContext() {
   // Every use of the executor runs on the single worker, which gives this work exclusive access
   // after the in-flight frame: the release never waits and never races a render.
   EnsurePipelineScheduler()->ScheduleWork([executor] { executor->ReleaseBinding(); });
+}
+
+void EditorSessionRenderSchedulerPort::ReleaseGpuResourcesForExport(
+    EditorGpuResourceReleaseCompletion on_released) {
+  std::shared_ptr<alcedo::PipelineExecutor> executor;
+  {
+    std::scoped_lock lock(mutex_);
+    released_for_export_ = true;
+    executor             = executor_;
+  }
+  // The single worker runs this after the frame or image job in flight; every later one reads
+  // released_for_export_ on the worker and renders nothing.
+  EnsurePipelineScheduler()->ScheduleWork(
+      [executor = std::move(executor), on_released = std::move(on_released)] {
+        EditorGpuResourceRelease release;
+        try {
+          if (executor) {
+            release.device_bytes_before = executor->DeviceResourceBytes();
+            executor->ReleaseBinding();
+            release.device_bytes_after = executor->DeviceResourceBytes();
+          }
+          release.success = true;
+        } catch (const std::exception& ex) {
+          release.error = ex.what();
+        } catch (...) {
+          release.error = "Releasing the editor GPU resources failed";
+        }
+        if (release.success) {
+          qCInfo(editorPresentLog).noquote()
+              << QStringLiteral("editor GPU resources released for export: %1 -> %2 bytes")
+                     .arg(release.device_bytes_before)
+                     .arg(release.device_bytes_after);
+        } else {
+          qCWarning(editorPresentLog).noquote()
+              << QStringLiteral("editor GPU resource release for export failed: %1")
+                     .arg(QString::fromStdString(release.error));
+        }
+        if (on_released) {
+          on_released(std::move(release));
+        }
+      });
+}
+
+void EditorSessionRenderSchedulerPort::ResumeGpuResourcesAfterExport() {
+  std::scoped_lock lock(mutex_);
+  released_for_export_ = false;
+}
+
+auto EditorSessionRenderSchedulerPort::gpu_resources_released_for_export() const -> bool {
+  std::scoped_lock lock(mutex_);
+  return released_for_export_;
 }
 
 void EditorSessionRenderSchedulerPort::InstallSessionContext(EditorRenderSessionContext context) {
@@ -541,7 +595,13 @@ void EditorSessionRenderSchedulerPort::DispatchPipelineFrame(Job job, alcedo::IF
     // The executor belongs to this port and every use of it runs on the single worker, which has
     // exclusive access, so the viewport sink is attached there before the frame. It changes only
     // when the viewport item is replaced.
-    task.prepare_                    = [sink](alcedo::PipelineTask& prepared_task) {
+    task.prepare_                    = [this, sink](alcedo::PipelineTask& prepared_task) {
+      // Read on the worker, which orders it against the release work item: a frame that runs
+      // after ReleaseGpuResourcesForExport allocates nothing while the export renders.
+      if (gpu_resources_released_for_export()) {
+        throw std::runtime_error(std::string(alcedo::kPresentationSuspendedMessage) +
+                                 "an export is running");
+      }
       auto& executor = *prepared_task.pipeline_executor_;
       if (executor.GetFrameSink() != sink) {
         executor.AttachFrameSink(sink);
@@ -619,6 +679,9 @@ auto EditorSessionRenderSchedulerPort::ScheduleImages(
     if (shutting_down_) {
       return reject("The editor render port is shutting down");
     }
+    if (released_for_export_) {
+      return reject(kExportRunningMessage);
+    }
     if (image_job_) {
       return reject("Another image job is running");
     }
@@ -694,6 +757,11 @@ void EditorSessionRenderSchedulerPort::RunImageJob(
     alcedo::EditorImageRenderCompletion         on_complete) {
   alcedo::EditorImageRenderResult result;
   try {
+    // An export that started after this job was accepted released the executor; the job must
+    // not allocate it again.
+    if (gpu_resources_released_for_export()) {
+      throw std::runtime_error(kExportRunningMessage);
+    }
     alcedo::FramePreviewMetadata metadata;
     metadata.image_identity       = static_cast<std::uint64_t>(request.image_id);
     metadata.session_epoch        = request.image_load_request_id.value;

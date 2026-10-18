@@ -96,23 +96,45 @@ void EditorSessionRenderController::SetGeometryOverlayActive(bool active) {
 void EditorSessionRenderController::SetPresentationSuspended(
     bool suspended, const EditorSessionIdentity& identity, ImageLoadRequestId image_load_request,
     EditorSessionState state) {
-  {
-    std::scoped_lock lock(mutex_);
-    if (presentation_suspended_ == suspended) {
-      return;
-    }
-    presentation_suspended_ = suspended;
-    if (suspended) {
-      return;
-    }
-    suspended_refresh_routed_ = false;
-  }
-  RouteSuspendedRefresh(identity, image_load_request, state);
+  SetSuspension(&EditorSessionRenderController::presentation_suspended_, suspended, identity,
+                image_load_request, state);
 }
 
 auto EditorSessionRenderController::presentation_suspended() const -> bool {
   std::scoped_lock lock(mutex_);
   return presentation_suspended_;
+}
+
+void EditorSessionRenderController::SetSuspendedForExport(bool suspended,
+                                                          const EditorSessionIdentity& identity,
+                                                          ImageLoadRequestId image_load_request,
+                                                          EditorSessionState state) {
+  SetSuspension(&EditorSessionRenderController::suspended_for_export_, suspended, identity,
+                image_load_request, state);
+}
+
+auto EditorSessionRenderController::suspended_for_export() const -> bool {
+  std::scoped_lock lock(mutex_);
+  return suspended_for_export_;
+}
+
+void EditorSessionRenderController::SetSuspension(bool EditorSessionRenderController::* reason,
+                                                  bool                         suspended,
+                                                  const EditorSessionIdentity& identity,
+                                                  ImageLoadRequestId           image_load_request,
+                                                  EditorSessionState           state) {
+  {
+    std::scoped_lock lock(mutex_);
+    if (this->*reason == suspended) {
+      return;
+    }
+    this->*reason = suspended;
+    if (presentation_suspended_ || suspended_for_export_) {
+      return;
+    }
+    suspended_refresh_routed_ = false;
+  }
+  RouteSuspendedRefresh(identity, image_load_request, state);
 }
 
 void EditorSessionRenderController::NoteSuspendedPresentation(
@@ -138,9 +160,9 @@ void EditorSessionRenderController::NoteSuspendedPresentation(
     } else {
       suspended_full_frame_ = true;
     }
-    // The viewport came back before this refusal reached the owner: the resume
-    // found nothing to refresh, so this result routes it.
-    if (!presentation_suspended_ && !suspended_refresh_routed_) {
+    // The viewport came back (or the export ended) before this refusal reached the
+    // owner: the resume found nothing to refresh, so this result routes it.
+    if (!presentation_suspended_ && !suspended_for_export_ && !suspended_refresh_routed_) {
       route_now = true;
     }
   }

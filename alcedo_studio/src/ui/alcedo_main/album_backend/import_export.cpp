@@ -11,7 +11,9 @@
 #include <QSettings>
 #include <QStandardPaths>
 #include <algorithm>
+#include <cstddef>
 #include <optional>
+#include <string>
 #include <thread>
 #include <tuple>
 #include <unordered_set>
@@ -131,6 +133,10 @@ auto ImportExportHandler::SupportedImportPatterns() -> QString {
 
 void ImportExportHandler::SetInteractionPolicy(InteractionPolicyController* interaction_policy) {
   interaction_policy_ = interaction_policy;
+}
+
+void ImportExportHandler::SetExportGpuResourceRelease(ExportGpuResourceRelease release) {
+  export_gpu_resource_release_ = std::move(release);
 }
 
 void ImportExportHandler::StartImport(const QStringList& fileUrlsOrPaths) {
@@ -502,6 +508,51 @@ void ImportExportHandler::StartExportWithRecipeOptionsForTargets(
   emit exportStateChanged();
   status_->SetTaskState(export_status_text_, 0, false);
 
+  if (!export_gpu_resource_release_.release_before_export) {
+    RenderQueuedExport(queue_result.skipped_count_);
+    return;
+  }
+  // The editor keeps its GPU resources while it is open; the export allocates its own only after
+  // the editor released them, so the two never hold device memory at the same time.
+  export_gpu_resources_released_ = true;
+  QPointer<ImportExportHandler> self(this);
+  export_gpu_resource_release_.release_before_export(
+      [self, queued = queue_result.queued_count_, skipped = queue_result.skipped_count_](
+          bool success, std::string error) {
+        if (!self) return;
+        QMetaObject::invokeMethod(
+            self,
+            [self, queued, skipped, success, error = std::move(error)]() {
+              if (!self) return;
+              if (success) {
+                self->RenderQueuedExport(skipped);
+              } else {
+                self->FailExportBeforeRender(queued, skipped, error);
+              }
+            },
+            Qt::QueuedConnection);
+      });
+}
+
+void ImportExportHandler::FailExportBeforeRender(int queuedCount, int skippedCount,
+                                                 const std::string& error) {
+  if (const auto& esvc = project_->handler().export_service()) {
+    esvc->ClearAllExportTasks();
+  }
+  ExportResult failed;
+  failed.failed_stage_ = "release_editor_gpu_resources";
+  failed.message_      = "Releasing the editor GPU resources failed: " + error;
+  FinishExport(std::make_shared<std::vector<ExportResult>>(
+                   static_cast<std::size_t>(std::max(queuedCount, 0)), failed),
+               skippedCount);
+}
+
+void ImportExportHandler::RenderQueuedExport(int skippedCount) {
+  const auto& esvc = project_->handler().export_service();
+  if (!esvc) {
+    FailExportBeforeRender(export_total_, skippedCount, "the export service is unavailable");
+    return;
+  }
   QPointer<ImportExportHandler> self(this);
   esvc->ExportAll(
       [self](const ExportProgress& progress) {
@@ -557,8 +608,7 @@ void ImportExportHandler::StartExportWithRecipeOptionsForTargets(
             },
             Qt::QueuedConnection);
       },
-      [self,
-       skipped = queue_result.skipped_count_](std::shared_ptr<std::vector<ExportResult>> results) {
+      [self, skipped = skippedCount](std::shared_ptr<std::vector<ExportResult>> results) {
         if (!self) return;
         QMetaObject::invokeMethod(
             self,
@@ -765,6 +815,10 @@ void ImportExportHandler::FinishExport(const std::shared_ptr<std::vector<ExportR
   // Phase 2 (Step 4): release the barrier; the 1->0 transition fires on_release_,
   // which drains any analysis-result writes that queued behind it.
   if (barrier_) barrier_->Release();
+  if (std::exchange(export_gpu_resources_released_, false) &&
+      export_gpu_resource_release_.resume_after_export) {
+    export_gpu_resource_release_.resume_after_export();
+  }
 
   int         ok   = 0;
   int         fail = 0;
