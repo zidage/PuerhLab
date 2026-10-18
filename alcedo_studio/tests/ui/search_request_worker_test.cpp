@@ -124,6 +124,24 @@ TEST(SearchRequestWorkerTest, RequestOfAnotherKindKeepsItsPendingRequest) {
   EXPECT_NE(apply, preview);
 }
 
+TEST(SearchRequestWorkerTest, PrewarmDoesNotReplacePreviewRequest) {
+  JobLog              log;
+  SearchRequestWorker worker;
+  worker.Submit(SearchRequestKind::kApply, log.RecordAndHold("apply-running"));
+  ASSERT_TRUE(log.WaitUntilHeld());
+
+  // A preview and a prewarm wait behind the running apply; each is its own kind.
+  const auto preview = worker.Submit(SearchRequestKind::kPreview, log.Record("preview"));
+  const auto prewarm = worker.Submit(SearchRequestKind::kPrewarm, log.Record("prewarm"));
+  log.Release();
+  ASSERT_TRUE(log.WaitForRunCount(3));
+  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+  EXPECT_EQ(log.Ran(), (std::vector<std::string>{"apply-running", "preview", "prewarm"}));
+  EXPECT_TRUE(worker.IsCurrent(SearchRequestKind::kPreview, preview));
+  EXPECT_TRUE(worker.IsCurrent(SearchRequestKind::kPrewarm, prewarm));
+}
+
 TEST(SearchRequestWorkerTest, RunningRequestBecomesStaleWhenANewerRequestArrives) {
   JobLog              log;
   SearchRequestWorker worker;

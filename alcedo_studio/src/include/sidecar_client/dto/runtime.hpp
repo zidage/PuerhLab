@@ -26,12 +26,21 @@ struct AiSidecarRuntimeModelInfo {
   std::string prototype_config_hash;
 };
 
+/// Residency of one CLIP encoder of the sidecar (`text`, `image`, or `multimodal`).
+struct AiSidecarEncoderResidency {
+  std::string encoder;
+  bool        loaded = false;
+  std::string device;
+  uint64_t    idle_ms = 0;  ///< Time since the last request; 0 before the first request.
+};
+
 struct AiSidecarRuntimeRemoteStatus {
-  std::string state;
-  std::string provider;
-  uint32_t    image_batch_cap     = 0;
-  uint32_t    image_batch_wait_ms = 0;
-  uint64_t    uptime_ms           = 0;
+  std::string                            state;
+  std::string                            provider;
+  uint32_t                               image_batch_cap     = 0;
+  uint32_t                               image_batch_wait_ms = 0;
+  uint64_t                               uptime_ms           = 0;
+  std::vector<AiSidecarEncoderResidency> encoders;
 };
 
 struct AiSidecarCapability {

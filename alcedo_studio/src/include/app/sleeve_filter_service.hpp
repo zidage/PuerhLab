@@ -113,6 +113,19 @@ class SemanticSearchProvider {
    *         embed, or a returned vector is invalid.
    */
   [[nodiscard]] virtual auto EmbedQuery(const std::wstring& query) -> SemanticQueryEmbedding = 0;
+
+  /**
+   * @brief Embeds SemanticVectorSearch::kNeutralText for the active model into the query
+   *        embedding cache, so that the first search after it needs no model load.
+   *
+   * May start the semantic sidecar and block until it embeds the text. The default does
+   * nothing. @throws std::runtime_error on the failures of EmbedQuery.
+   */
+  virtual void               Prewarm() {}
+
+  /// True when the neutral text of the active model is cached (a Prewarm has nothing to do).
+  /// Reads the active model from storage. The default returns true.
+  [[nodiscard]] virtual auto IsPrewarmed() -> bool { return true; }
 };
 
 /// Threading: the const query methods (search, count, stats, WHERE build) read storage under
@@ -207,6 +220,10 @@ class SleeveFilterService {
   /// @throws std::runtime_error when no provider is set, the query is empty, or the provider
   ///         fails.
   [[nodiscard]] auto EmbedSemanticQuery(const std::wstring& query) const -> SemanticQueryEmbedding;
+  /// SemanticSearchProvider::IsPrewarmed and Prewarm of the provider; false and a no-op without
+  /// a provider. Prewarm throws the provider error.
+  [[nodiscard]] auto IsSemanticSearchPrewarmed() const -> bool;
+  void               PrewarmSemanticSearch() const;
   /// The SELECT of the files of @p parent_id that the relevance rule keeps for @p embedding
   /// (SemanticVectorSearch::BuildRelevanceSelect), for the library reads of a natural-language
   /// search. Calls no provider. The fragment is valid for one statement on this project.

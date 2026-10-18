@@ -7,6 +7,7 @@
 #include <QObject>
 #include <QProcess>
 #include <QString>
+#include <QTimer>
 #include <atomic>
 #include <chrono>
 #include <cstdint>
@@ -64,6 +65,16 @@ struct AiSidecarRuntimeOptions {
   std::string               revision;
   std::string               hf_endpoint        = "https://hf-mirror.com";
   std::string               device             = "auto";
+  /// Device of the text encoder. The text encoder runs on the CPU (residency plan, 1.2 item 6).
+  std::string                         text_device        = "cpu";
+  /// Device of the image encoder; empty uses `device`.
+  std::string                         vision_device;
+  /// Idle unload time of the text encoder (-1 never, 0 after each request). Empty uses the
+  /// idle stop delay of the service (SetIdleStopDelay), so "Keep AI model loaded" applies to
+  /// both the process and the text encoder.
+  std::optional<std::chrono::seconds> text_idle_unload;
+  /// Idle unload time of the image encoder, with the same rule.
+  std::chrono::seconds                vision_idle_unload{60};
   uint32_t                  batch_cap          = 512;
   uint32_t                  batch_wait_ms      = 25;
   uint32_t                  max_message_bytes  = 16 * 1024 * 1024;
@@ -110,6 +121,27 @@ class AiSidecarRuntimeService final : public QObject {
   void               Stop();
   void               StopForProjectClose();
 
+  /**
+   * @brief Sets how long the process keeps running after the last lease is released.
+   *
+   * 0 stops the process at once at the last release (blocking stop). A positive delay starts a
+   * single-shot timer at the last release; when it expires with no lease, the process stops
+   * without blocking the owner thread (terminate, then kill after `graceful_stop_timeout`). A
+   * negative delay starts no timer: the process runs until StopForProjectClose(). A new lease
+   * stops the timer. A change applies at once: with no lease and a running process, 0 starts
+   * the stop, a positive delay restarts the timer with the new value, and a negative delay
+   * stops the timer. Runs on the owner thread (other threads block on a queued call).
+   */
+  void               SetIdleStopDelay(std::chrono::milliseconds delay);
+  auto               IdleStopDelay() const -> std::chrono::milliseconds { return idle_stop_delay_; }
+  /**
+   * @brief Records that the provider configs changed after the running process read them.
+   *
+   * The next start request made while no lease other than the caller's own is held restarts
+   * the process, so the new process reads the new configs. Runs on the owner thread.
+   */
+  void               MarkProviderConfigsChanged();
+
   auto               Status() -> AiSidecarRuntimeStatusSnapshot;
   auto               Options() const -> const AiSidecarRuntimeOptions& { return options_; }
   auto               IsRunning() -> bool;
@@ -141,6 +173,17 @@ class AiSidecarRuntimeService final : public QObject {
   void AttachChildTreeCleanup();
   void ReleaseChildTreeCleanup();
   void ReleaseLease();
+  // Idle stop without blocking the owner thread: terminate, then idle_stop_kill_timer_ escalates to
+  // kill and finally to kStopTimedOut. The QProcess::finished handler or RefreshProcessExit calls
+  // FinishIdleStop when the process exits.
+  void BeginIdleStop();
+  void OnIdleStopKillTimeout();
+  void FinishIdleStop();
+  // A start during an idle stop kills the exiting process and waits up to kill_timeout for it.
+  auto CompleteIdleStopBeforeStart() -> bool;
+  // Model identity (model_root, model_id, revision) of the running process differs from
+  // @p requested.
+  auto ModelIdentityDiffers(const AiSidecarRuntimeOptions& requested) const -> bool;
 
   AiSidecarClientFactory                  client_factory_;
   std::shared_ptr<sidecar_client::Client> client_;
@@ -149,6 +192,13 @@ class AiSidecarRuntimeService final : public QObject {
   AiSidecarRuntimeStatusSnapshot          status_;
   std::string                             endpoint_;
   int                                     active_leases_ = 0;
+  // Residency of the process after the last lease (SetIdleStopDelay). Owner thread only.
+  std::chrono::milliseconds               idle_stop_delay_{0};
+  QTimer                                  idle_stop_timer_;
+  QTimer                                  idle_stop_kill_timer_;
+  bool                                    idle_stop_pending_        = false;
+  bool                                    idle_stop_kill_sent_      = false;
+  bool                                    provider_configs_changed_ = false;
   // Interactive-boot state. `interactive_starting_` is set for the duration of
   // a StartAndWaitInteractive boot so IsStartingInteractive() can report it;
   // `cancel_start_requested_` is the cancel flag checkpointed each poll.

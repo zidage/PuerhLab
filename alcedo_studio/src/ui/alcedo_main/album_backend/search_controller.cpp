@@ -29,6 +29,7 @@
 #include "ui/alcedo_main/album_backend/search_request_worker.hpp"
 #include "ui/alcedo_main/album_backend/stats_engine.hpp"
 #include "ui/alcedo_main/i18n.hpp"
+#include "utils/diagnostics/app_logging.hpp"
 
 namespace alcedo::ui {
 
@@ -243,9 +244,10 @@ SearchController::SearchController(ProjectModule* project, LibraryModule* librar
 }
 
 SearchController::~SearchController() {
-  // A running preview job posts its result to `this`; wait for it before teardown.
+  // A running preview or prewarm job posts its result to `this`; wait for it before teardown.
   if (worker_ != nullptr) {
     worker_->InvalidateAndWait(SearchRequestKind::kPreview);
+    worker_->InvalidateAndWait(SearchRequestKind::kPrewarm);
   }
   CancelSearchPreviewThumbnails();
 }
@@ -510,6 +512,32 @@ auto SearchController::ClassifyQuery(const QString& query) const -> QString {
       ClassifySearchQuery(query.trimmed().toStdWString(), natural_language_search_enabled_);
   return QString::fromUtf8(SearchQueryRouteName(classification.route_).data(),
                            static_cast<int>(SearchQueryRouteName(classification.route_).size()));
+}
+
+void SearchController::PrewarmNaturalLanguageSearch() {
+  if (!natural_language_search_enabled_ || prewarm_pending_ || worker_ == nullptr) {
+    return;
+  }
+  auto project        = project_->handler().project();
+  auto filter_service = project ? project->GetSleeveFilterService() : nullptr;
+  if (!filter_service || !filter_service->HasSemanticSearchProvider()) {
+    return;
+  }
+  prewarm_pending_ = true;
+  worker_->Submit(SearchRequestKind::kPrewarm, [this, filter_service = std::move(filter_service)](
+                                                   std::uint64_t) {
+    try {
+      if (!filter_service->IsSemanticSearchPrewarmed()) {
+        filter_service->PrewarmSemanticSearch();
+      }
+    } catch (const std::exception& e) {
+      qCWarning(diag::semanticLog).noquote()
+          << QStringLiteral("semantic.search.prewarm.failed error=%1")
+                 .arg(QString::fromUtf8(e.what()));
+    }
+    // The destructor waits for this job before QObject teardown.
+    QMetaObject::invokeMethod(this, [this]() { prewarm_pending_ = false; }, Qt::QueuedConnection);
+  });
 }
 
 void SearchController::SetNaturalLanguageSearchEnabled(bool enabled) {

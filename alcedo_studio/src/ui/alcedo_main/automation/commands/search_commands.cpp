@@ -146,7 +146,31 @@ auto RegisterAutomationSearchCommands(AutomationCommandRegistry& registry,
                      });
     *request_id = session->Replace(text, offset, limit, true, !fuzzy);
   };
-  return registry.Register(std::move(query), error);
+  if (!registry.Register(std::move(query), error)) {
+    return false;
+  }
+
+  AutomationCommandSpec prewarm;
+  prewarm.method      = QStringLiteral("search.prewarm");
+  prewarm.description = QStringLiteral(
+      "Does what the search palette does when it opens: when natural language search is on, "
+      "starts the AI sidecar and embeds the neutral text in the background, so the next "
+      "natural language query loads no model. Returns at once; a failure is written to the "
+      "log only.");
+  prewarm.params_schema = AutomationClosedParamsSchema(QJsonObject{}, QJsonArray{});
+  prewarm.result_schema = AutomationObjectSchema(
+      QJsonObject{{"natural_language_search", QJsonObject{{"type", "boolean"}}}},
+      QJsonArray{"natural_language_search"});
+  prewarm.handler = [host](const QJsonObject&, AutomationReply reply) {
+    if (!AutomationEnteredProject(host, reply)) {
+      return;
+    }
+    ui::SearchController* search = host->search();
+    search->PrewarmNaturalLanguageSearch();
+    reply.SendResult(
+        QJsonObject{{"natural_language_search", search->natural_language_search_enabled()}});
+  };
+  return registry.Register(std::move(prewarm), error);
 }
 
 }  // namespace alcedo::automation

@@ -256,6 +256,7 @@ UI units apply to every editor parameter value.
 | `export.run` | `targets[]`, `out_dir`, options | `task_id` |
 | `export.status` | — | queue rows and counts |
 | `search.query` | `text`, `offset`, `limit`, `mode` (`auto`, `fuzzy`) | matches and paging values |
+| `search.prewarm` | none | `natural_language_search` (the switch value); starts the AI sidecar and embeds the neutral text in the background, as the search palette does when it opens ([residency plan](../ai/ai_sidecar_runtime_residency_plan.md), Phase SR3) |
 | `tasks.list` | — | running tasks |
 | `tasks.wait` | `task_id` or `idle: true` | final task state |
 

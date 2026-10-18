@@ -805,7 +805,8 @@ Remaining defects or unavailable platforms:
   - Scan cost follows the project embedding count, not the folder size. Follow-up issue.
   - macOS not built or tested in this phase.
   - Cold sidecar start on Enter still blocks the worker (Section 12, known behavior; the
-    residency plan owns it).
+    residency plan owns it). Since residency Phase SR1 the boot no longer blocks the GUI
+    thread, and the sidecar stays running for the idle time after a search.
 ```
 
 ### Phase GS2 — Natural-language results in the Library

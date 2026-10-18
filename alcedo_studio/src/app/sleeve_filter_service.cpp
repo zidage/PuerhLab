@@ -605,6 +605,16 @@ auto SleeveFilterService::EmbedSemanticQuery(const std::wstring& query) const
   return semantic_search_provider_->EmbedQuery(text);
 }
 
+auto SleeveFilterService::IsSemanticSearchPrewarmed() const -> bool {
+  return semantic_search_provider_ && semantic_search_provider_->IsPrewarmed();
+}
+
+void SleeveFilterService::PrewarmSemanticSearch() const {
+  if (semantic_search_provider_) {
+    semantic_search_provider_->Prewarm();
+  }
+}
+
 auto SleeveFilterService::BuildSemanticRelevanceSelect(
     sl_element_id_t parent_id, const SemanticQueryEmbedding& embedding) const
     -> duckorm::SqlFragment {

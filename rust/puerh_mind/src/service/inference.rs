@@ -11,6 +11,8 @@ use tracing::warn;
 #[cfg(target_os = "macos")]
 use crate::service::coreml_clip::CoreMlClipEngine;
 
+/// The semantic engine of the configured model profile. It validates the manifest, the model
+/// files, and the device values; no encoder loads here (each loads on its first request).
 pub fn build_semantic_engine(config: &AppConfig) -> Arc<dyn EmbeddingEngine> {
     match build_available_semantic_engine(config) {
         Ok(engine) => engine,
@@ -28,7 +30,10 @@ fn build_available_semantic_engine(config: &AppConfig) -> anyhow::Result<Arc<dyn
     ensure_profile_supported(profile)?;
     match profile.inference_backend {
         InferenceBackend::NativeCoreMl => build_coreml_semantic_engine(config),
-        InferenceBackend::OnnxRuntime => Ok(Arc::new(OrtClipEngine::new(&config.semantic)?)),
+        InferenceBackend::OnnxRuntime => Ok(Arc::new(OrtClipEngine::with_residency(
+            &config.semantic,
+            &config.residency,
+        )?)),
     }
 }
 
@@ -73,7 +78,10 @@ fn unavailable_engine(config: &AppConfig, reason: String) -> UnavailableEmbeddin
 
 #[cfg(target_os = "macos")]
 fn build_coreml_semantic_engine(config: &AppConfig) -> anyhow::Result<Arc<dyn EmbeddingEngine>> {
-    Ok(Arc::new(CoreMlClipEngine::new(&config.semantic)?))
+    Ok(Arc::new(CoreMlClipEngine::with_residency(
+        &config.semantic,
+        &config.residency,
+    )?))
 }
 
 #[cfg(not(target_os = "macos"))]

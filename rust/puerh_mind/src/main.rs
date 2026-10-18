@@ -5,6 +5,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 const SERVER_THREAD_STACK_BYTES: usize = 64 * 1024 * 1024;
+/// How often loaded encoders are checked against their idle unload time.
+const ENCODER_IDLE_CHECK_INTERVAL: Duration = Duration::from_secs(5);
 
 fn main() -> anyhow::Result<()> {
     let server_thread = std::thread::Builder::new()
@@ -77,6 +79,18 @@ fn run_server() -> anyhow::Result<()> {
         .enable_all()
         .build()
         .context("failed to initialize alcedo_mind tokio runtime")?;
+    // Unloads each encoder that is idle for longer than its idle time. The check takes the
+    // encoder lock, so it runs on the blocking pool and waits for a running request.
+    let idle_engine = semantic_engine.clone();
+    runtime.spawn(async move {
+        let mut interval = tokio::time::interval(ENCODER_IDLE_CHECK_INTERVAL);
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        loop {
+            interval.tick().await;
+            let engine = idle_engine.clone();
+            let _ = tokio::task::spawn_blocking(move || engine.unload_idle_encoders()).await;
+        }
+    });
     runtime
         .block_on(bootstrap::start_server(
             config,

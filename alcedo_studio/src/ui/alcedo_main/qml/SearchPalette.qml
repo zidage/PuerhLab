@@ -268,7 +268,13 @@ Dialog {
         }
     }
 
-    onOpened: syncInteractionPolicy()
+    onOpened: {
+        syncInteractionPolicy()
+        // Start the sidecar and load the text encoder while the user types the query.
+        if (searchController) {
+            searchController.PrewarmNaturalLanguageSearch()
+        }
+    }
     onClosed: resetPreviewState()
 
     Timer {
@@ -901,6 +907,9 @@ Dialog {
                                         return
                                     }
                                     searchPalette.searchController.SetNaturalLanguageSearchEnabled(checked)
+                                    if (checked) {
+                                        searchPalette.searchController.PrewarmNaturalLanguageSearch()
+                                    }
                                     if (searchPalette.interactionPolicyController) {
                                         searchPalette.interactionPolicyController.naturalLanguageSearchEnabled =
                                             checked

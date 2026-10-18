@@ -131,6 +131,16 @@ class SearchController final : public QObject {
                                                const QString& mode = QStringLiteral("replace"));
   Q_INVOKABLE QString      ClassifyQuery(const QString& query) const;
   Q_INVOKABLE void         SetNaturalLanguageSearchEnabled(bool enabled);
+  /**
+   * @brief Starts the semantic sidecar and embeds the neutral text in the background, so the
+   *        first natural-language search after it needs no model load.
+   *
+   * Does nothing when natural-language search is off, when the project has no semantic
+   * provider, or while a prewarm is pending. The worker job (kind kPrewarm, so it replaces no
+   * preview or library request) returns at once when the neutral text is already cached. A
+   * failure is written to the log only; the search reports the real error.
+   */
+  Q_INVOKABLE void         PrewarmNaturalLanguageSearch();
   Q_INVOKABLE void         SetSearchFieldFilenameEnabled(bool enabled);
   Q_INVOKABLE void         SetSearchFieldExifEnabled(bool enabled);
   Q_INVOKABLE void         SetSearchFieldAiDescriptionEnabled(bool enabled);
@@ -229,6 +239,8 @@ class SearchController final : public QObject {
   /// Newest first; read from QSettings once at construction, written after each change.
   std::vector<RecentSearch>         recent_searches_{};
   bool                      natural_language_search_enabled_  = false;
+  /// A prewarm job is queued or runs on the worker (PrewarmNaturalLanguageSearch).
+  bool                                                 prewarm_pending_                  = false;
   /// Read from QSettings once at construction, written after each change.
   bool                      search_settings_panel_open_       = false;
   std::uint64_t             search_preview_generation_        = 0;
