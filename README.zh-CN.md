@@ -14,9 +14,9 @@
 
 **Alcedo Studio** 是一款免费、开源的 RAW 编辑器与照片图库。
 
-把照片拷贝到本地硬盘并导入文件夹后，你可以在 Alcedo 中浏览、评分和搜索它们，再通过 GPU 加速的 32 位浮点管线逐张冲洗 RAW，最高可处理 1.5 亿像素的文件。相册结构和每张照片的完整编辑历史都保存在同一个项目文件里，移动或备份它就像处理任何普通文件一样。
+将照片导入后，你可以在统一的项目中浏览、评分、检索，并通过全链路 32 位浮点 GPU 管线冲洗 RAW 图像，即使面对高像素中画幅文件也能流畅编辑。相册结构和每张照片的完整编辑历史都保存在同一个项目文件里，移动或备份它就像处理任何普通文件一样。
 
-支持 Windows 10/11（x64）和搭载 Apple Silicon 的 Mac。
+支持 Windows 10/11（x64，CUDA/OpenCL）和搭载 Apple Silicon 的 Mac（Metal）。
 
 <p align="center">
   <img src="docs/images/editor.jpg" alt="Alcedo Studio 编辑器：打开一张 RAW 照片，右侧为调整面板，底部为胶片条" width="100%"/>
@@ -35,35 +35,24 @@ https://github.com/user-attachments/assets/ae0d9773-220e-4901-90f6-1989f58b0462
 
 </details>
 
-## 从第一性原理出发的设计（TL;DR）
+## 核心特性
 
-热爱摄影的人往往对色彩敏锐，却常在修图时被工具消耗——现有的许多软件，都是在数十年前的技术底座上层层加码，日渐臃肿。我不想做一个插件，或是一次性的vibe coding软件，而是选择回到第一性原理：如果今天从零构建一款 RAW 编辑器，也许应该这样做：
+- **场景参考的节点式色彩管线**  
+  全链路基于 32 位浮点场景线性空间，内置 ACES 2.0 与 OpenDRT 显示渲染变换。调色过程组织为直观的节点图：`Develop` 节点完成 RAW 解码与色彩空间转换，后续可串联任意数量带独立蒙版的 `Color Grade` 节点。支持 113 款胶片 LUT 及任意色彩空间的自定义 3D CUBE LUT。
 
-🎨 **处理流程应尽量透明并且符合行业标准**
+- **基于 DAG 的 GPU 交互管线**  
+  调色处理采用有向无环图（DAG）架构，全链路基于原生 CUDA / OpenCL（Windows）与 Metal（macOS）的 32 位浮点计算。每个节点与蒙版独立缓存中间结果，调整滑块时只重算后面的变化，而不需要从头重跑整张照片。拖动时即时响应，松开后自动呈现完整画质；放大查看时也仅对当前屏幕区域渲染 1:1 细节，处理高像素大文件完全不需要等待漫长的离线代理。
 
-Alcedo采用节点式编辑，自由调整编辑顺序，组织蒙版层级，让每一步操作的脉络一目了然；内置ACES流程及可自定义的色彩科学效果，无需纠结厂商配置文件的盘根错节与玄学德味的无尽争论，设备平权自此实现；内置113款可更新的胶片LUT，配合Halation，颗粒，黑柔效果，一键做出电影级的惊人效果；你自己的 3D CUBE LUT 也能直接使用，无论它为哪个色彩空间而做。
+- **轻量本地图库（DuckDB + 本地 CLIP）**  
+  相册数据直接由内嵌的 DuckDB 驱动，在海量图库下依然支持复杂的毫秒级条件筛选；结合本地运行的多语言 CLIP 模型，导入即可自动为照片生成语义标签，支持自然语言检索，全程零云端依赖。
 
-🖼 **应该具有手机相册般的易用**
+- **类似 Git 的分支化历史**  
+  每次修改都记录在非线性的版本树中，可随时从任意历史步骤切出新版本进行比对，所有操作均可永久撤销，并支持将 Look 局部或完整批量应用至其他照片。
 
-面对数万张照片，传统目录常陷于卡顿，手动打标也是负担。Alcedo 无意再造一个复杂的资产管理服务，而是追求现代手机相册那般导入即用、零额外配置的轻盈。资产模块 Sleeve 内嵌轻量分析引擎 DuckDB，支持复杂的筛选条件；结合本地 CLIP 语义模型，可为图片自动生成对应标签，快捷分类。
+- **1:1 的命令行与智能体协同**  
+  图形界面中的每个交互（从筛片、调滑块到分支管理）在 `alcedo-cli` 中均有对应命令。配合 [alcedo-skills](https://github.com/zidage/alcedo-skills)，Claude Code 或 Codex 等智能体可以在后台批量处理，或在当前窗口中协同调色，将静态预设转变为能理解画面内容的动态脚本。
 
-🧵 **编辑历史应被永久保留**
-
-Alcedo引入了类似Git的分支化版本树：每一次修改都可永久回溯。并且支持批量应用调整项目，一键出片。
-
-🖥 **性能应该尽量高效**
-
-高像素文件叠上复杂蒙版，内存磁盘往往受累不堪，尤其在存储计算价格飙高的今天，一个软件的效率成为重中之重。Alcedo的处理管线由GPU驱动，配合增量局部重算与精细的内存管理，换取跟手的实时反馈；同时引入基于深度学习的联合去马赛克与降噪（JDD），实现比肩商业软件的RAW解码效果
-
-📖 **功能强大所伴随的复杂度不应被用户承担**
-
-告别二十年前满屏细碎滑块与层层嵌套菜单的压迫感。Alcedo追求最为平缓地学习曲线：区域职责清晰，深度功能从不过早打扰，初学者可凭直觉成片，专业用户也无需在多个软件中来回切换来构建本不该如此复杂的工作流程。
-
-🤖 **界面里能做的，智能体都能通过 CLI 做到**
-
-传统的照片命令行工具只会套用预设、导出文件。alcedo-cli 与图形界面一一对应：从图库筛片、拖动滑块到分支化的版本历史，每个操作都有对应的命令。带上你已经在用的智能体（如 Claude Code 或 Codex），它既可以在同一个窗口里与你协作，也可以在后台无窗口地批量处理。预设从静态的参数快照变成能理解场景的技能；插件变成智能体在技能中编写的轻量脚本，直接读写原生管线，无需中间 TIFF，软件核心也因此始终保持轻盈。
-
-## 功能一览
+## 功能深入
 
 ### RAW 解码
 
@@ -71,13 +60,9 @@ Alcedo 可以读取 Canon、Nikon、Sony、Fujifilm、Panasonic、OM System、Le
 
 它提供两种去马赛克方法。Bayer 传感器默认使用 RCD；Fujifilm X-Trans 默认使用 Neural Engine，这是一个从 [DemosaicNet](https://groups.csail.mit.edu/graphics/demosaicnet/) 蒸馏而来、在 GPU 上运行的精简神经网络，同样适用于 Bayer 文件。Alcedo 还支持基于 darktable 与 RawTherapee 的 inpaint-opposed 方法改进而来的高光重建、基于 Lensfun 配置文件的镜头校正，以及 DNG 文件内嵌的色彩配置文件。
 
-### 高性能 32 位浮点管线
-
-得益于高度优化的 GPU 加速管线（Windows 上基于 CUDA 和 OpenCL，Mac 上基于 Metal）和精心设计的缓存机制，即使打开 1.5 亿像素的文件，编辑依然流畅。拖动滑块时，无论原图分辨率多高，预览都能保持 2.5K、60 FPS；松开后，预览会提升到 4K。放大查看时，Alcedo 只以完整细节渲染当前可见的区域。
-
 ### 场景参考的色彩管线
 
-Alcedo 在整个编辑过程中保留 RAW 文件的全部范围，只在最后一步为你的显示器形成画面：
+Alcedo 在整个编辑过程中保留 RAW 文件的全部动态范围，只在最后一步为你的显示器形成画面：
 
 ```mermaid
 flowchart LR
@@ -142,7 +127,7 @@ alcedo-cli schema          # 每个命令的参数和结果
 alcedo-cli session stop
 ```
 
-**用技能代替预设，用脚本代替插件。** [alcedo-skills](https://github.com/zidage/alcedo-skills) 仓库中的 `alcedo` 技能会教智能体如何使用 alcedo-cli。安装时，直接对智能体说“Install the skill zidage/alcedo-skills”即可；在 Claude Code 中也可以运行 `/plugin marketplace add zidage/alcedo-skills` 和 `/plugin install alcedo@alcedo-skills`。有了它，智能体会渲染预览、亲自查看，再调整编辑参数，直到照片看起来合适。因此“帮我修一下这些照片”“来点阴郁的氛围”“帮我挑片”都会因场景而异，而不是套用固定的数值。新功能以技能中的小脚本形式提供，而不是编译进应用程序的插件。例如，`contact_sheet.py` 通过一次 `alcedo-cli batch` 调用为数百张照片生成联系表，方便智能体挑出最好的几张并评分；`analyze_preview.py` 则从预览中测量影调、色偏和地平线倾斜。它们的结果会以评分和编辑的形式直接写回项目。完整的[命令参考](https://github.com/zidage/alcedo-skills/blob/main/skills/alcedo/references/README.md)（英文）也在同一个仓库中。
+配合 [alcedo-skills](https://github.com/zidage/alcedo-skills) 仓库中的 `alcedo` 技能，智能体可以形成「渲染预览 → 观察画面 → 调整参数」的闭环，根据实际画面内容动态调整，而非机械套用固定预设。安装时，直接对智能体说“Install the skill zidage/alcedo-skills”即可；在 Claude Code 中也可以运行 `/plugin marketplace add zidage/alcedo-skills` 和 `/plugin install alcedo@alcedo-skills`。新功能也不需要编译进二进制插件，编写轻量 Python 脚本即可直接与管线交互。例如，`contact_sheet.py` 通过一次批量调用为照片生成联系表用于挑选评分；`analyze_preview.py` 则从预览中测量影调、色偏与地平线倾斜，结果直接写回项目。完整的[命令参考](https://github.com/zidage/alcedo-skills/blob/main/skills/alcedo/references/README.md)（英文）在同一个仓库中。
 
 ## 截图
 
