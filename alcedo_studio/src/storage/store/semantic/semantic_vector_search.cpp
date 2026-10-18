@@ -90,13 +90,17 @@ auto RelevanceDirection(const SemanticQueryEmbedding& embedding) -> std::vector<
  * `c = x . q / |x|`, `r = c - b = x . (q - n) / |x|`, and `|x| = sqrt(x . x)`: three inner
  * products per embedding row. Stored image vectors need not have unit length.
  *
- * The products are computed in a projection directly over the scan of the ready embedding rows
- * of the model, and only the scalar results join the scope. When the vectors go into the join,
- * DuckDB 1.2 builds its hash table on the embedding rows and copies every vector (about twice
- * the cost of the products at 20 000 rows). The cost of the scan therefore follows the number of
- * ready embeddings of the model in the project, not the scope size; the statistics and the keep
- * rule use the scope rows only. `scored` is materialized because `stats` and `rated` both read
- * it. The vectors are array literals: DuckDB binds have no array type.
+ * The products are computed only for the embedding rows of scope files, in two steps. The
+ * `scope_row` join reads only the scalar columns of the ready embedding rows of the model and
+ * returns the row ids of the scope files. The outer scan then reads the vectors of those rows
+ * through a semi join on the row id and computes the products in a projection over it. The semi
+ * join builds its hash table on the row ids, because the outer scan has no filter and its
+ * estimate is the full table, so no vector is copied into a hash table. When the vectors go
+ * into a join with the scope, DuckDB 1.2 builds the hash table on the embedding rows and copies
+ * every vector (about 60 ms at 20 000 rows of 512 values). The semi join also pushes the row id
+ * range of the scope rows into the outer scan, which skips the vectors outside that range.
+ * `scored` is materialized because `stats` and `rated` both read it. The vectors are array
+ * literals: DuckDB binds have no array type.
  */
 auto BuildRatedCte(sl_element_id_t folder_id, const SemanticQueryEmbedding& embedding,
                    int model_dim) -> duckorm::SqlFragment {
@@ -110,15 +114,18 @@ auto BuildRatedCte(sl_element_id_t folder_id, const SemanticQueryEmbedding& embe
             "sqrt(CAST(array_inner_product(se.embedding, se.embedding) AS DOUBLE)) AS "
             "embedding_norm, CAST(array_inner_product(se.embedding, ",
       scope.from_where_));
+  const char* table = ImageEmbeddingTable(model_dim);
   query.append(expr::lit_float_array(QueryDirection(embedding)));
   query.append(expr::raw(") AS DOUBLE) AS query_product, CAST(array_inner_product(se.embedding, "));
   query.append(expr::lit_float_array(RelevanceDirection(embedding)));
-  query.append(expr::raw(std::format(") AS DOUBLE) AS relevance_product FROM {} se WHERE ",
-                                     ImageEmbeddingTable(model_dim))));
-  query.append(expr::column_eq("se.model_key", embedding.model_key_));
   query.append(expr::raw(std::format(
-      " AND se.status = 'ready' AND se.embedding_dim = {}) products "
-      "JOIN scoped ON scoped.file_id = products.file_id AND scoped.image_id = products.image_id), "
+      ") AS DOUBLE) AS relevance_product FROM {0} se WHERE se.rowid IN (SELECT scope_row.rowid "
+      "FROM {0} scope_row JOIN scoped ON scoped.file_id = scope_row.file_id AND "
+      "scoped.image_id = scope_row.image_id WHERE ",
+      table)));
+  query.append(expr::column_eq("scope_row.model_key", embedding.model_key_));
+  query.append(expr::raw(std::format(
+      " AND scope_row.status = 'ready' AND scope_row.embedding_dim = {})) products), "
       "stats AS (SELECT COUNT(*) AS scored_count, AVG(relevance) AS relevance_mean, "
       "STDDEV_POP(relevance) AS relevance_deviation FROM scored), "
       "rated AS (SELECT scored.file_id, scored.image_id, scored.query_similarity, "

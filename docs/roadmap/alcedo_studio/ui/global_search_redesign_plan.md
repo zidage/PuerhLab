@@ -802,10 +802,53 @@ Remaining defects or unavailable platforms:
     limit depends on the photo set (the two calibration projects have no common feasible
     value). Other model profiles (for example jina-clip-v2) are not calibrated. Follow-up
     issue.
-  - Scan cost follows the project embedding count, not the folder size. Follow-up issue.
+  - Scan cost follows the project embedding count, not the folder size. Follow-up issue
+    #427, fixed (record below).
   - macOS not built or tested in this phase.
   - Cold sidecar start on Enter still blocks the worker (Section 12, known behavior; the
     residency plan owns it).
+```
+
+**Follow-up record: issue #427 (relevance products only for the folder scope)**
+
+```text
+Date / status: 2026-10-17 / complete.
+Change: SemanticVectorSearch::BuildRatedCte computes the three inner products only for the
+  embedding rows of scope files. A join of scalar columns (`scope_row` JOIN `scoped`) returns
+  the row ids of the ready embedding rows of the scope; the outer scan of the embedding table
+  reads those rows through a semi join on the row id, and a projection over it computes the
+  products. The semi join builds its hash table on the row ids (the outer scan has no filter,
+  so its estimate is the full table), so no vector is copied into a hash table, and the row id
+  range of the scope rows is pushed into the outer scan.
+Rejected shapes, measured on the production statement (20 000 embeddings, one folder):
+  vectors joined with the scope (either text order) 109-128 ms, because DuckDB 1.2.1 builds the
+  hash table on the embedding rows; IN semi join on (file_id, image_id) 105-115 ms; LATERAL
+  68 ms; MATERIALIZED scope 63-81 ms; row id semi join 62-64 ms in that run, 53 ms in the
+  benchmark. A constant IN list of file ids or row ids, an OR of file id ranges, and an extra
+  single-column index on file_id did not reduce the vector reads (DuckDB 1.2.1 reads the vector
+  column of every row that its pushed range filter admits).
+Tests (release, ALCEDO_BUILD_TESTS=ON for the run, then OFF again; two runs each):
+  DISABLED_RelevanceSelectOver20000Embeddings: before p50 57.3 / 55.2 ms; after 53.5 / 52.9 ms
+    (target <= 80 ms: met; 419 kept in both).
+  DISABLED_RelevanceSelectOfFolderDoesNotGrowWithProjectSize (new): folder of 100 files with
+    contiguous ids, other files in another folder, half of their rows before and half after
+    the folder rows:
+      1 000 project embeddings:   before 28.6 / 28.3 ms, after 27.6 / 26.9 ms
+      100 000 project embeddings: before 24.4 / 23.7 ms, after 28.0 / 31.0 ms
+    Check large p50 <= 2 x small p50: passes after the change. It also passes before it,
+    because DuckDB's join filter already limited the scan to the folder id range.
+    Reported, not checked: one more folder file written after every other file, so the folder
+    rows span the table (100 001 embeddings): before 227.6 / 241.7 ms (products of every row),
+    after 69.6 / 67.6 ms (products of the 101 folder rows only; the scan still reads the
+    vectors in the row id range of the folder rows).
+  Debug: SemanticStorageControllerTest, AlbumQueryTest, FilterServiceTest,
+    SemanticRelevanceCalibrationTest: 97 tests, 95 passed, 2 skipped (live calibration and
+    LargeLibraryPagesStayBoundedAndRecordTimings, environment variables), including
+    FolderScopeKeepsChildrenThatRankLowInTheProject and
+    PagesOfOneQueryJoinToTheFullOrderedResult.
+Remaining defect: when the rows of a folder span the embedding table, the scan reads the
+  vectors of every row in that range. DuckDB 1.2.1 has no plan that fetches only the listed
+  rows of an array column.
 ```
 
 ### Phase GS2 — Natural-language results in the Library

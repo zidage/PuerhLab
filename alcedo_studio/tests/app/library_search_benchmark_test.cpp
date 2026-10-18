@@ -17,7 +17,8 @@
 // A third benchmark measures the natural-language relevance read
 // (global_search_redesign_plan.md, Phase GS1): SemanticVectorSearch::SearchImageEmbeddings
 // over one folder of 20 000 synthetic 512-dimensional embeddings. Target: p50 at or below 80 ms
-// in a release build.
+// in a release build. A fourth measures the same read for a folder of 100 files in projects of
+// 1 000 and 100 000 embeddings (issue 427): the p50 must not grow with the project size.
 //
 // Environment variables:
 //   ALCEDO_SEARCH_BENCH_REPEAT   runs per query (default 3)
@@ -29,12 +30,14 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdint>
 #include <cstdlib>
 #include <filesystem>
 #include <format>
 #include <iostream>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "app/project_package_backend.hpp"
@@ -42,6 +45,8 @@
 #include "app/sleeve_filter_service.hpp"
 #include "library_search_test_support.hpp"
 #include "process_memory_test_support.hpp"
+#include "sleeve/sleeve_element/sleeve_element.hpp"
+#include "sleeve/storage.hpp"
 #include "storage/store/semantic/semantic_records.hpp"
 #include "storage/store/semantic/semantic_vector_search.hpp"
 #include "utils/clock/time_provider.hpp"
@@ -289,67 +294,187 @@ auto SyntheticUnitVector(uint32_t salt) -> std::vector<float> {
   return values;
 }
 
-TEST_F(LibrarySearchBenchmarkTest, DISABLED_RelevanceSelectOver20000Embeddings) {
-  constexpr size_t      kFileCount = 20000;
-  constexpr size_t      kPageSize  = 120;
-  constexpr const char* kModelKey  = "relevance-benchmark";
-  ProjectService        project(work_dir_ / "relevance.db", work_dir_ / "relevance.json");
-  ASSERT_EQ(SyntheticLibraryBuilder(project).AddFiles(BenchmarkLibrarySpecs(kFileCount, 0)).size(),
-            kFileCount);
+constexpr const char* kRelevanceModelKey = "relevance-benchmark";
 
-  auto&       storage = *project.GetStorage();
+/// The SQL expression of a pseudo-random 512-value embedding for the file id @p file_id_sql.
+auto                  PseudoRandomEmbeddingSql(const std::string& file_id_sql) -> std::string {
+  return std::format(
+      "CAST(list_transform(range({0}), k -> CAST(hash({1} * {0} + k) % 2001 AS FLOAT) / 1000.0 - "
+                       "1.0) AS FLOAT[{0}])",
+      kSemanticEmbeddingDim, file_id_sql);
+}
+
+void ExecuteBenchmarkSql(Storage& storage, const std::string& sql) {
+  auto          guard = storage.GetDatabase().GetConnectionGuard();
+  auto          lock  = guard.Lock();
+  duckdb_result result;
+  ASSERT_EQ(duckdb_query(guard.conn_, sql.c_str(), &result), DuckDBSuccess)
+      << duckdb_result_error(&result);
+  duckdb_destroy_result(&result);
+}
+
+/// Registers the benchmark model and writes a pseudo-random ready embedding for every file
+/// (FileImage row) that has no embedding yet.
+void WriteEmbeddingsForLibraryFiles(Storage& storage) {
   std::string error;
   ASSERT_TRUE(storage.GetSemanticModelRegistry().UpsertModel(
-      SemanticModelRecord{.model_key_     = kModelKey,
+      SemanticModelRecord{.model_key_     = kRelevanceModelKey,
                           .model_id_      = "relevance-benchmark",
                           .revision_      = "bench",
                           .embedding_dim_ = kSemanticEmbeddingDim,
                           .image_size_    = 256},
       &error))
       << error;
-  {
-    // One statement writes a pseudo-random ready embedding for every file.
-    auto          guard = storage.GetDatabase().GetConnectionGuard();
-    auto          lock  = guard.Lock();
-    duckdb_result result;
-    const auto    sql = std::format(
-        "INSERT INTO SemanticImageEmbedding (file_id, image_id, model_key, embedding, "
-           "embedding_dim, thumbnail_resolution, status, error) "
-           "SELECT fi.file_id, fi.image_id, '{}', "
-           "CAST(list_transform(range({}), k -> CAST(hash(fi.file_id * {} + k) % 2001 AS FLOAT) "
-           "/ 1000.0 - 1.0) AS FLOAT[{}]), {}, 256, 'ready', NULL FROM FileImage fi",
-        kModelKey, kSemanticEmbeddingDim, kSemanticEmbeddingDim, kSemanticEmbeddingDim,
-        kSemanticEmbeddingDim);
-    ASSERT_EQ(duckdb_query(guard.conn_, sql.c_str(), &result), DuckDBSuccess)
-        << duckdb_result_error(&result);
-    duckdb_destroy_result(&result);
-  }
-  ASSERT_EQ(storage.GetSemanticEmbeddingStore().CountImageEmbeddings(kModelKey), kFileCount);
+  ExecuteBenchmarkSql(
+      storage,
+      std::format("INSERT INTO SemanticImageEmbedding (file_id, image_id, model_key, embedding, "
+                  "embedding_dim, thumbnail_resolution, status, error) "
+                  "SELECT fi.file_id, fi.image_id, '{}', {}, {}, 256, 'ready', NULL "
+                  "FROM FileImage fi WHERE NOT EXISTS (SELECT 1 FROM SemanticImageEmbedding se "
+                  "WHERE se.file_id = fi.file_id)",
+                  kRelevanceModelKey, PseudoRandomEmbeddingSql("fi.file_id"),
+                  kSemanticEmbeddingDim));
+}
 
-  const SemanticQueryEmbedding embedding{.model_key_ = kModelKey,
+/**
+ * Writes @p count files of another folder with a ready embedding each, by SQL: Element, Image,
+ * FileImage, and FolderContent rows and an embedding row. Only the table sizes matter to the
+ * relevance read of the library root, so the files have no Sleeve objects. Their ids start at
+ * @p first_id.
+ */
+void WriteOtherFolderFiles(Storage& storage, int64_t first_id, size_t count) {
+  constexpr int64_t kOtherFolderId = 999999999;
+  ExecuteBenchmarkSql(
+      storage,
+      std::format(
+          "INSERT INTO Element SELECT {0} + r, {3}, 'other_' || r, now(), now(), 1 "
+          "FROM range({1}) t(r); "
+          "INSERT INTO Image (id, file_name) SELECT {0} + r, 'other_' || r FROM range({1}) t(r); "
+          "INSERT INTO FileImage SELECT {0} + r, {0} + r FROM range({1}) t(r); "
+          "INSERT INTO FolderContent SELECT {2}, {0} + r FROM range({1}) t(r); "
+          "INSERT INTO SemanticImageEmbedding (file_id, image_id, model_key, embedding, "
+          "embedding_dim, thumbnail_resolution, status, error) "
+          "SELECT {0} + r, {0} + r, '{4}', {5}, {6}, 256, 'ready', NULL FROM range({1}) t(r)",
+          first_id, count, kOtherFolderId, static_cast<uint32_t>(ElementType::FILE),
+          kRelevanceModelKey, PseudoRandomEmbeddingSql(std::format("({} + r)", first_id)),
+          kSemanticEmbeddingDim));
+}
+
+struct RelevanceReadLatency {
+  size_t kept_count_ = 0;
+  double p50_ms_     = 0.0;
+  double p95_ms_     = 0.0;
+  int    runs_       = 0;
+};
+
+/// Times SearchImageEmbeddings (page of 120) on the folder @p folder_id of @p project.
+auto MeasureRelevanceRead(ProjectService& project, sl_element_id_t folder_id)
+    -> RelevanceReadLatency {
+  constexpr size_t             kPageSize = 120;
+  const SemanticQueryEmbedding embedding{.model_key_ = kRelevanceModelKey,
                                          .dimension_ = kSemanticEmbeddingDim,
                                          .query_     = SyntheticUnitVector(1),
                                          .neutral_   = SyntheticUnitVector(2)};
-  const auto                   folder_id = LibraryRootFolderId(project);
-  const auto&                  search    = storage.GetSemanticVectorSearch();
+  const auto&                  search = project.GetStorage()->GetSemanticVectorSearch();
   std::vector<double>          samples;
-  const int                    repeat = std::max(RepeatCount(), 20);
-  size_t                       total  = 0;
-  for (int run = 0; run < repeat; ++run) {
-    const auto start = Clock::now();
-    const auto page  = search.SearchImageEmbeddings(folder_id, embedding, 0, kPageSize, &error);
+  RelevanceReadLatency         latency;
+  latency.runs_ = std::max(RepeatCount(), 20);
+  for (int run = 0; run < latency.runs_; ++run) {
+    std::string error;
+    const auto  start = Clock::now();
+    const auto  page  = search.SearchImageEmbeddings(folder_id, embedding, 0, kPageSize, &error);
     samples.push_back(ElapsedMs(start));
-    ASSERT_TRUE(error.empty()) << error;
-    total = page.total_;
+    EXPECT_TRUE(error.empty()) << error;
+    latency.kept_count_ = page.total_;
   }
+  latency.p50_ms_ = Percentile(samples, 50);
+  latency.p95_ms_ = Percentile(samples, 95);
+  return latency;
+}
 
-  const auto line = std::format("  {} embeddings, {} kept, p50 {:.1f} ms, p95 {:.1f} ms ({} runs)",
-                                kFileCount, total, Percentile(samples, 50),
-                                Percentile(samples, 95), repeat);
+TEST_F(LibrarySearchBenchmarkTest, DISABLED_RelevanceSelectOver20000Embeddings) {
+  constexpr size_t kFileCount = 20000;
+  ProjectService   project(work_dir_ / "relevance.db", work_dir_ / "relevance.json");
+  ASSERT_EQ(SyntheticLibraryBuilder(project).AddFiles(BenchmarkLibrarySpecs(kFileCount, 0)).size(),
+            kFileCount);
+  auto& storage = *project.GetStorage();
+  WriteEmbeddingsForLibraryFiles(storage);
+  ASSERT_EQ(storage.GetSemanticEmbeddingStore().CountImageEmbeddings(kRelevanceModelKey),
+            kFileCount);
+
+  const auto latency = MeasureRelevanceRead(project, LibraryRootFolderId(project));
+  const auto line =
+      std::format("  {} embeddings, {} kept, p50 {:.1f} ms, p95 {:.1f} ms ({} runs)", kFileCount,
+                  latency.kept_count_, latency.p50_ms_, latency.p95_ms_, latency.runs_);
   std::cout << "\n[natural-language relevance read]\n" << line << "\n";
   std::cout.flush();
   ::testing::Test::RecordProperty("relevance read", line);
-  EXPECT_LE(Percentile(samples, 50), 80.0);
+  EXPECT_LE(latency.p50_ms_, 80.0);
+}
+
+/**
+ * A folder of 100 files in a project of 1 000 and of 100 000 embeddings. The folder files are
+ * imported together, so their ids are contiguous, and half of the other embedding rows are
+ * written before the folder rows and half after them. The relevance read multiplies only the
+ * folder rows and skips the vectors outside their row range, so the p50 of the large project
+ * must stay within twice the p50 of the small project.
+ *
+ * A third project of 100 000 embeddings adds one folder file that is written after every other
+ * file, so the folder rows span the whole table. Its p50 is reported and not checked: DuckDB 1.2
+ * reads the vectors of every row in the range of the folder rows.
+ */
+TEST_F(LibrarySearchBenchmarkTest, DISABLED_RelevanceSelectOfFolderDoesNotGrowWithProjectSize) {
+  constexpr size_t          kFolderFileCount = 100;
+  constexpr sl_element_id_t kFolderId        = 777;
+  constexpr int64_t         kOtherFirstId    = 1000000;
+  constexpr int64_t         kLastFileId      = 9000000;
+  const auto measure = [&](size_t project_embedding_count, bool last_file_in_folder) {
+    const auto     name = std::format("relevance_{}_{}", project_embedding_count,
+                                  last_file_in_folder ? "spanning" : "contiguous");
+    ProjectService project(work_dir_ / (name + ".db"), work_dir_ / (name + ".json"));
+    EXPECT_EQ(SyntheticLibraryBuilder(project)
+                  .AddFiles(BenchmarkLibrarySpecs(kFolderFileCount, 0))
+                  .size(),
+              kFolderFileCount);
+    auto& storage = *project.GetStorage();
+    // The library files are also the direct children of the folder.
+    ExecuteBenchmarkSql(storage, std::format("INSERT INTO FolderContent SELECT {}, file_id FROM "
+                                             "FileImage",
+                                             kFolderId));
+    const auto other_count = project_embedding_count - kFolderFileCount;
+    const auto before      = other_count / 2;
+    WriteOtherFolderFiles(storage, kOtherFirstId, before);
+    WriteEmbeddingsForLibraryFiles(storage);
+    WriteOtherFolderFiles(storage, kOtherFirstId + static_cast<int64_t>(before),
+                          other_count - before);
+    size_t expected_count = project_embedding_count;
+    if (last_file_in_folder) {
+      WriteOtherFolderFiles(storage, kLastFileId, 1);
+      ExecuteBenchmarkSql(storage, std::format("INSERT INTO FolderContent VALUES ({}, {})",
+                                               kFolderId, kLastFileId));
+      ++expected_count;
+    }
+    EXPECT_EQ(storage.GetSemanticEmbeddingStore().CountImageEmbeddings(kRelevanceModelKey),
+              expected_count);
+    return MeasureRelevanceRead(project, kFolderId);
+  };
+  const auto report = [](const std::string& label, const RelevanceReadLatency& latency) {
+    const auto line =
+        std::format("  {}: {} kept, p50 {:.1f} ms, p95 {:.1f} ms ({} runs)", label,
+                    latency.kept_count_, latency.p50_ms_, latency.p95_ms_, latency.runs_);
+    std::cout << "\n[natural-language relevance read of a folder]\n" << line << "\n";
+    ::testing::Test::RecordProperty(label, line);
+  };
+
+  const auto small_project    = measure(1000, false);
+  const auto large_project    = measure(100000, false);
+  const auto spanning_project = measure(100000, true);
+  report("folder of 100 files, 1000 project embeddings", small_project);
+  report("folder of 100 files, 100000 project embeddings", large_project);
+  report("folder of 101 files spanning 100001 project embeddings", spanning_project);
+  std::cout.flush();
+  EXPECT_EQ(large_project.kept_count_, small_project.kept_count_);
+  EXPECT_LE(large_project.p50_ms_, 2.0 * small_project.p50_ms_);
 }
 
 TEST_F(LibrarySearchBenchmarkTest, DISABLED_ReportsSearchLatencyForPackedProject) {
