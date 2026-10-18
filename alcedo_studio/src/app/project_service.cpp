@@ -717,6 +717,7 @@ auto ProjectService::GetAiSidecarRuntimeService() const
 auto ProjectService::NormalizedAiSidecarIdleStopSeconds(int seconds) -> int {
   switch (seconds) {
     case 0:
+    case 30:
     case 60:
     case 300:
     case 900:

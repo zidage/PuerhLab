@@ -54,8 +54,8 @@ class ProjectService {
   /// QSettings key of "Keep AI model loaded": seconds the AI sidecar keeps running after its
   /// last use. 0 stops it at once, -1 keeps it until the project closes.
   static constexpr const char* kAiSidecarIdleStopSecondsKey     = "ai/sidecarIdleStopSeconds";
-  static constexpr int         kDefaultAiSidecarIdleStopSeconds = 300;
-  /// @p seconds when it is one of the setting values (0, 60, 300, 900, -1), else the default.
+  static constexpr int         kDefaultAiSidecarIdleStopSeconds = 30;
+  /// @p seconds when it is one of the setting values (0, 30, 60, 300, 900, -1), else the default.
   [[nodiscard]] static auto    NormalizedAiSidecarIdleStopSeconds(int seconds) -> int;
   /// Applies the "Keep AI model loaded" value @p seconds (normalized as above) to the runtime
   /// service of this project, at once. Call on the UI thread. Does not write the setting.

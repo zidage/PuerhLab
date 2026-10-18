@@ -34,6 +34,8 @@ struct FakeSidecarState {
   std::atomic<bool>              ready{true};
   std::atomic<bool>              model_info_ready{true};
   std::atomic<int>               ping_count{0};
+  // Ping blocks this long, like a gRPC call to a process that does not listen yet.
+  std::atomic<int>               ping_delay_ms{0};
   std::atomic<int>               embed_text_calls{0};
   std::atomic<int>               embed_image_batch_calls{0};
   std::atomic<int>               describe_image_calls{0};
@@ -52,6 +54,9 @@ class FakeRuntimeControlClient final : public sidecar_client::RuntimeControlClie
   auto Ping(std::chrono::milliseconds timeout, std::string* error) -> bool override {
     (void)timeout;
     state_->ping_count.fetch_add(1);
+    if (const int delay_ms = state_->ping_delay_ms.load(); delay_ms > 0) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));
+    }
     if (!state_->ready.load()) {
       if (error) *error = "fake runtime is not ready";
       return false;
@@ -427,6 +432,9 @@ class FakeSidecarClient final : public sidecar_client::Client {
   void SetEndpoint(std::string endpoint) { endpoint_ = std::move(endpoint); }
   void SetReady(bool ready) { state_->ready.store(ready); }
   void SetModelInfoReady(bool ready) { state_->model_info_ready.store(ready); }
+  void SetPingDelay(std::chrono::milliseconds delay) {
+    state_->ping_delay_ms.store(static_cast<int>(delay.count()));
+  }
   void SetListModelsCanned(std::vector<AiDiscoveredModel> models) {
     state_->list_models_canned = std::move(models);
   }
@@ -1318,6 +1326,50 @@ TEST(AiSidecarRuntimeServiceTest, WorkerStartKeepsOwnerThreadResponsive) {
   lease.reset();
 }
 
+// Issue #432: the readiness probe blocks in gRPC calls while the process boots. The
+// interactive start runs the probe off the owner thread, so a slow Ping does not delay the
+// events (paints, animation timers) of the owner thread.
+TEST(AiSidecarRuntimeServiceTest, InteractiveStartRunsSlowProbeOffOwnerThread) {
+  auto                    client = std::make_shared<FakeSidecarClient>(/*ready=*/false);
+  client->SetPingDelay(std::chrono::milliseconds(300));
+  AiSidecarRuntimeService service(FakeFactory(client));
+  auto                    lease = service.AcquireLease();
+
+  std::atomic<int64_t>    max_post_wait_us{-1};
+  std::atomic<bool>       poster_done{false};
+  std::thread             poster([&] {
+    // Posts several calls during the boot and records the longest wait for the owner thread.
+    for (int i = 0; i < 6; ++i) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(110));
+      const auto posted_at = SteadyClock::now();
+      QMetaObject::invokeMethod(
+          &service,
+          [&max_post_wait_us, posted_at] {
+            const auto waited_us = std::chrono::duration_cast<std::chrono::microseconds>(
+                                       SteadyClock::now() - posted_at)
+                                       .count();
+            if (waited_us > max_post_wait_us.load()) {
+              max_post_wait_us = waited_us;
+            }
+          },
+          Qt::QueuedConnection);
+    }
+    client->SetPingDelay(std::chrono::milliseconds(0));
+    client->SetReady(true);
+    poster_done = true;
+  });
+
+  auto options            = LongRunningOptions();
+  options.startup_timeout = std::chrono::milliseconds(5000);
+  EXPECT_TRUE(service.StartAndWaitInteractive(options));
+  EXPECT_TRUE(ProcessEventsUntil([&] { return poster_done.load(); }, std::chrono::seconds(10)));
+  poster.join();
+  QCoreApplication::processEvents();
+  ASSERT_GE(max_post_wait_us.load(), 0);
+  EXPECT_LT(max_post_wait_us.load(), 100000);
+  lease.reset();
+}
+
 TEST(AiSidecarRuntimeServiceTest, ZeroDelayWhileIdleStopsRunningProcess) {
   auto                    client = std::make_shared<FakeSidecarClient>();
   AiSidecarRuntimeService service(FakeFactory(client));
@@ -1356,9 +1408,9 @@ TEST(AiSidecarRuntimeServiceTest, IdleStopSettingAppliesToRunningService) {
 }
 
 TEST(AiSidecarRuntimeServiceTest, UnknownIdleStopSettingReadsAsDefault) {
-  EXPECT_EQ(ProjectService::NormalizedAiSidecarIdleStopSeconds(42), 300);
-  EXPECT_EQ(ProjectService::NormalizedAiSidecarIdleStopSeconds(-7), 300);
-  for (const int value : {0, 60, 300, 900, -1}) {
+  EXPECT_EQ(ProjectService::NormalizedAiSidecarIdleStopSeconds(42), 30);
+  EXPECT_EQ(ProjectService::NormalizedAiSidecarIdleStopSeconds(-7), 30);
+  for (const int value : {0, 30, 60, 300, 900, -1}) {
     EXPECT_EQ(ProjectService::NormalizedAiSidecarIdleStopSeconds(value), value);
   }
 
@@ -1369,7 +1421,7 @@ TEST(AiSidecarRuntimeServiceTest, UnknownIdleStopSettingReadsAsDefault) {
   {
     ProjectService project(db_path, meta_path, ProjectOpenMode::kCreateNew);
     project.SetAiSidecarIdleStopSeconds(42);
-    EXPECT_EQ(project.GetAiSidecarRuntimeService()->IdleStopDelay(), std::chrono::seconds(300));
+    EXPECT_EQ(project.GetAiSidecarRuntimeService()->IdleStopDelay(), std::chrono::seconds(30));
   }
   std::filesystem::remove(db_path);
   std::filesystem::remove(meta_path);
