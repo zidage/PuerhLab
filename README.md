@@ -14,9 +14,9 @@
 
 **Alcedo Studio** is a free and open-source RAW editor and photo library.
 
-Copy your photos to a local drive, import the folder, and Alcedo lets you browse, rate, and search them, then develop each RAW in a GPU-accelerated, 32-bit floating-point pipeline that handles files of up to 150 megapixels. The album structure and the full edit history of every photo live together in a single project file, which you can move or back up like any other file.
+Import your photos to browse, rate, and search them within a single project, then develop RAW files in an end-to-end 32-bit floating-point GPU pipeline that handles large medium-format files without lag. The album structure and every photo's complete edit history stay inside one project file, making backups and moving libraries as simple as copying a standard file.
 
-It supports Windows 10/11 (x64) and Macs with Apple Silicon.
+Supports Windows 10/11 (x64 with CUDA/OpenCL) and Macs with Apple Silicon (Metal).
 
 <p align="center">
   <img src="docs/images/editor.jpg" alt="The Alcedo Studio editor with a RAW photo open, the adjustment panels on the right, and the filmstrip along the bottom" width="100%"/>
@@ -35,47 +35,32 @@ https://github.com/user-attachments/assets/ae0d9773-220e-4901-90f6-1989f58b0462
 
 </details>
 
-## Design from first principles (TL;DR)
+## Key Features
 
-People who love photography tend to have a keen eye for color, yet editing tools often wear them down. Many of today's applications keep piling features onto technical foundations laid decades ago, and grow more bloated every year. I did not want to make a plugin or a throwaway vibe-coded app. Instead, I went back to first principles: if you built a RAW editor from scratch today, this is perhaps how it should work.
+- **Scene-Referred Node-Based Color Pipeline**  
+  Operates entirely in a 32-bit floating-point scene-linear space with built-in ACES 2.0 and OpenDRT output transforms. Edits are structured as an intuitive node graph: a `Develop` node handles RAW decoding and color space transforms, followed by arbitrary `Color Grade` nodes with dedicated masks. Includes 113 film LUTs and supports custom 3D CUBE LUTs in any color space.
 
-🎨 **The processing pipeline should be transparent and follow industry standards**
+- **DAG-Based GPU Pipeline**  
+  Edits are evaluated as a directed acyclic graph (DAG) in full 32-bit floating-point precision on native CUDA/OpenCL (Windows) and Metal (macOS). Each node and mask caches its output, so moving a slider only recalculates what comes after it rather than reprocessing the entire image. The preview updates in real time while dragging and settles to full quality on release. Zooming in only computes the visible region at 1:1 detail, eliminating the need to wait for offline proxies.
 
-Alcedo uses node-based editing. You can freely reorder edits and organize mask hierarchies, so the thread of every step is clear at a glance. A built-in ACES workflow with customizable color science frees you from the tangle of vendor profiles and the endless, almost mystical debates about the "Leica look": every camera finally stands on equal footing. 113 updatable film LUTs, together with halation, grain, and black-mist effects, give you a striking cinematic look in one click, and your own 3D CUBE LUTs work too, whatever color space they were made for.
+- **Local Asset Management (DuckDB & Local CLIP)**  
+  Catalogs are backed by an embedded DuckDB engine for sub-millisecond filtering across massive libraries. An on-device multilingual CLIP model tags photos upon import for natural language search without cloud dependencies.
 
-🖼 **It should be as easy to use as the photo gallery on your phone**
+- **Branching Version History (Git-like DAG)**  
+  Every adjustment is recorded in a non-linear version tree. Branch new variations from any step, undo changes permanently, or copy partial/complete Looks across images.
 
-With tens of thousands of photos, traditional catalogs often slow to a crawl, and tagging by hand is a chore. Alcedo does not set out to build yet another complex asset-management service. It aims for the lightness of a modern phone gallery: import and go, with no extra setup. Its asset module, Sleeve, embeds the lightweight analytical engine DuckDB to support complex filters, and a local CLIP semantic model tags your photos automatically so you can sort them quickly.
+- **Full CLI & Agent Collaboration**  
+  Every UI action—from culling and slider adjustments to branching history—maps 1:1 to `alcedo-cli`. Paired with [alcedo-skills](https://github.com/zidage/alcedo-skills), agents like Claude Code or Codex can run batch jobs headlessly or collaborate directly in the live window via a "preview → evaluate → adjust" loop.
 
-🧵 **Edit history should be kept forever**
+## A Closer Look
 
-Alcedo introduces a Git-like branching version tree, so you can always go back to any change. You can also apply adjustments to many photos at once and finish a whole set in one click.
-
-🖥 **Performance should be as efficient as possible**
-
-High-resolution files with complex masks often strain memory and disk, and with storage and compute prices soaring, the efficiency of an application matters more than ever. Alcedo's processing pipeline runs on the GPU and, with incremental local recomputation and careful memory management, gives responsive real-time feedback. It also uses deep-learning-based joint demosaicing and denoising (JDD) to decode RAW files on par with commercial software.
-
-📖 **Users should not carry the complexity that comes with powerful features**
-
-Say goodbye to the oppressive walls of tiny sliders and deeply nested menus from twenty years ago. Alcedo aims for the gentlest possible learning curve: each area has a clear job, and advanced features never get in your way too early. Beginners can get great results by intuition, and professionals no longer have to jump between several applications to build a workflow that should never have been this complicated.
-
-🤖 **Whatever you can do in the window, an agent can do through the CLI**
-
-Most photo command-line tools only apply a preset and export a file. alcedo-cli matches the interface command for command, from culling the library and moving sliders to branching the version history. Bring the agent you already use, such as Claude Code or Codex: it can work beside you in the same live window, or run batch jobs headlessly in the background. Presets become scene-aware skills, and plugins become small scripts that an agent writes inside a skill. They read from and write straight back to the native pipeline, with no intermediate TIFFs, so the core application stays lean.
-
-## A closer look
-
-### RAW decode
+### RAW Decode
 
 Alcedo reads RAW files from Canon, Nikon, Sony, Fujifilm, Panasonic, OM System, Leica, Hasselblad, Phase One (including the 150 MP IQ4), Pentax, Sigma, and DNGs from phones and drones; see the lists of [supported formats](docs/supported_raw_formats.md) and [supported cameras](docs/supported_cameras.md). Through the project's [LibRaw fork](https://github.com/zidage/LibRaw), it also opens Nikon High Efficiency NEFs from the Z 8, Z 9, Z 6 III, and Z 50 II.
 
 It offers two demosaicing methods. RCD is the default for Bayer sensors, and the Neural Engine, a compact neural network distilled from [DemosaicNet](https://groups.csail.mit.edu/graphics/demosaicnet/) that runs on the GPU, is the default for Fujifilm X-Trans and works with Bayer files as well. Alcedo also supports highlight reconstruction based on an improved inpaint-opposed method from darktable and RawTherapee, lens correction with Lensfun profiles, and the color profiles embedded in DNG files.
 
-### High-performance 32-bit float pipeline
-
-Editing stays fluid even with a 150-megapixel file, thanks to a highly optimized GPU-accelerated pipeline, built on CUDA and OpenCL on Windows and Metal on the Mac, together with a carefully designed caching mechanism. While you drag a slider, the preview holds 2.5K at 60 frames per second regardless of the source resolution, and when you let go it resolves to 4K. When you zoom in, Alcedo renders only the visible region at full detail.
-
-### Scene-referred color pipeline
+### Scene-Referred Color Pipeline
 
 Alcedo keeps the full range of the RAW file through the whole edit and forms the picture for your display only at the last step:
 
@@ -90,7 +75,7 @@ flowchart LR
 
 For the display rendering transform, you can choose the ACES 2.0 output transform or OpenDRT, and set the target color space, transfer function, and peak luminance. On a Mac with an HDR display, the editor previews the HDR result directly.
 
-### Node-based grading
+### Node-Based Grading
 
 Each photo's edit is a node graph. The Develop node turns the RAW into a scene-referred image, any number of Color Grade nodes follow in sequence, and the Display Transform node forms the final picture. Every Color Grade node carries its own adjustments and its own masks, so a grade can apply to the whole frame or only to the region you choose.
 
@@ -102,92 +87,92 @@ flowchart LR
     G3 --> T[Display Transform]
 ```
 
-Inside each node you will find the usual tone and color controls, a tone curve, lift/gamma/gain color wheels, selective color, and detail tools, with shadows and highlights handled by local tone mapping. Alcedo also ships with [CUBE LUTs built from the spectral responses of real film stocks](https://github.com/JanLohse/spectral_film_lut), along with film grain and halation based on physical models.
+Each node provides standard tone and color controls, tone curves, Lift/Gamma/Gain color wheels, selective color, and detail tools. Shadows and highlights are handled by local tone mapping. Alcedo also includes [CUBE LUTs built from the spectral response of real film](https://github.com/JanLohse/spectral_film_lut), as well as physically modeled film grain and halation.
 
-### LUTs in any color space
+### LUTs in Any Color Space
 
-Besides the official film LUT packages, you can use your own 3D CUBE LUTs: put them in the user LUT folder that the LUT browser shows, and they appear under "User". For each LUT, you choose the encoding it expects and the one it produces. Scene encodings include ACES, ARRI LogC3 and LogC4, Fujifilm F-Log, Panasonic V-Log, Nikon N-Log, Apple Log, and DaVinci Intermediate; display encodings include sRGB, BT.1886, PQ, and HLG. When a LUT produces a display encoding, Alcedo brings its output back into the scene with the ACES 2.0 inverse output transform, so the LUT works inside the scene-referred pipeline like any other adjustment. Alcedo can remember the encoding pair of a LUT and apply it each time you use that LUT, and copying adjustments to other photos includes the encodings. The LUT browser filters by category, source, brand, and print stock.
+Alongside the built-in film LUT pack, you can use your own 3D CUBE LUTs: drop them into the folder suggested by the LUT browser, and they appear under the "User" category. You can set the expected input encoding and resulting output encoding for each LUT. Scene encodings include ACES, ARRI LogC3 and LogC4, Fujifilm F-Log, Panasonic V-Log, Nikon N-Log, Apple Log, and DaVinci Intermediate; display encodings include sRGB, BT.1886, PQ, and HLG. When a LUT outputs a display encoding, Alcedo applies an ACES 2.0 inverse output transform to bring the result back into the scene space, allowing the LUT to integrate into the scene-referred pipeline like any other adjustment. Alcedo remembers encoding pairs per LUT and carries them when copying adjustments. The LUT browser supports filtering by category, source, brand, and print stock.
 
-### Versions and edit history
+### Versions and Edit History
 
-Every photo can hold several named versions, and you can branch a new version from any point in the history. Each adjustment is recorded in a Git-like history saved inside the project file, so you can undo it forever. You can also copy a whole look, or only the parts you choose, onto other photos. The [edit history design notes](https://zidage.github.io/AlcedoStudio_docs/en/docs/developer/edit-history-architecture) explain how it works.
+Each photo can store multiple named versions, or branch into a new version from any step in history. Adjustments are recorded in a Git-like history inside the project file, making every step reversible. You can copy an entire Look, or select specific adjustments, across photos. For architecture details, see the [edit history design notes](https://zidage.github.io/AlcedoStudio_docs/en/docs/developer/edit-history-architecture).
 
-### Library and search
+### Library and Search
 
-The library is stored in a [DuckDB](https://duckdb.org/) database, so browsing, filtering, and searching stay responsive as your collection grows. The Album Inspector groups photos by capture date, camera, lens, label, and rating, and selecting a group filters the album.
+The library is stored in a [DuckDB](https://duckdb.org/) database, keeping browsing, filtering, and search responsive as your collection expands. The album inspector groups photos by date, camera, lens, tag, and rating; selecting any group filters the catalog instantly.
 
-Alcedo supports three kinds of search: EXIF search by camera, lens, date, ISO, focal length, and aperture; natural-language search with multilingual CLIP models that run locally and can tag photos automatically after import; and full-text search over the descriptions and tags Alcedo has generated.
+Alcedo supports three search modes: EXIF queries by camera, lens, date, ISO, focal length, and aperture; natural-language search via on-device multilingual CLIP models that can also auto-tag on import; and full-text search across generated descriptions and tags.
 
-It can also connect to an AI provider you already use, through an OpenAI-compatible or Anthropic-compatible endpoint, to write a description for each photo and give it a 1–5 star rating with a short reason. You can set how strict the review is and which language it uses. API keys are kept in the Windows Credential Manager or the macOS Keychain, and the analysis runs in the background while you keep working.
+It can also connect to your existing AI services via OpenAI- or Anthropic-compatible APIs to write photo descriptions and assign 1–5 star ratings with concise rationales. Rating strictness and language are configurable. API keys are stored securely in Windows Credential Manager or macOS Keychain, and analysis runs in the background.
 
 ### Export
 
-Alcedo exports JPEG, PNG, TIFF, OpenEXR, and Ultra HDR JPEG, at 8, 16, or 32 bits depending on the format. It supports sizing by long edge, dimensions, or print size, embedded ICC profiles, and file names built from the source name, capture date, camera, lens, exposure, rating, and a sequence number. Export presets (Standard, Web, Social Media, Email, Maximum Quality JPEG, 16-bit TIFF, and EXR Archive) set every option except the destination, and you can save your own. You choose whether each export keeps the EXIF metadata, the ICC profile, and the GPS location of the source photo. Camera and lens serial numbers and the edit history are never written to exported files.
+Alcedo exports to JPEG, PNG, TIFF, OpenEXR, and Ultra HDR JPEG, supporting 8, 16, or 32 bits where applicable. Sizing can be defined by long edge, exact dimensions, or print size, with embedded ICC profiles and flexible filename patterns. Built-in presets (Standard, Web, Social Media, Email, Maximum Quality JPEG, 16-bit TIFF, and EXR Archive) configure all settings except destination, and custom presets can be saved. Metadata export options let you choose whether to retain EXIF, ICC profiles, and GPS coordinates. Camera/lens serial numbers and edit history are never written to exported files.
 
-### AI agents and alcedo-cli
+### AI Agents and alcedo-cli
 
-alcedo-cli is installed next to the application (inside the app bundle on macOS). It gives an agent, a script, or you in a terminal the same reach as the interface:
+alcedo-cli is installed alongside the application (inside the app bundle on macOS). Agents, shell scripts, or terminal users can perform any UI action through the CLI:
 
-- **Projects and library**: create, open, and save projects; import folders; list, rate, select, and delete photos; read capture metadata and thumbnails; and search with the same rules as the search dialog, including natural-language search.
-- **Editing**: open a photo, read and set any adjustment the editor offers, set many fields in one step, work with nodes and LUTs, undo and redo, and read the history.
-- **Versions**: create, branch, check out, rename, and remove versions, and copy and paste adjustments between photos.
-- **Output**: render previews for the agent to look at, export with the same options as the export panel, and follow background tasks until they finish.
+- **Projects and Library**: Create, open, and save projects; import folders; list, rate, select, and delete photos; inspect metadata and thumbnails; query via search rules including natural-language queries.
+- **Editing**: Open photos, inspect and set any adjustment, update multiple fields atomically, manipulate nodes and LUTs, undo/redo, and read edit histories.
+- **Versions**: Create, branch, switch, rename, and delete versions; copy and paste adjustments across photos.
+- **Output**: Render previews for inspection, export using identical settings to the UI panel, and monitor background tasks until completion.
 
-An agent can work in two ways. A headless session runs without a window, which suits batch jobs. An agent can also take control of the window you are using: while it has control, your edit controls are locked, but you can still pan, zoom, and watch the scopes. The agent session stays at the top of the task island and the Background Tasks dialog with a list of its actions, and Stop ends its control at once. Agent edits are marked in the history and show the agent's note, so you can review or undo each one.
+Agents operate in two modes. Headless sessions run in the background for batch workflows. Alternatively, an agent can take control of your active window: editing controls are locked during its operations while viewport panning, zooming, and scopes remain active. Agent sessions are pinned to the task island and background tasks dialog, listing executed commands; clicking Stop immediately returns control. Agent edits are badged in the history with rationales for easy review and rollback.
 
 ```sh
 alcedo-cli session start --headless --project <project>.alcd
-alcedo-cli call search.query '{"text": "sunset over the sea"}'
-alcedo-cli schema          # the parameters and results of every command
+alcedo-cli call search.query '{"text": "sunset over the ocean"}'
+alcedo-cli schema          # Parameter and result definitions per command
 alcedo-cli session stop
 ```
 
-**Skills instead of presets, scripts instead of plugins.** The `alcedo` skill in the [alcedo-skills](https://github.com/zidage/alcedo-skills) repository teaches an agent how to use alcedo-cli. To install it, ask your agent "Install the skill zidage/alcedo-skills", or in Claude Code run `/plugin marketplace add zidage/alcedo-skills` and `/plugin install alcedo@alcedo-skills`. With it, the agent renders a preview, looks at it, and changes the editor values until the photo looks right, so "fix these photos", "a moody look", or "cull this shoot" adapts to each scene instead of applying fixed numbers. New features come as small scripts in the skill rather than as plugins compiled into the application. For example, `contact_sheet.py` builds contact sheets of hundreds of photos through one `alcedo-cli batch` call so the agent can pick and rate the best frames, and `analyze_preview.py` measures tone, color cast, and horizon tilt from a preview. Their results go straight back into the project as ratings and edits. The full [command reference](https://github.com/zidage/alcedo-skills/blob/main/skills/alcedo/references/README.md) is in the same repository.
+Paired with the `alcedo` skill in [alcedo-skills](https://github.com/zidage/alcedo-skills), an agent establishes a "render preview → inspect frame → refine adjustments" loop, adapting edits dynamically to the image rather than applying static numbers. Install by telling your agent "Install the skill zidage/alcedo-skills", or in Claude Code via `/plugin marketplace add zidage/alcedo-skills` and `/plugin install alcedo@alcedo-skills`. New capabilities are added as lightweight Python scripts rather than compiled plugins. For example, `contact_sheet.py` generates contact sheets across hundreds of images in a single batch call for automated culling and rating, while `analyze_preview.py` measures tones, color casts, and horizon tilt, writing results directly back into the project. The complete [command reference](https://github.com/zidage/alcedo-skills/blob/main/skills/alcedo/references/README.md) is available in the same repository.
 
 ## Screenshots
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/images/library.jpg" alt="Library grid with the Album Inspector grouping photos by camera and lens"/></td>
-    <td width="50%"><img src="docs/images/display-transform.jpg" alt="Display transform panel with OpenDRT and HDR output settings"/></td>
+    <td width="50%"><img src="docs/images/library.jpg" alt="Library grid with album inspector grouped by camera and lens"/></td>
+    <td width="50%"><img src="docs/images/display-transform.jpg" alt="Display transform panel showing OpenDRT and HDR output settings"/></td>
   </tr>
   <tr>
-    <td width="50%"><img src="docs/images/nodes.jpg" alt="Node editor with several Color Grade nodes and a mask shown on the photo"/></td>
-    <td width="50%"><img src="docs/images/masks.jpg" alt="Mask editor with several Color Grade nodes and a mask shown on the photo"/></td>
+    <td width="50%"><img src="docs/images/nodes.jpg" alt="Node editor with multiple Color Grade nodes and an active mask"/></td>
+    <td width="50%"><img src="docs/images/masks.jpg" alt="Mask editor displaying active masks on the image"/></td>
   </tr>
   <tr>
-    <td width="50%"><img src="docs/images/search.jpg" alt="Natural-language search results with an AI description in the inspector"/></td>
-    <td width="50%"><img src="docs/images/export.jpg" alt="Export panel with format, size, and file naming options"/></td>
+    <td width="50%"><img src="docs/images/search.jpg" alt="Natural language search results with AI descriptions in inspector"/></td>
+    <td width="50%"><img src="docs/images/export.jpg" alt="Export panel showing format, sizing, and naming options"/></td>
   </tr>
 </table>
 
-## System requirements
+## System Requirements
 
-- **Windows** 10 or 11, x64. NVIDIA GPUs with compute capability 6.0 or newer use CUDA; other GPUs use OpenCL.
-- **macOS** 13.3 or later on Apple Silicon (M1 or newer), using Metal.
-- 8 GB of memory at minimum, 16 GB or more for large libraries.
+- **Windows**: 10 or 11, x64. Compute capability 6.0+ NVIDIA GPU for CUDA; OpenCL for other GPUs.
+- **macOS**: 13.3 or later, Apple Silicon (M1 or newer), using Metal.
+- Minimum 8 GB RAM; 16 GB or more recommended for large libraries.
 
 ## Documentation
 
-User guides and developer notes are on the [documentation site](https://zidage.github.io/AlcedoStudio_docs/docs/intro). To build from source, see [docs/build_from_source.md](docs/build_from_source.md). Release notes are in [docs/changelog/](docs/changelog/). To control Alcedo Studio from a terminal, a script, or an AI agent, see the [alcedo-cli documentation](https://github.com/zidage/alcedo-skills/blob/main/skills/alcedo/references/README.md). It is part of the agent skill in the [alcedo-skills](https://github.com/zidage/alcedo-skills) repository.
+User guides and developer notes are available on the [documentation site](https://zidage.github.io/AlcedoStudio_docs/docs/intro). For building from source, see [docs/build_from_source.md](docs/build_from_source.md). Release notes are located in [docs/changelog/](docs/changelog/). To control Alcedo Studio from scripts, terminals, or AI agents, refer to the [alcedo-cli documentation](https://github.com/zidage/alcedo-skills/blob/main/skills/alcedo/references/README.md).
 
-## Acknowledgements
+## Acknowledgments
 
-Alcedo Studio is based on the work of many open-source projects and their authors.
+Alcedo Studio builds upon the work of many open-source projects and authors:
 
-- Film-emulation LUTs from [JanLohse/spectral_film_lut](https://github.com/JanLohse/spectral_film_lut) and [andreavolpato/spektrafilm](https://github.com/andreavolpato/spektrafilm).
-- Some camera color matrices from [rawtoaces-data](https://github.com/AcademySoftwareFoundation/rawtoaces-data).
-- Neural demosaic models distilled from [mgharbi/demosaicnet](https://github.com/mgharbi/demosaicnet) ([Gharbi et al., 2016](https://groups.csail.mit.edu/graphics/demosaicnet/)).
+- Film simulation LUTs from [JanLohse/spectral_film_lut](https://github.com/JanLohse/spectral_film_lut) and [andreavolpato/spektrafilm](https://github.com/andreavolpato/spektrafilm).
+- Camera color matrices from [rawtoaces-data](https://github.com/AcademySoftwareFoundation/rawtoaces-data).
+- Neural demosaicing model distilled from [mgharbi/demosaicnet](https://github.com/mgharbi/demosaicnet) ([Gharbi et al., 2016](https://groups.csail.mit.edu/graphics/demosaicnet/)).
 - Inpaint-opposed highlight reconstruction adapted from [darktable](https://github.com/darktable-org/darktable/blob/master/src/iop/hlreconstruct/opposed.c) and [RawTherapee](https://github.com/RawTherapee/RawTherapee/blob/dev/rtengine/hilite_recon.cc).
 - RCD demosaicing adapted from [LuisSR/RCD-Demosaicing](https://github.com/LuisSR/RCD-Demosaicing).
 - OpenDRT ported from Jed Smith's [open-display-transform](https://github.com/jedypod/open-display-transform).
-- ACES 2.0 output transform implemented from [aces-aswf/aces-core](https://github.com/aces-aswf/aces-core).
+- ACES 2.0 output transforms implemented according to [aces-aswf/aces-core](https://github.com/aces-aswf/aces-core).
 - Film grain based on [Realistic Film Grain Rendering](https://doi.org/10.5201/ipol.2017.192) (IPOL 2017).
-- RAW decoding with [LibRaw](https://www.libraw.org/), lens correction with [Lensfun](https://lensfun.github.io/), metadata with [Exiv2](https://exiv2.org/), image I/O with [OpenImageIO](https://github.com/AcademySoftwareFoundation/OpenImageIO) and [OpenCV](https://opencv.org/), color management with [OpenColorIO](https://opencolorio.org/), the library with [DuckDB](https://duckdb.org/), and the interface with [Qt](https://www.qt.io/) and [QuickQanava](https://github.com/cneben/QuickQanava).
+- RAW decoding uses [LibRaw](https://www.libraw.org/), lens correction uses [Lensfun](https://lensfun.github.io/), metadata uses [Exiv2](https://exiv2.org/), image IO uses [OpenImageIO](https://github.com/AcademySoftwareFoundation/OpenImageIO) and [OpenCV](https://opencv.org/), color management uses [OpenColorIO](https://opencolorio.org/), catalog database uses [DuckDB](https://duckdb.org/), and UI uses [Qt](https://www.qt.io/) and [QuickQanava](https://github.com/cneben/QuickQanava).
 
-The complete list of third-party components and their licenses is in [THIRD_PARTY_NOTICE.txt](THIRD_PARTY_NOTICE.txt) and [third_party_licenses/](third_party_licenses/).
+For a complete list of third-party components and their licenses, see [THIRD_PARTY_NOTICE.txt](THIRD_PARTY_NOTICE.txt) and [third_party_licenses/](third_party_licenses/).
 
-ACES is a trademark of the Academy of Motion Picture Arts and Sciences (A.M.P.A.S.). Alcedo Studio is an independent project and is not affiliated with, certified by, or endorsed by A.M.P.A.S., the Academy Software Foundation, Jed Smith, or any other upstream author named above. These names are used only to identify the corresponding technology.
+ACES is a trademark of the Academy of Motion Picture Arts and Sciences (A.M.P.A.S.). Alcedo Studio is an independent project and is not affiliated with, certified, or endorsed by A.M.P.A.S., Academy Software Foundation, Jed Smith, or any other upstream authors mentioned above. These names are used solely to identify the respective technologies.
 
 ## License
 
