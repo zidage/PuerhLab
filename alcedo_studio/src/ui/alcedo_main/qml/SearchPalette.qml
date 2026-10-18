@@ -7,10 +7,11 @@ import QtQuick.Effects
 // Global search palette (global_search_redesign_plan.md, Section 2). A launcher, not a result
 // browser: recent searches, one command, Inspector filter rows, and up to three photo previews.
 // Enter and "View all" apply the search to the Library; the palette shows no result list and
-// no result count. The settings side panel holds the field scope and the natural-language
-// switch. Routes, preview rows, and request matching are owned by SearchSession (C++); the
-// palette keeps only the query text, the highlight index, and the typing debounce. The side
-// panel open state is owned by SearchController (QSettings `search/settingsPanelOpen`).
+// no result count. The settings drawer below the input row holds the field scope and the
+// natural-language switch. Routes, preview rows, and request matching are owned by
+// SearchSession (C++); the palette keeps only the query text, the highlight index, and the
+// typing debounce. The drawer open state is owned by SearchController (QSettings
+// `search/settingsPanelOpen`).
 Dialog {
     id: searchPalette
     font.family: appTheme.uiFontFamily
@@ -32,6 +33,18 @@ Dialog {
     readonly property bool searchLoading: searchSession ? searchSession.loading : false
     readonly property bool settingsPanelOpen: searchController
                                               ? searchController.searchSettingsPanelOpen : false
+    // Field check boxes of the settings drawer: SearchController property and setter of each.
+    readonly property var searchFieldOptions: [
+        { objectName: "searchFieldFilenameCheckBox", text: qsTr("File name"),
+          property: "searchFieldFilenameEnabled", setter: "SetSearchFieldFilenameEnabled" },
+        { objectName: "searchFieldExifCheckBox", text: qsTr("EXIF info"),
+          property: "searchFieldExifEnabled", setter: "SetSearchFieldExifEnabled" },
+        { objectName: "searchFieldAiDescriptionCheckBox", text: qsTr("AI description"),
+          property: "searchFieldAiDescriptionEnabled",
+          setter: "SetSearchFieldAiDescriptionEnabled" },
+        { objectName: "searchFieldAiTagsCheckBox", text: qsTr("AI tags"),
+          property: "searchFieldAiTagsEnabled", setter: "SetSearchFieldAiTagsEnabled" }
+    ]
 
     property string queryText: ""
     readonly property string trimmedQuery: queryText.trim()
@@ -335,25 +348,12 @@ Dialog {
         implicitWidth: searchPalette.width
         implicitHeight: searchPalette.height
 
-        // Geometry of Section 2.1: the main column is min(window - 2 * margin, max width) wide
-        // while the side panel is closed. An open panel adds its width at the right side and
-        // keeps the left edge; in a narrow window the main column becomes narrower first.
+        // Geometry of Section 2.1: the palette is min(window - 2 * margin, max width) wide. The
+        // settings drawer opens inside the palette and does not change its width.
         readonly property real marginX: appTheme.searchPaletteWindowMarginX
         readonly property real marginY: appTheme.searchPaletteWindowMarginY
-        readonly property real panelWidth: appTheme.searchSettingsPanelWidth
-        readonly property real closedMainWidth: Math.max(0, Math.min(appTheme.searchPaletteMaxWidth,
-                                                                      width - 2 * marginX))
-        readonly property real closedLeft: Math.round((width - closedMainWidth) / 2)
-        readonly property real openMainWidth: {
-            const room = width - marginX - closedLeft - panelWidth
-            const wanted = Math.min(closedMainWidth, Math.max(room, Math.min(closedMainWidth,
-                                                                             2 * panelWidth)))
-            return Math.max(0, Math.min(wanted, width - 2 * marginX - panelWidth))
-        }
-        readonly property real openLeft: Math.max(marginX, Math.min(closedLeft,
-                                                                    width - marginX - panelWidth
-                                                                    - openMainWidth))
-        readonly property real mainWidth: searchPalette.settingsPanelOpen ? openMainWidth : closedMainWidth
+        readonly property real mainWidth: Math.max(0, Math.min(appTheme.searchPaletteMaxWidth,
+                                                               width - 2 * marginX))
         readonly property real maxShellHeight: Math.max(0, height - 2 * marginY)
 
         // A click outside the panel closes the searchPalette.
@@ -362,9 +362,9 @@ Dialog {
             onClicked: searchPalette.close()
         }
 
-        // Fold progress of the side panel (DESIGN.md Motion, fold rules).
-        property real panelProgress: searchPalette.settingsPanelOpen ? 1 : 0
-        Behavior on panelProgress {
+        // Fold progress of the settings drawer (DESIGN.md Motion, fold rules).
+        property real drawerProgress: searchPalette.settingsPanelOpen ? 1 : 0
+        Behavior on drawerProgress {
             NumberAnimation {
                 duration: appTheme.reduceMotion ? 0
                                                 : (searchPalette.settingsPanelOpen ? appTheme.motionFoldOpenMs
@@ -372,12 +372,15 @@ Dialog {
                 easing.type: appTheme.motionEasing
             }
         }
+        // False while the drawer folds open or closed.
+        readonly property bool drawerSettled: drawerProgress
+                                              === (searchPalette.settingsPanelOpen ? 1 : 0)
 
         Rectangle {
             id: shell
             objectName: "searchPaletteShell"
-            x: searchPalette.settingsPanelOpen ? canvas.openLeft : canvas.closedLeft
-            width: canvas.mainWidth + canvas.panelWidth * canvas.panelProgress
+            x: Math.round((canvas.width - width) / 2)
+            width: canvas.mainWidth
             height: Math.min(canvas.maxShellHeight, shellColumn.implicitHeight)
             y: Math.round((canvas.height - height) / 2)
             radius: appTheme.panelRadius
@@ -386,7 +389,9 @@ Dialog {
             border.color: appTheme.cardBorderColor
             clip: true
 
+            // The drawer fold drives the height frame by frame; the content fade must not lag it.
             Behavior on height {
+                enabled: canvas.drawerSettled
                 NumberAnimation {
                     duration: appTheme.reduceMotion ? 0 : appTheme.motionFadeMs
                     easing.type: appTheme.motionEasing
@@ -405,411 +410,148 @@ Dialog {
                 anchors.top: parent.top
                 spacing: 0
 
-                RowLayout {
+                ColumnLayout {
+                    id: mainColumn
                     Layout.fillWidth: true
                     spacing: 0
 
-                    ColumnLayout {
-                        id: mainColumn
-                        Layout.preferredWidth: canvas.mainWidth
-                        Layout.maximumWidth: canvas.mainWidth
-                        Layout.alignment: Qt.AlignTop
-                        spacing: 0
+                    // ── Input row ──────────────────────────────────────────────────
+                    Item {
+                        id: inputRow
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: appTheme.iconButtonHitSize + appTheme.spaceMd
 
-                        // ── Input row ──────────────────────────────────────────────────
-                        Item {
-                            id: inputRow
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: appTheme.iconButtonHitSize + appTheme.spaceMd
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: appTheme.spaceLg
+                            anchors.rightMargin: appTheme.spaceMd
+                            spacing: appTheme.spaceMd
 
-                            RowLayout {
-                                anchors.fill: parent
-                                anchors.leftMargin: appTheme.spaceLg
-                                anchors.rightMargin: appTheme.spaceMd
-                                spacing: appTheme.spaceMd
+                            ColorImage {
+                                Layout.preferredWidth: appTheme.iconOpticalSize
+                                Layout.preferredHeight: appTheme.iconOpticalSize
+                                Layout.alignment: Qt.AlignVCenter
+                                source: "qrc:/panel_icons/search.svg"
+                                sourceSize.width: appTheme.iconSourceSize
+                                sourceSize.height: appTheme.iconSourceSize
+                                color: appTheme.textMutedColor
+                                fillMode: Image.PreserveAspectFit
+                            }
 
-                                ColorImage {
-                                    Layout.preferredWidth: appTheme.iconOpticalSize
-                                    Layout.preferredHeight: appTheme.iconOpticalSize
-                                    Layout.alignment: Qt.AlignVCenter
-                                    source: "qrc:/panel_icons/search.svg"
-                                    sourceSize.width: appTheme.iconSourceSize
-                                    sourceSize.height: appTheme.iconSourceSize
-                                    color: appTheme.textMutedColor
-                                    fillMode: Image.PreserveAspectFit
-                                }
+                            Item {
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
 
-                                Item {
-                                    Layout.fillWidth: true
-                                    Layout.fillHeight: true
-
-                                    Text {
-                                        anchors.left: parent.left
-                                        anchors.right: parent.right
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        visible: searchField.text.length === 0
-                                        text: qsTr("Search photos, cameras, lenses, dates")
-                                        color: appTheme.textMutedColor
-                                        font.family: appTheme.uiFontFamily
-                                        font.pixelSize: appTheme.fontSizeSection
-                                        font.weight: appTheme.fontWeightRegular
-                                        elide: Text.ElideRight
-                                    }
-
-                                    TextInput {
-                                        id: searchField
-                                        objectName: "globalSearchField"
-                                        anchors.left: parent.left
-                                        anchors.right: parent.right
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        selectByMouse: true
-                                        clip: true
-                                        color: appTheme.textColor
-                                        selectionColor: appTheme.buttonSelectedFillColor
-                                        selectedTextColor: appTheme.textColor
-                                        font.family: appTheme.uiFontFamily
-                                        font.pixelSize: appTheme.fontSizeSection
-                                        font.weight: appTheme.fontWeightRegular
-                                        verticalAlignment: TextInput.AlignVCenter
-                                        Accessible.role: Accessible.EditableText
-                                        Accessible.name: qsTr("Search photos")
-                                        onTextChanged: {
-                                            searchPalette.queryText = text
-                                            searchPalette.semanticApplyError = ""
-                                            searchPalette.highlightIndex = text.trim().length > 0 ? 0 : -1
-                                            previewTimer.restart()
-                                        }
-                                        onAccepted: searchPalette.handleSearchSubmit()
-                                        Keys.onUpPressed: searchPalette.moveHighlight(-1)
-                                        Keys.onDownPressed: searchPalette.moveHighlight(1)
-                                        Keys.onEscapePressed: searchPalette.close()
-                                    }
-                                }
-
-                                Label {
-                                    objectName: "searchPaletteRouteLabel"
-                                    Layout.alignment: Qt.AlignVCenter
-                                    visible: searchPalette.semanticRoute
-                                    text: qsTr("Natural language")
+                                Text {
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    visible: searchField.text.length === 0
+                                    text: qsTr("Search photos, cameras, lenses, dates")
                                     color: appTheme.textMutedColor
                                     font.family: appTheme.uiFontFamily
-                                    font.pixelSize: appTheme.fontSizeCaption
+                                    font.pixelSize: appTheme.fontSizeSection
+                                    font.weight: appTheme.fontWeightRegular
+                                    elide: Text.ElideRight
                                 }
 
-                                IconActionButton {
-                                    objectName: "searchPaletteSettingsButton"
-                                    Layout.alignment: Qt.AlignVCenter
-                                    compact: true
-                                    selected: searchPalette.settingsPanelOpen
-                                    showFocusRing: false
-                                    fillIdle: "transparent"
-                                    iconSrc: "qrc:/panel_icons/adjustments.svg"
-                                    actionName: qsTr("Search settings")
-                                    onClicked: searchPalette.toggleSettingsPanel()
-                                }
-
-                                Label {
-                                    id: escapeLabel
-                                    Layout.alignment: Qt.AlignVCenter
-                                    text: qsTr("Esc")
-                                    color: escapeMouse.containsMouse ? appTheme.textColor
-                                                                     : appTheme.textMutedColor
+                                TextInput {
+                                    id: searchField
+                                    objectName: "globalSearchField"
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    selectByMouse: true
+                                    clip: true
+                                    color: appTheme.textColor
+                                    selectionColor: appTheme.buttonSelectedFillColor
+                                    selectedTextColor: appTheme.textColor
                                     font.family: appTheme.uiFontFamily
-                                    font.pixelSize: appTheme.fontSizeCaption
-                                    font.weight: appTheme.fontWeightStrong
-                                    Accessible.role: Accessible.Button
-                                    Accessible.name: qsTr("Close search")
-                                    Accessible.onPressAction: searchPalette.close()
-
-                                    MouseArea {
-                                        id: escapeMouse
-                                        anchors.fill: parent
-                                        anchors.margins: -appTheme.spaceXs
-                                        hoverEnabled: true
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: searchPalette.close()
+                                    font.pixelSize: appTheme.fontSizeSection
+                                    font.weight: appTheme.fontWeightRegular
+                                    verticalAlignment: TextInput.AlignVCenter
+                                    Accessible.role: Accessible.EditableText
+                                    Accessible.name: qsTr("Search photos")
+                                    onTextChanged: {
+                                        searchPalette.queryText = text
+                                        searchPalette.semanticApplyError = ""
+                                        searchPalette.highlightIndex = text.trim().length > 0 ? 0 : -1
+                                        previewTimer.restart()
                                     }
-
-                                    ToolTip.visible: escapeMouse.containsMouse
-                                    ToolTip.text: qsTr("Close search")
-                                    ToolTip.delay: 400
+                                    onAccepted: searchPalette.handleSearchSubmit()
+                                    Keys.onUpPressed: searchPalette.moveHighlight(-1)
+                                    Keys.onDownPressed: searchPalette.moveHighlight(1)
+                                    Keys.onEscapePressed: searchPalette.close()
                                 }
                             }
-                        }
 
-                        Rectangle {
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: 1
-                            color: appTheme.dividerColor
-                        }
+                            Label {
+                                objectName: "searchPaletteRouteLabel"
+                                Layout.alignment: Qt.AlignVCenter
+                                visible: searchPalette.semanticRoute
+                                text: qsTr("Natural language")
+                                color: appTheme.textMutedColor
+                                font.family: appTheme.uiFontFamily
+                                font.pixelSize: appTheme.fontSizeCaption
+                            }
 
-                        // ── Sections ───────────────────────────────────────────────────
-                        Flickable {
-                            id: bodyFlick
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: Math.min(contentHeight,
-                                                             Math.max(0, canvas.maxShellHeight
-                                                                         - inputRow.height
-                                                                         - footer.height - 2))
-                            contentWidth: width
-                            contentHeight: bodyColumn.implicitHeight + 2 * appTheme.spaceSm
-                            clip: true
-                            boundsBehavior: Flickable.StopAtBounds
-                            interactive: contentHeight > height
+                            IconActionButton {
+                                objectName: "searchPaletteSettingsButton"
+                                Layout.alignment: Qt.AlignVCenter
+                                compact: true
+                                selected: searchPalette.settingsPanelOpen
+                                showFocusRing: false
+                                fillIdle: "transparent"
+                                iconSrc: "qrc:/panel_icons/adjustments.svg"
+                                actionName: qsTr("Search settings")
+                                onClicked: searchPalette.toggleSettingsPanel()
+                            }
 
-                            ColumnLayout {
-                                id: bodyColumn
-                                x: appTheme.spaceSm
-                                y: appTheme.spaceSm
-                                width: bodyFlick.width - 2 * appTheme.spaceSm
-                                spacing: appTheme.spaceSm
-
-                                Label {
-                                    objectName: "searchPaletteEmptyHint"
-                                    Layout.fillWidth: true
-                                    Layout.topMargin: appTheme.spaceLg
-                                    Layout.bottomMargin: appTheme.spaceLg
-                                    visible: searchPalette.showEmptyHint
-                                    text: qsTr("Type to search photos")
-                                    color: appTheme.textMutedColor
-                                    font.family: appTheme.uiFontFamily
-                                    font.pixelSize: appTheme.fontSizeBody
-                                    horizontalAlignment: Text.AlignHCenter
-                                    wrapMode: Text.Wrap
-                                }
-
-                                // Recent searches (empty query).
-                                ColumnLayout {
-                                    objectName: "searchPaletteRecentSection"
-                                    Layout.fillWidth: true
-                                    spacing: 0
-                                    visible: searchPalette.trimmedQuery.length === 0
-                                             && searchPalette.recentRows.length > 0
-
-                                    SectionHeader {
-                                        title: qsTr("Recent searches")
-                                    }
-
-                                    Repeater {
-                                        model: searchPalette.recentRows
-
-                                        delegate: PaletteRow {
-                                            required property var modelData
-                                            required property int index
-                                            navIndex: searchPalette.recentNavOffset + index
-                                            iconSource: "qrc:/panel_icons/clock-play.svg"
-                                            title: String(modelData.query)
-                                            trailingText: modelData.route === "semantic"
-                                                          ? qsTr("Natural language") : ""
-                                            onActivated: searchPalette.applyRecent(index)
-                                        }
-                                    }
-                                }
-
-                                // Commands (typed query).
-                                ColumnLayout {
-                                    objectName: "searchPaletteCommandSection"
-                                    Layout.fillWidth: true
-                                    spacing: 0
-                                    visible: searchPalette.trimmedQuery.length > 0
-
-                                    SectionHeader {
-                                        title: qsTr("Commands")
-                                    }
-
-                                    PaletteRow {
-                                        objectName: "searchPaletteCommandRow"
-                                        navIndex: 0
-                                        iconSource: "qrc:/panel_icons/search.svg"
-                                        title: searchPalette.semanticRoute
-                                               ? qsTr("Search photos by meaning for \"%1\"")
-                                                     .arg(searchPalette.trimmedQuery)
-                                               : qsTr("Search photos for \"%1\"")
-                                                     .arg(searchPalette.trimmedQuery)
-                                        trailingText: qsTr("Enter")
-                                        onActivated: searchPalette.applyQuery()
-                                    }
-                                }
-
-                                // Filters (Inspector statistics filters).
-                                ColumnLayout {
-                                    objectName: "searchPaletteFilterSection"
-                                    Layout.fillWidth: true
-                                    spacing: 0
-                                    visible: searchPalette.filterRows.length > 0
-
-                                    SectionHeader {
-                                        title: qsTr("Filters")
-                                    }
-
-                                    Repeater {
-                                        model: searchPalette.filterRows
-
-                                        delegate: PaletteRow {
-                                            required property var modelData
-                                            required property int index
-                                            objectName: "searchPaletteFilterRow"
-                                            navIndex: searchPalette.filterNavOffset + index
-                                            iconSource: searchPalette.categoryIconSource(modelData.category)
-                                            categoryText: modelData.categoryLabel
-                                                          ? String(modelData.categoryLabel) : ""
-                                            title: String(modelData.label)
-                                            trailingText: modelData.count !== undefined
-                                                          ? String(modelData.count) : ""
-                                            trailingIsData: true
-                                            onActivated: searchPalette.applyFilter(modelData)
-                                        }
-                                    }
-                                }
-
-                                // Photos (typed query).
-                                ColumnLayout {
-                                    id: photosSection
-                                    objectName: "searchPalettePhotosSection"
-                                    Layout.fillWidth: true
-                                    spacing: appTheme.spaceXs
-                                    visible: searchPalette.trimmedQuery.length > 0
-
-                                    readonly property real tileSpacing: appTheme.spaceMd
-                                    readonly property real tileWidth: Math.max(
-                                        0, Math.floor((width - 2 * appTheme.spaceSm
-                                                       - 2 * tileSpacing) / 3))
-
-                                    SectionHeader {
-                                        title: qsTr("Photos")
-                                        actionText: searchPalette.queryRoute === "fuzzy"
-                                                    && searchPalette.previewRows.length > 0
-                                                    ? qsTr("View all") : ""
-                                        onActionClicked: searchPalette.applyQuery()
-                                    }
-
-                                    Label {
-                                        objectName: "searchPalettePhotosStatus"
-                                        Layout.fillWidth: true
-                                        Layout.leftMargin: appTheme.spaceSm
-                                        Layout.rightMargin: appTheme.spaceSm
-                                        Layout.bottomMargin: appTheme.spaceSm
-                                        visible: searchPalette.photosStatusText.length > 0
-                                                 && !searchPalette.photosStatusIsError
-                                        text: searchPalette.photosStatusText
-                                        color: appTheme.textMutedColor
-                                        font.family: appTheme.uiFontFamily
-                                        font.pixelSize: appTheme.fontSizeBody
-                                        wrapMode: Text.Wrap
-                                    }
-
-                                    AlertBadge {
-                                        objectName: "searchPalettePhotosError"
-                                        Layout.leftMargin: appTheme.spaceSm
-                                        Layout.rightMargin: appTheme.spaceSm
-                                        Layout.bottomMargin: appTheme.spaceSm
-                                        text: searchPalette.photosStatusIsError ? searchPalette.photosStatusText
-                                                                          : ""
-                                    }
-
-                                    // Three placeholder frames while the preview loads.
-                                    Row {
-                                        Layout.leftMargin: appTheme.spaceSm
-                                        Layout.bottomMargin: appTheme.spaceSm
-                                        spacing: photosSection.tileSpacing
-                                        visible: searchPalette.photosLoading
-
-                                        Repeater {
-                                            model: searchPalette.photosLoading ? 3 : 0
-
-                                            delegate: Column {
-                                                spacing: appTheme.spaceXs
-
-                                                SkeletonBlock {
-                                                    width: photosSection.tileWidth
-                                                    height: Math.round(photosSection.tileWidth * 3 / 4)
-                                                    radius: appTheme.controlRadiusSmall
-                                                }
-
-                                                SkeletonBlock {
-                                                    width: Math.round(photosSection.tileWidth / 2)
-                                                    height: appTheme.lineHeightCaption
-                                                    radius: appTheme.badgeRadius
-                                                    animated: false
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    Row {
-                                        objectName: "searchPalettePreviewRow"
-                                        Layout.leftMargin: appTheme.spaceSm
-                                        Layout.bottomMargin: appTheme.spaceSm
-                                        spacing: photosSection.tileSpacing
-                                        visible: searchPalette.previewRows.length > 0
-                                                 && !searchPalette.semanticRoute
-
-                                        Repeater {
-                                            model: searchPalette.semanticRoute ? [] : searchPalette.previewRows
-
-                                            delegate: PreviewFrame {
-                                                required property var modelData
-                                                tileWidth: photosSection.tileWidth
-                                                elementId: Number(modelData.elementId)
-                                                imageId: Number(modelData.imageId)
-                                                fileName: modelData.fileName
-                                                          ? String(modelData.fileName) : ""
-                                                initialThumbUrl: modelData.thumbUrl
-                                                                 ? String(modelData.thumbUrl) : ""
-                                                initialThumbMissingSource:
-                                                    modelData.thumbMissingSource === true
-                                                initialThumbErrorText: modelData.thumbErrorText
-                                                                       ? String(modelData.thumbErrorText)
-                                                                       : ""
-                                                onActivated: searchPalette.applyPhoto(elementId)
-                                            }
-                                        }
-                                    }
-                                }
+                            IconActionButton {
+                                objectName: "searchPaletteCloseButton"
+                                Layout.alignment: Qt.AlignVCenter
+                                compact: true
+                                showFocusRing: false
+                                fillIdle: "transparent"
+                                iconSrc: "qrc:/panel_icons/close.svg"
+                                iconColorDefault: appTheme.iconColor
+                                iconColorMuted: appTheme.textMutedColor
+                                actionName: qsTr("Close search")
+                                onClicked: searchPalette.close()
                             }
                         }
                     }
 
                     Rectangle {
-                        Layout.preferredWidth: 1
-                        Layout.fillHeight: true
-                        visible: canvas.panelProgress > 0
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 1
                         color: appTheme.dividerColor
                     }
 
-                    // ── Settings side panel ────────────────────────────────────────────
+                    // ── Settings drawer ────────────────────────────────────────────
+                    // Folds below the input row (DESIGN.md Motion, fold rules): the host
+                    // clips, and its height and opacity follow the fold progress.
                     Item {
-                        id: sidePanel
-                        objectName: "searchSettingsPanel"
-                        Layout.preferredWidth: Math.max(0, canvas.panelWidth * canvas.panelProgress - 1)
-                        Layout.fillHeight: true
-                        Layout.preferredHeight: settingsColumn.implicitHeight
-                                                + 2 * appTheme.spaceLg
-                        visible: canvas.panelProgress > 0
-                        opacity: canvas.panelProgress
+                        id: settingsDrawer
+                        objectName: "searchSettingsDrawer"
+                        readonly property real openHeight: settingsColumn.implicitHeight
+                                                           + 2 * appTheme.spaceMd + 1
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: Math.round(openHeight * canvas.drawerProgress)
+                        visible: canvas.drawerProgress > 0
+                        opacity: canvas.drawerProgress
                         clip: true
 
                         ColumnLayout {
                             id: settingsColumn
                             x: appTheme.spaceLg
-                            y: appTheme.spaceLg
-                            // The body keeps its open width and is revealed by the host width.
-                            width: canvas.panelWidth - 1 - 2 * appTheme.spaceLg
+                            y: appTheme.spaceMd
+                            // The body keeps its open layout and is revealed by the host height.
+                            width: settingsDrawer.width - 2 * appTheme.spaceLg
                             spacing: appTheme.spaceSm
 
                             Label {
                                 Layout.fillWidth: true
-                                text: qsTr("Search settings")
-                                color: appTheme.textColor
-                                font.family: appTheme.uiFontFamily
-                                font.pixelSize: appTheme.fontSizeSection
-                                font.weight: appTheme.fontWeightHeading
-                                wrapMode: Text.Wrap
-                            }
-
-                            Label {
-                                Layout.fillWidth: true
-                                Layout.topMargin: appTheme.spaceXs
                                 text: qsTr("Search in")
                                 color: appTheme.textMutedColor
                                 font.family: appTheme.uiFontFamily
@@ -818,74 +560,33 @@ Dialog {
                                 wrapMode: Text.Wrap
                             }
 
-                            ThemeCheckBox {
-                                objectName: "searchFieldFilenameCheckBox"
-                                text: qsTr("File name")
-                                checked: searchPalette.searchController
-                                         ? searchPalette.searchController.searchFieldFilenameEnabled : true
-                                enabled: searchPalette.searchFieldFiltersEnabled
-                                onToggled: function(checked) {
-                                    if (searchPalette.searchController) {
-                                        searchPalette.searchController.SetSearchFieldFilenameEnabled(checked)
-                                        previewTimer.restart()
-                                    }
-                                }
-                            }
-
-                            ThemeCheckBox {
-                                objectName: "searchFieldExifCheckBox"
-                                text: qsTr("EXIF info")
-                                checked: searchPalette.searchController
-                                         ? searchPalette.searchController.searchFieldExifEnabled : true
-                                enabled: searchPalette.searchFieldFiltersEnabled
-                                onToggled: function(checked) {
-                                    if (searchPalette.searchController) {
-                                        searchPalette.searchController.SetSearchFieldExifEnabled(checked)
-                                        previewTimer.restart()
-                                    }
-                                }
-                            }
-
-                            ThemeCheckBox {
-                                objectName: "searchFieldAiDescriptionCheckBox"
-                                text: qsTr("AI description")
-                                checked: searchPalette.searchController
-                                         ? searchPalette.searchController.searchFieldAiDescriptionEnabled
-                                         : true
-                                enabled: searchPalette.searchFieldFiltersEnabled
-                                onToggled: function(checked) {
-                                    if (searchPalette.searchController) {
-                                        searchPalette.searchController.SetSearchFieldAiDescriptionEnabled(checked)
-                                        previewTimer.restart()
-                                    }
-                                }
-                            }
-
-                            ThemeCheckBox {
-                                objectName: "searchFieldAiTagsCheckBox"
-                                text: qsTr("AI tags")
-                                checked: searchPalette.searchController
-                                         ? searchPalette.searchController.searchFieldAiTagsEnabled : true
-                                enabled: searchPalette.searchFieldFiltersEnabled
-                                onToggled: function(checked) {
-                                    if (searchPalette.searchController) {
-                                        searchPalette.searchController.SetSearchFieldAiTagsEnabled(checked)
-                                        previewTimer.restart()
-                                    }
-                                }
-                            }
-
-                            Label {
-                                objectName: "searchFieldFiltersReason"
+                            GridLayout {
+                                id: fieldGrid
                                 Layout.fillWidth: true
-                                visible: !searchPalette.searchFieldFiltersEnabled && text.length > 0
-                                text: searchPalette.interactionPolicyController
-                                      ? searchPalette.interactionPolicyController.searchFieldFiltersReason
-                                      : ""
-                                color: appTheme.textMutedColor
-                                font.family: appTheme.uiFontFamily
-                                font.pixelSize: appTheme.fontSizeCaption
-                                wrapMode: Text.Wrap
+                                columns: 4
+                                columnSpacing: appTheme.spaceSm
+                                rowSpacing: appTheme.spaceXs
+
+                                Repeater {
+                                    model: searchPalette.searchFieldOptions
+
+                                    delegate: ThemeCheckBox {
+                                        required property var modelData
+                                        objectName: modelData.objectName
+                                        Layout.preferredWidth: 1
+                                        text: modelData.text
+                                        checked: searchPalette.searchController
+                                                 ? searchPalette.searchController[modelData.property]
+                                                 : true
+                                        enabled: searchPalette.searchFieldFiltersEnabled
+                                        onToggled: function(checked) {
+                                            if (searchPalette.searchController) {
+                                                searchPalette.searchController[modelData.setter](checked)
+                                                previewTimer.restart()
+                                            }
+                                        }
+                                    }
+                                }
                             }
 
                             Rectangle {
@@ -898,6 +599,11 @@ Dialog {
 
                             ThemeSwitch {
                                 objectName: "naturalLanguageSearchSwitch"
+                                // One check-box column wide: the track ends at the first column.
+                                Layout.fillWidth: false
+                                Layout.preferredWidth: Math.max(
+                                    implicitWidth,
+                                    (settingsColumn.width - 3 * fieldGrid.columnSpacing) / 4)
                                 text: qsTr("Natural language search")
                                 checked: searchPalette.searchController
                                          ? searchPalette.searchController.naturalLanguageSearchEnabled
@@ -928,6 +634,241 @@ Dialog {
                                 wrapMode: Text.Wrap
                             }
                         }
+
+                        Rectangle {
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.bottom: parent.bottom
+                            height: 1
+                            color: appTheme.dividerColor
+                        }
+                    }
+
+                    // ── Sections ───────────────────────────────────────────────────
+                    Flickable {
+                        id: bodyFlick
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: Math.min(contentHeight,
+                                                         Math.max(0, canvas.maxShellHeight
+                                                                     - inputRow.height
+                                                                     - settingsDrawer.height
+                                                                     - footer.height - 2))
+                        contentWidth: width
+                        contentHeight: bodyColumn.implicitHeight + 2 * appTheme.spaceSm
+                        clip: true
+                        boundsBehavior: Flickable.StopAtBounds
+                        interactive: contentHeight > height
+
+                        ColumnLayout {
+                            id: bodyColumn
+                            x: appTheme.spaceSm
+                            y: appTheme.spaceSm
+                            width: bodyFlick.width - 2 * appTheme.spaceSm
+                            spacing: appTheme.spaceSm
+
+                            Label {
+                                objectName: "searchPaletteEmptyHint"
+                                Layout.fillWidth: true
+                                Layout.topMargin: appTheme.spaceLg
+                                Layout.bottomMargin: appTheme.spaceLg
+                                visible: searchPalette.showEmptyHint
+                                text: qsTr("Type to search photos")
+                                color: appTheme.textMutedColor
+                                font.family: appTheme.uiFontFamily
+                                font.pixelSize: appTheme.fontSizeBody
+                                horizontalAlignment: Text.AlignHCenter
+                                wrapMode: Text.Wrap
+                            }
+
+                            // Recent searches (empty query).
+                            ColumnLayout {
+                                objectName: "searchPaletteRecentSection"
+                                Layout.fillWidth: true
+                                spacing: 0
+                                visible: searchPalette.trimmedQuery.length === 0
+                                         && searchPalette.recentRows.length > 0
+
+                                SectionHeader {
+                                    title: qsTr("Recent searches")
+                                }
+
+                                Repeater {
+                                    model: searchPalette.recentRows
+
+                                    delegate: PaletteRow {
+                                        required property var modelData
+                                        required property int index
+                                        navIndex: searchPalette.recentNavOffset + index
+                                        iconSource: "qrc:/panel_icons/clock-play.svg"
+                                        title: String(modelData.query)
+                                        trailingText: modelData.route === "semantic"
+                                                      ? qsTr("Natural language") : ""
+                                        onActivated: searchPalette.applyRecent(index)
+                                    }
+                                }
+                            }
+
+                            // Commands (typed query).
+                            ColumnLayout {
+                                objectName: "searchPaletteCommandSection"
+                                Layout.fillWidth: true
+                                spacing: 0
+                                visible: searchPalette.trimmedQuery.length > 0
+
+                                SectionHeader {
+                                    title: qsTr("Commands")
+                                }
+
+                                PaletteRow {
+                                    objectName: "searchPaletteCommandRow"
+                                    navIndex: 0
+                                    iconSource: "qrc:/panel_icons/search.svg"
+                                    title: searchPalette.semanticRoute
+                                           ? qsTr("Search photos by meaning for \"%1\"")
+                                                 .arg(searchPalette.trimmedQuery)
+                                           : qsTr("Search photos for \"%1\"")
+                                                 .arg(searchPalette.trimmedQuery)
+                                    trailingText: qsTr("Enter")
+                                    onActivated: searchPalette.applyQuery()
+                                }
+                            }
+
+                            // Filters (Inspector statistics filters).
+                            ColumnLayout {
+                                objectName: "searchPaletteFilterSection"
+                                Layout.fillWidth: true
+                                spacing: 0
+                                visible: searchPalette.filterRows.length > 0
+
+                                SectionHeader {
+                                    title: qsTr("Filters")
+                                }
+
+                                Repeater {
+                                    model: searchPalette.filterRows
+
+                                    delegate: PaletteRow {
+                                        required property var modelData
+                                        required property int index
+                                        objectName: "searchPaletteFilterRow"
+                                        navIndex: searchPalette.filterNavOffset + index
+                                        iconSource: searchPalette.categoryIconSource(modelData.category)
+                                        categoryText: modelData.categoryLabel
+                                                      ? String(modelData.categoryLabel) : ""
+                                        title: String(modelData.label)
+                                        trailingText: modelData.count !== undefined
+                                                      ? String(modelData.count) : ""
+                                        trailingIsData: true
+                                        onActivated: searchPalette.applyFilter(modelData)
+                                    }
+                                }
+                            }
+
+                            // Photos (typed query).
+                            ColumnLayout {
+                                id: photosSection
+                                objectName: "searchPalettePhotosSection"
+                                Layout.fillWidth: true
+                                spacing: appTheme.spaceXs
+                                visible: searchPalette.trimmedQuery.length > 0
+
+                                readonly property real tileSpacing: appTheme.spaceMd
+                                readonly property real tileWidth: Math.max(
+                                    0, Math.floor((width - 2 * appTheme.spaceSm
+                                                   - 2 * tileSpacing) / 3))
+
+                                SectionHeader {
+                                    title: qsTr("Photos")
+                                    actionText: searchPalette.queryRoute === "fuzzy"
+                                                && searchPalette.previewRows.length > 0
+                                                ? qsTr("View all") : ""
+                                    onActionClicked: searchPalette.applyQuery()
+                                }
+
+                                Label {
+                                    objectName: "searchPalettePhotosStatus"
+                                    Layout.fillWidth: true
+                                    Layout.leftMargin: appTheme.spaceSm
+                                    Layout.rightMargin: appTheme.spaceSm
+                                    Layout.bottomMargin: appTheme.spaceSm
+                                    visible: searchPalette.photosStatusText.length > 0
+                                             && !searchPalette.photosStatusIsError
+                                    text: searchPalette.photosStatusText
+                                    color: appTheme.textMutedColor
+                                    font.family: appTheme.uiFontFamily
+                                    font.pixelSize: appTheme.fontSizeBody
+                                    wrapMode: Text.Wrap
+                                }
+
+                                AlertBadge {
+                                    objectName: "searchPalettePhotosError"
+                                    Layout.leftMargin: appTheme.spaceSm
+                                    Layout.rightMargin: appTheme.spaceSm
+                                    Layout.bottomMargin: appTheme.spaceSm
+                                    text: searchPalette.photosStatusIsError ? searchPalette.photosStatusText
+                                                                      : ""
+                                }
+
+                                // Three placeholder frames while the preview loads.
+                                Row {
+                                    Layout.leftMargin: appTheme.spaceSm
+                                    Layout.bottomMargin: appTheme.spaceSm
+                                    spacing: photosSection.tileSpacing
+                                    visible: searchPalette.photosLoading
+
+                                    Repeater {
+                                        model: searchPalette.photosLoading ? 3 : 0
+
+                                        delegate: Column {
+                                            spacing: appTheme.spaceXs
+
+                                            SkeletonBlock {
+                                                width: photosSection.tileWidth
+                                                height: Math.round(photosSection.tileWidth * 3 / 4)
+                                                radius: appTheme.controlRadiusSmall
+                                            }
+
+                                            SkeletonBlock {
+                                                width: Math.round(photosSection.tileWidth / 2)
+                                                height: appTheme.lineHeightCaption
+                                                radius: appTheme.badgeRadius
+                                                animated: false
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Row {
+                                    objectName: "searchPalettePreviewRow"
+                                    Layout.leftMargin: appTheme.spaceSm
+                                    Layout.bottomMargin: appTheme.spaceSm
+                                    spacing: photosSection.tileSpacing
+                                    visible: searchPalette.previewRows.length > 0
+                                             && !searchPalette.semanticRoute
+
+                                    Repeater {
+                                        model: searchPalette.semanticRoute ? [] : searchPalette.previewRows
+
+                                        delegate: PreviewFrame {
+                                            required property var modelData
+                                            tileWidth: photosSection.tileWidth
+                                            elementId: Number(modelData.elementId)
+                                            imageId: Number(modelData.imageId)
+                                            fileName: modelData.fileName
+                                                      ? String(modelData.fileName) : ""
+                                            initialThumbUrl: modelData.thumbUrl
+                                                             ? String(modelData.thumbUrl) : ""
+                                            initialThumbMissingSource:
+                                                modelData.thumbMissingSource === true
+                                            initialThumbErrorText: modelData.thumbErrorText
+                                                                   ? String(modelData.thumbErrorText)
+                                                                   : ""
+                                            onActivated: searchPalette.applyPhoto(elementId)
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -956,11 +897,6 @@ Dialog {
 
                         Item {
                             Layout.fillWidth: true
-                        }
-
-                        KeyHint {
-                            keyText: qsTr("Esc")
-                            actionText: qsTr("Close")
                         }
                     }
                 }

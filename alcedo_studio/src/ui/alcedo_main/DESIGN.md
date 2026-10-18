@@ -504,8 +504,7 @@ the two side columns read as one family.
 
 | Token | px | Use |
 | --- | --- | --- |
-| `searchPaletteMaxWidth` | 960 | Widest main column of the palette (settings panel closed) |
-| `searchSettingsPanelWidth` | 260 | Settings side panel width, added at the right side when open |
+| `searchPaletteMaxWidth` | 960 | Widest palette; the settings drawer opens inside this width |
 | `searchPaletteWindowMarginX` | 28 | Smallest left and right gap between the palette and the window |
 | `searchPaletteWindowMarginY` | 36 | Smallest top and bottom gap between the palette and the window |
 
@@ -1045,7 +1044,7 @@ row delegate and arrow affordance automatically.
 | `SegmentedCardSwitcher.qml` | Monochrome segmented track; per-entry `enabled: false` keeps unsupported choices visible but non-interactive |
 | `AdjustmentSlider.qml` | Shared numeric slider + field bound to `EditorAdjustmentValueModel` |
 | `ThemedProgressBar.qml` | Shared determinate / indeterminate progress track (Background Tasks + Export) |
-| `ThemeCheckBox.qml` | Monochrome check row (Adjustment Transfer / Export): selected well + check, muted label when off |
+| `ThemeCheckBox.qml` | Monochrome check row (Adjustment Transfer / Export): selected well + check, muted label when off; disabled: hairline box, muted mark and label |
 | `ThemeSwitch.qml` | Monochrome switch row (search settings): label + track; on = selected well + ink knob, off = sunken track + muted knob |
 | `AppContextMenu.qml` | Shared dark popup menu shell (`Menu` + `AppMenuItem` delegate, fade transition, `openAt`) |
 | `AppMenuItem.qml` | Shared dark menu row (state gutter, wrapping label, sub-menu arrow, hover wash) |

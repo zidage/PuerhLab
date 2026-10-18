@@ -5,6 +5,8 @@ import QtQuick.Layouts
 // Shared monochrome checkbox row matching AdjustmentTransferDialog parameter
 // checks: light selected well + dark check when on; hairline empty box when off.
 // Label uses textColor when checked / alwaysPrimary, else textMutedColor.
+// Disabled (DESIGN.md "Component states"): muted tint on the box, the check, and
+// the labels; no parent opacity.
 Item {
     id: root
     objectName: "themeCheckBox"
@@ -58,7 +60,6 @@ Item {
                : "transparent"
         border.width: root.activeFocus ? 1 : 0
         border.color: appTheme.accentColor
-        opacity: root.enabled ? 1.0 : 0.55
     }
 
     RowLayout {
@@ -73,11 +74,11 @@ Item {
             Layout.preferredHeight: appTheme.iconOpticalSizeCompact
             Layout.alignment: Qt.AlignVCenter
             radius: appTheme.badgeRadius
-            color: (root.checked || root.partiallyChecked)
+            color: root.enabled && (root.checked || root.partiallyChecked)
                    ? appTheme.editorListSelectedFillColor
                    : "transparent"
             border.width: 1
-            border.color: (root.checked || root.partiallyChecked)
+            border.color: root.enabled && (root.checked || root.partiallyChecked)
                           ? appTheme.editorListSelectedFillColor
                           : appTheme.cardBorderColor
 
@@ -85,7 +86,8 @@ Item {
                 anchors.centerIn: parent
                 visible: root.checked && !root.partiallyChecked
                 text: "✓"
-                color: appTheme.editorListSelectedInkColor
+                color: root.enabled ? appTheme.editorListSelectedInkColor
+                                    : appTheme.textMutedColor
                 font.family: appTheme.uiFontFamily
                 font.pixelSize: appTheme.fontSizeCaption
                 font.weight: appTheme.fontWeightHeading
@@ -95,7 +97,8 @@ Item {
                 anchors.centerIn: parent
                 visible: root.partiallyChecked
                 text: "–"
-                color: appTheme.editorListSelectedInkColor
+                color: root.enabled ? appTheme.editorListSelectedInkColor
+                                    : appTheme.textMutedColor
                 font.family: appTheme.uiFontFamily
                 font.pixelSize: appTheme.fontSizeCaption
                 font.weight: appTheme.fontWeightHeading
@@ -107,7 +110,8 @@ Item {
             Layout.alignment: Qt.AlignVCenter
             visible: root.text.length > 0
             text: root.text
-            color: (root.checked || root.partiallyChecked || root.alwaysPrimaryText)
+            color: root.enabled
+                   && (root.checked || root.partiallyChecked || root.alwaysPrimaryText)
                    ? appTheme.textColor
                    : appTheme.textMutedColor
             font.family: appTheme.uiFontFamily

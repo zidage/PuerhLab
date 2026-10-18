@@ -10,6 +10,7 @@
 #include <QApplication>
 #include <QByteArray>
 #include <QImage>
+#include <QPointF>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickItem>
@@ -523,51 +524,80 @@ TEST_F(GlobalSearchDialogQmlTests, SettingsPanelStatePersists) {
   ASSERT_TRUE(harness.Open());
   auto* palette = harness.palette();
   EXPECT_FALSE(palette->property("settingsPanelOpen").toBool());
-  const auto panels = FindNamedObjects(harness.window(), QStringLiteral("searchSettingsPanel"));
-  ASSERT_EQ(panels.size(), 1u);
-  auto* panel = qobject_cast<QQuickItem*>(panels.front());
-  ASSERT_NE(panel, nullptr);
-  EXPECT_FALSE(panel->isVisible());
+  const auto drawers = FindNamedObjects(harness.window(), QStringLiteral("searchSettingsDrawer"));
+  ASSERT_EQ(drawers.size(), 1u);
+  auto* drawer = qobject_cast<QQuickItem*>(drawers.front());
+  ASSERT_NE(drawer, nullptr);
+  EXPECT_FALSE(drawer->isVisible());
+  const auto shells = FindNamedObjects(harness.window(), QStringLiteral("searchPaletteShell"));
+  ASSERT_EQ(shells.size(), 1u);
+  auto* shell = qobject_cast<QQuickItem*>(shells.front());
+  ASSERT_NE(shell, nullptr);
+  ASSERT_TRUE(WaitUntil([&]() { return shell->width() > 0 && shell->x() > 0; }, 3000));
+  const qreal closed_x     = shell->x();
+  const qreal closed_width = shell->width();
   // A project without photos and without recent searches shows the empty hint.
-  const auto hints = FindNamedObjects(harness.window(), QStringLiteral("searchPaletteEmptyHint"));
+  const auto  hints = FindNamedObjects(harness.window(), QStringLiteral("searchPaletteEmptyHint"));
   ASSERT_EQ(hints.size(), 1u);
   EXPECT_TRUE(hints.front()->property("visible").toBool());
   SaveScreenshotIfRequested(harness.window(), "empty_query");
 
+  // The drawer opens below the input row, inside the palette; the palette keeps its width.
   ASSERT_TRUE(QMetaObject::invokeMethod(palette, "toggleSettingsPanel"));
   EXPECT_TRUE(palette->property("settingsPanelOpen").toBool());
   ASSERT_TRUE(WaitUntil(
       [&]() {
-        return panel->isVisible() &&
-               panel->width() >= AppTheme::Instance().searchSettingsPanelWidth() - 1;
+        return drawer->isVisible() && qFuzzyCompare(drawer->opacity(), 1.0) && drawer->height() > 0;
       },
       3000));
-  SaveScreenshotIfRequested(harness.window(), "settings_panel_open");
+  EXPECT_DOUBLE_EQ(shell->x(), closed_x);
+  EXPECT_DOUBLE_EQ(shell->width(), closed_width);
+  EXPECT_DOUBLE_EQ(drawer->width(), shell->width());
+  auto* field = qobject_cast<QQuickItem*>(harness.SearchField());
+  ASSERT_NE(field, nullptr);
+  EXPECT_GT(drawer->mapToItem(shell, QPointF(0, 0)).y(),
+            field->mapToItem(shell, QPointF(0, 0)).y());
+  SaveScreenshotIfRequested(harness.window(), "settings_drawer_open");
   ASSERT_TRUE(harness.Close());
 
   ASSERT_TRUE(harness.Open());
   EXPECT_TRUE(palette->property("settingsPanelOpen").toBool());
-  EXPECT_TRUE(panel->isVisible());
+  EXPECT_TRUE(drawer->isVisible());
   // A new controller reads the stored state.
   const SearchController reader(nullptr, nullptr, nullptr, nullptr);
   EXPECT_TRUE(reader.SearchSettingsPanelOpen());
 
   // In a narrow window the open palette stays inside the window margins.
   harness.window()->setProperty("width", 900);
-  const auto shells = FindNamedObjects(harness.window(), QStringLiteral("searchPaletteShell"));
-  ASSERT_EQ(shells.size(), 1u);
-  auto* shell = qobject_cast<QQuickItem*>(shells.front());
-  ASSERT_NE(shell, nullptr);
   const int margin = AppTheme::Instance().searchPaletteWindowMarginX();
   EXPECT_TRUE(WaitUntil(
       [&]() { return shell->x() >= margin && shell->x() + shell->width() <= 900 - margin; }, 3000))
       << "x=" << shell->x() << " width=" << shell->width();
-  SaveScreenshotIfRequested(harness.window(), "narrow_window_settings_panel");
+  SaveScreenshotIfRequested(harness.window(), "narrow_window_settings_drawer");
   harness.window()->setProperty("width", 1280);
 
   ASSERT_TRUE(QMetaObject::invokeMethod(palette, "toggleSettingsPanel"));
   EXPECT_FALSE(palette->property("settingsPanelOpen").toBool());
+  EXPECT_TRUE(WaitUntil([&]() { return !drawer->isVisible(); }, 3000));
   ASSERT_TRUE(harness.Close());
+}
+
+TEST_F(GlobalSearchDialogQmlTests, CloseButtonClosesPalette) {
+  ScopedPaletteSettings settings;
+  ApplicationModuleHost backend;
+  ASSERT_TRUE(CreateTestProject(backend));
+
+  PaletteHarness harness(backend);
+  ASSERT_NE(harness.palette(), nullptr);
+  ASSERT_TRUE(harness.Open());
+
+  const auto buttons =
+      FindNamedObjects(harness.window(), QStringLiteral("searchPaletteCloseButton"));
+  ASSERT_EQ(buttons.size(), 1u);
+  EXPECT_EQ(buttons.front()->property("iconSrc").toUrl(),
+            QUrl(QStringLiteral("qrc:/panel_icons/close.svg")));
+  ASSERT_TRUE(QMetaObject::invokeMethod(buttons.front(), "clicked"));
+  EXPECT_TRUE(WaitUntil([&]() { return !harness.palette()->property("visible").toBool(); }, 5000));
 }
 
 // The persisted natural-language switch reaches SearchController at construction, but
@@ -598,6 +628,10 @@ TEST_F(GlobalSearchDialogQmlTests, NaturalLanguageSwitchStateIsReadOnOpen) {
       FindNamedObjects(harness.window(), QStringLiteral("naturalLanguageSearchSwitch"));
   ASSERT_EQ(switches.size(), 1u);
   EXPECT_TRUE(switches.front()->property("checked").toBool());
+  // The disabled look of the check boxes replaces the reason text.
+  EXPECT_TRUE(
+      FindNamedObjects(harness.window(), QStringLiteral("searchFieldFiltersReason")).empty());
+  SaveScreenshotIfRequested(harness.window(), "disabled_field_check_boxes");
   ASSERT_TRUE(harness.Close());
   search->SetNaturalLanguageSearchEnabled(false);
 }

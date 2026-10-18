@@ -153,6 +153,7 @@ Review the panel at 260 px, 320 px, and 460 px widths in both themes:
 | --- | --- |
 | Selected / focused row | `editorListSelectedFillColor` well + `editorListSelectedInkColor` ink; no accent fill, border, or stripe. |
 | Checked / partial checkbox | Bone well + ink mark via `ThemeCheckBox`; partial uses the ink dash mark. |
+| Disabled checkbox | `ThemeCheckBox` with `enabled: false`: hairline `cardBorderColor` box, `textMutedColor` mark and label; no parent opacity. |
 | Hover | `buttonHoveredFillColor` wash; never replaces selection. |
 | Keyboard focus | 1 px `textColor` outline on the focused list row; visible independently from selection. |
 | Disabled row | Muted text and disabled checkbox state; the Masks row dims rather than disappearing. |
@@ -528,16 +529,16 @@ moving, and the saving phase shows a spinning ring.
 
 - A modal panel on the blurred `overlayColor` backdrop. The shell is
   `bgDeepColor` with a 1 px `cardBorderColor` outline and `panelRadius`. The
-  main column is `min(window width - 2 * searchPaletteWindowMarginX,
-  searchPaletteMaxWidth)` wide; the open settings panel adds
-  `searchSettingsPanelWidth` at the right side and keeps the left edge (in a
-  narrow window the main column becomes narrower first). The height follows
-  the content, up to `window height - 2 * searchPaletteWindowMarginY`, and the
-  shell stays vertically centered.
+  palette is `min(window width - 2 * searchPaletteWindowMarginX,
+  searchPaletteMaxWidth)` wide and stays horizontally centered; the settings
+  drawer opens inside that width. The height follows the content, up to
+  `window height - 2 * searchPaletteWindowMarginY`, and the shell stays
+  vertically centered.
 - Input row: muted search icon, `fontSizeSection` text field, the muted
   caption `Natural language` for the semantic route (plain text, no pill), the
   settings `IconActionButton` (compact, `buttonSelectedFillColor` while the
-  panel is open), and the muted `Esc` text action.
+  drawer is open), and the compact close `IconActionButton`
+  (`qrc:/panel_icons/close.svg`). The Escape key also closes the palette.
 - Section headers are uppercase muted captions (`fontWeightStrong`). Rows are
   `iconButtonHitSizeCompact` high, `controlRadiusSmall`, and use one quiet
   `hoverColor` highlight that both the pointer and Up / Down move. A filter row
@@ -549,13 +550,15 @@ moving, and the saving phase shows a spinning ring.
   shows three `SkeletonBlock` frames. A missing source shows the muted `!` mark
   with a tooltip. Errors use `AlertBadge`; the hint and the empty text are muted
   body copy.
-- Settings panel: `Search settings` title (`fontSizeSection`,
-  `fontWeightHeading`), the muted `Search in` caption, four `ThemeCheckBox`
-  rows, the muted reason text while they are disabled, a divider, and the
-  `ThemeSwitch` row. The panel folds with `motionFoldOpenMs` /
-  `motionFoldCloseMs` (clip + opacity, no slide).
-- Footer: `Enter` / `Search` and `Esc` / `Close` key hints, each as a
-  `textColor` key label and a muted action label.
+- Settings drawer: below the input row, above the sections. The muted
+  `Search in` caption, the four `ThemeCheckBox` columns in one row, a divider,
+  the `ThemeSwitch` row, and its muted caption. A divider closes the drawer.
+  While natural-language search is on, the check boxes show the
+  `ThemeCheckBox` disabled state; no reason text. The drawer folds with
+  `motionFoldOpenMs` / `motionFoldCloseMs` (clip, height, and opacity, no
+  slide); `reduceMotion` snaps.
+- Footer: the `Enter` / `Search` key hint only, as a `textColor` key label and
+  a muted action label.
 
 ### `ThemeSwitch.qml`
 
@@ -568,7 +571,8 @@ moving, and the saving phase shows a spinning ring.
 ### Manual review
 
 In Alcedo and Classic themes: open the palette with and without the settings
-panel, in a wide and in a narrow window; empty query with and without recent
+drawer, in a wide and in a narrow window; the disabled check boxes with
+natural-language search on; empty query with and without recent
 searches; a field query (loading frames, three previews, no matches, error); a
 natural-language query (hint, rejected Enter); hover and Up / Down highlight;
 a recommendation row, a recent search, and a photo click.
