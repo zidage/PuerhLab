@@ -65,9 +65,9 @@ matches clearly, the result is empty.
 5. **Mouse first.** Hover highlights a row. A click runs the row. The keyboard supports only the
    text field, Up and Down to move the row highlight, Enter, and Escape.
 6. **No action panel.** The palette has no secondary action menu for a row or a photo.
-7. **Search settings are a collapsible side panel.** The panel is at the right side of the
-   palette. It holds the search field check boxes and the natural-language switch. Its open state
-   persists.
+7. **Search settings are a collapsible drawer.** The drawer is inside the palette, below the
+   input row. It holds the search field check boxes and the natural-language switch. It does not
+   change the palette width. Its open state persists.
 8. **Natural-language search and field search stay mutually exclusive.** The natural-language
    switch disables the field check boxes, as today. Rank fusion (for example reciprocal rank
    fusion) is not part of this plan. Reason: the field search is a Boolean filter with no rank,
@@ -103,30 +103,39 @@ Do not add these items again:
 The palette is a modal panel at the center of the window, with the current blurred backdrop.
 
 ```text
-+--------------------------------------------------------------------+-------------------+
-| [search icon]  mountain sunset          Natural language  [gear] Esc| Search settings   |
-+--------------------------------------------------------------------+                   |
-| COMMANDS                                                           | Search in         |
-|   [icon] Search photos for "mountain sunset"                 Enter | [x] File name     |
-|                                                                    | [x] EXIF info     |
-| FILTERS                                                            | [x] AI description|
-|   [camera icon] Camera   Canon EOS R5                          128 | [x] AI tags       |
-|   [lens icon]   Lens     RF 24-70mm F2.8                        42 | ----------------- |
-|                                                                    | Natural language  |
-| PHOTOS                                                  View all > |   search   [on]   |
-|   +-------------+  +-------------+  +-------------+                | (reason text when |
-|   |  thumbnail  |  |  thumbnail  |  |  thumbnail  |                |  check boxes are  |
-|   +-------------+  +-------------+  +-------------+                |  disabled)        |
-|   IMG_0412.CR3     IMG_0415.CR3     IMG_0533.CR3                    |                   |
-+--------------------------------------------------------------------+-------------------+
-| Enter  Search                                          Esc  Close                       |
-+-----------------------------------------------------------------------------------------+
++--------------------------------------------------------------------+
+| [search icon]  mountain sunset      Natural language  [gear]  [x]  |
++--------------------------------------------------------------------+
+| SEARCH IN                                                          |  <- settings drawer
+| [x] File name   [x] EXIF info   [x] AI description   [x] AI tags   |     (open)
+| ------------------------------------------------------------------ |
+| Natural language search  [on]                                      |
+| Search by meaning with the semantic model. Press Enter to run it.  |
++--------------------------------------------------------------------+
+| COMMANDS                                                           |
+|   [icon] Search photos for "mountain sunset"                 Enter |
+|                                                                    |
+| FILTERS                                                            |
+|   [camera icon] Camera   Canon EOS R5                          128 |
+|   [lens icon]   Lens     RF 24-70mm F2.8                        42 |
+|                                                                    |
+| PHOTOS                                                  View all > |
+|   +-------------+  +-------------+  +-------------+                |
+|   |  thumbnail  |  |  thumbnail  |  |  thumbnail  |                |
+|   +-------------+  +-------------+  +-------------+                |
+|   IMG_0412.CR3     IMG_0415.CR3     IMG_0533.CR3                    |
++--------------------------------------------------------------------+
+| Enter  Search                                                      |
++--------------------------------------------------------------------+
 ```
 
-- The palette width is `min(window width - 56, 960)` when the side panel is closed. The side
-  panel adds 260 px. The palette height fits its content, up to `window height - 72`.
-- The side panel opens and closes with the settings button in the input row. The palette keeps
-  its left edge position when the panel opens.
+- The palette width is `min(window width - 56, 960)`. The palette is horizontally centered. The
+  palette height fits its content, up to `window height - 72`.
+- The settings drawer opens and closes with the settings button in the input row. The drawer
+  opens inside the palette, below the input row. The palette keeps its width and position.
+- The close button `[x]` at the right end of the input row is an `IconActionButton` with
+  `qrc:/panel_icons/close.svg`.
+- The footer shows only the Enter / Search hint.
 - All colors, spacing, radii, type sizes, and icon sizes come from `appTheme` and `DESIGN.md`.
   The palette uses the Basic style. It does not import `QtQuick.Controls.Material`.
 
@@ -190,23 +199,23 @@ Recent searches:
 - Up and Down move the row highlight across the Commands and Filters rows. The mouse hover moves
   the same highlight. Enter runs the highlighted row. The Commands row is highlighted when the
   query changes.
-- Escape and a click outside the palette close it. The text "Esc" in the input row also closes
-  it on click.
+- Escape, a click outside the palette, and the close button in the input row close it.
 - The text field has focus when the palette opens.
 
-### 2.4 Settings side panel
+### 2.4 Settings drawer
 
-- Title: "Search settings".
-- Group "Search in": check boxes "File name", "EXIF info", "AI description", "AI tags". They
-  call the existing `SetSearchField*Enabled` operations.
+- The drawer is below the input row, above the sections. It folds with the shared fold motion
+  (`CollapsibleSection` and DESIGN.md Motion: clip, height, and opacity; `reduceMotion` snaps).
+- Group "Search in": check boxes "File name", "EXIF info", "AI description", "AI tags", in one
+  row. They call the existing `SetSearchField*Enabled` operations.
 - A divider, then the switch "Natural language search". It calls
   `SetNaturalLanguageSearchEnabled` and updates `InteractionPolicyController`.
-- When the switch is on, the check boxes are disabled, and the panel shows
-  `searchFieldFiltersReason` below them.
+- When the switch is on, the check boxes are disabled. They show the `ThemeCheckBox` disabled
+  state: a muted box, a muted check mark, and a muted label. The drawer shows no reason text.
 - A change re-runs the preview of the current query.
 - The open state persists in `QSettings` key `search/settingsPanelOpen`. Default: closed.
-- Controls use `ThemeCheckBox.qml` and a Basic-style switch from the shared components. The
-  panel does not use Material controls.
+- Controls use `ThemeCheckBox.qml` and `ThemeSwitch.qml`. The drawer does not use Material
+  controls.
 
 ### 2.5 Natural-language relevance rule
 
@@ -1348,7 +1357,7 @@ semantic Enter -> ApplySemanticSearch returns "Natural language search is not av
 | `SemanticQueryShowsEnterHintAndNoPreviews` | The hint text is visible and no preview request is sent. |
 | `RecommendationRowAppliesStatsFilterAndCloses` | A click on a camera row sets the camera stats filter and closes the palette. |
 | `RejectedSemanticEnterKeepsPaletteOpen` | With no provider, Enter shows the error text and the palette stays open. |
-| `SettingsPanelStatePersists` | The panel is open on reopen after it was open. |
+| `SettingsPanelStatePersists` | The drawer is open on reopen after it was open; it does not change the palette width. |
 | `PreviewThumbnailsRenderAfterReopen` (renamed in GS2 from `ScrolledSearchResultsRenderPreviewThumbnailsAndReopenStillWorks`; GS2 tests the old dialog with it) | Thumbnails show after close and reopen. |
 | `NaturalLanguageSwitchStateIsReadOnOpen` (renamed from the current test of the switch sync on open) | The check boxes are disabled on open when the persisted switch is on. |
 
@@ -1467,6 +1476,31 @@ Screenshots: offscreen grabs of the real SearchPalette.qml with ApplicationModul
 Evidence path: build/tmp/global_search_gs4/.
 Remaining defects or unavailable platforms: manual check in alcedo_main; macOS not built or
   tested.
+```
+
+**GS4 follow-up record ([#433](https://github.com/zidage/AlcedoStudio/issues/433),
+[#434](https://github.com/zidage/AlcedoStudio/issues/434), 2026-10-17)**
+
+```text
+Changes after GS4 (Sections 2.1, 2.3, and 2.4 are updated):
+  - The settings side panel is now a drawer inside the palette, below the input row. The palette
+    keeps its width (min(window - 56, 960)) and stays horizontally centered. The drawer folds
+    with motionFoldOpenMs / motionFoldCloseMs (clip, height, opacity; reduceMotion snaps). The
+    open state stays SearchController::searchSettingsPanelOpen. AppTheme.searchSettingsPanelWidth
+    is removed.
+  - ThemeCheckBox has a disabled state: hairline box, muted check mark, muted label, no parent
+    opacity. The drawer shows no searchFieldFiltersReason text.
+  - The "Esc" text action is replaced by the close IconActionButton (close.svg). The footer shows
+    only the Enter / Search hint. The Escape key still closes the palette.
+Build and test commands with exit codes:
+  cmd /c scripts\msvc_env.cmd --build --preset win_debug --parallel 4
+    --target GlobalSearchDialogQmlTest alcedo_main                               -> 0
+  ctest --test-dir build/debug -R "GlobalSearchDialogQmlTest" --output-on-failure -> 0
+Discovered / passed / failed / skipped counts: GlobalSearchDialogQmlTest 10 / 10 / 0 / 0
+  (new: CloseButtonClosesPalette).
+Screenshots (offscreen, not committed): disabled_field_check_boxes, settings_drawer_open,
+  narrow_window_settings_drawer in build/debug/search_palette_shots/.
+Manual verification: the GS4 manual check in alcedo_main is still open.
 ```
 
 ### Phase GS5 — Remove the old search dialog
