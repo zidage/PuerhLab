@@ -52,6 +52,9 @@ class SemanticGenerationController final : public QObject {
   Q_PROPERTY(QString activeModelKey READ ActiveModelKeyQString NOTIFY StateChanged)
   Q_PROPERTY(bool modelActivationRunning READ ModelActivationRunning NOTIFY StateChanged)
   Q_PROPERTY(bool selectedModelActive READ SelectedModelActive NOTIFY StateChanged)
+  /// "Keep AI model loaded" in seconds: 0, 60, 300, 900, or -1 (while the project is open).
+  Q_PROPERTY(int sidecarIdleStopSeconds READ SidecarIdleStopSeconds WRITE SetSidecarIdleStopSeconds
+                 NOTIFY StateChanged)
 
  public:
   SemanticGenerationController(ProjectModule* project, LibraryModule* library,
@@ -81,6 +84,11 @@ class SemanticGenerationController final : public QObject {
   QString            ActiveModelKeyQString() const;
   bool               ModelActivationRunning() const { return model_activation_running_; }
   bool               SelectedModelActive() const { return selected_model_active_; }
+  int                SidecarIdleStopSeconds() const;
+  /// Writes the setting and applies it at once to the sidecar process of the open project
+  /// (ProjectService::SetAiSidecarIdleStopSeconds). The text encoder idle time follows at the
+  /// next sidecar start.
+  void               SetSidecarIdleStopSeconds(int seconds);
 
   Q_INVOKABLE void   StartPendingGeneration(bool forceRegenerate = false);
   Q_INVOKABLE void   SkipPendingGeneration(bool rememberChoice = false);

@@ -6278,6 +6278,38 @@ Create a new layer above it and draw the Mask there?</source>
 <context>
     <name>SemanticGenerationSettingsPanel</name>
     <message>
+        <source>Unload after use</source>
+        <translation>用后卸载</translation>
+    </message>
+    <message>
+        <source>1 minute</source>
+        <translation>1 分钟</translation>
+    </message>
+    <message>
+        <source>5 minutes</source>
+        <translation>5 分钟</translation>
+    </message>
+    <message>
+        <source>15 minutes</source>
+        <translation>15 分钟</translation>
+    </message>
+    <message>
+        <source>While the project is open</source>
+        <translation>项目打开期间</translation>
+    </message>
+    <message>
+        <source>Memory</source>
+        <translation>内存</translation>
+    </message>
+    <message>
+        <source>Keep AI model loaded</source>
+        <translation>保持 AI 模型加载</translation>
+    </message>
+    <message>
+        <source>The text model&apos;s unload time applies to the sidecar the next time it starts.</source>
+        <translation>文本模型的卸载时间在 AI 服务下次启动时生效。</translation>
+    </message>
+    <message>
         <location filename="../qml/SemanticGenerationSettingsPanel.qml" line="+40"/>
         <source>No active model</source>
         <translation>未激活模型</translation>

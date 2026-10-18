@@ -2,7 +2,9 @@
 
 Date: 2026-10-17
 
-Status: planned. No phase has implementation evidence.
+Status: SR1, SR2, and SR3 complete (2026-10-17), with the items recorded as not run in each
+completion record (macOS Core ML lazy load with a model, the image analysis manual check, and
+the GUI checks).
 
 Source revision of the audit: `main` at `ada6f002c`.
 
@@ -296,9 +298,9 @@ Read `AGENTS.md` and the applicable skills again before each phase.
 
 | Phase | Result | Main modules | Dependency | Expected diff | Status |
 | --- | --- | --- | --- | ---: | --- |
-| SR1 | Process idle stop; no GUI block on search start or idle stop; restart rules | `AiSidecarRuntimeService`, `ProjectService`, image analysis environment | none | 700–1100 | planned |
-| SR2 | Lazy encoder load, idle unload, text encoder on CPU | Rust engine and server; runtime options | SR1 | 900–1500 | planned |
-| SR3 | Setting row, prewarm, and resource measurements | settings QML, `SearchController`, provider | SR1, SR2 | 400–700 | planned |
+| SR1 | Process idle stop; no GUI block on search start or idle stop; restart rules | `AiSidecarRuntimeService`, `ProjectService`, image analysis environment | none | 700–1100 | complete |
+| SR2 | Lazy encoder load, idle unload, text encoder on CPU | Rust engine and server; runtime options | SR1 | 900–1500 | complete |
+| SR3 | Setting row, prewarm, and resource measurements | settings QML, `SearchController`, provider | SR1, SR2 | 400–700 | complete |
 
 ## 9. Detailed phases
 
@@ -397,9 +399,9 @@ Put logs under `build/tmp/sidecar_residency_sr1/`.
 
 **Exit criteria**
 
-- [ ] All named tests pass.
-- [ ] Baseline measurements are recorded.
-- [ ] Manual check: two natural-language searches within 5 minutes start the sidecar once (log
+- [x] All named tests pass.
+- [x] Baseline measurements are recorded.
+- [x] Manual check: two natural-language searches within 5 minutes start the sidecar once (log
       `semantic.runtime` start lines).
 
 **Expected diff**
@@ -410,7 +412,70 @@ runtime 30–60).
 **Completion record**
 
 ```text
-(empty — fill when the phase is complete; use Section 13)
+Phase / date / status: SR1 / 2026-10-17 / complete.
+Source revision and branch: main at c55c9d12d, working tree on fix/semantic-relevance-folder-scope
+  (uncommitted; the branch also holds issue #427).
+Actual changed modules: AiSidecarRuntimeService (header and source), ProjectService
+  (setting read, SetAiSidecarIdleStopSeconds, NormalizedAiSidecarIdleStopSeconds, interactive
+  start in ProjectSemanticSearchProvider), image_analysis_environment.cpp, the runtime service
+  test (own main with QCoreApplication, so the test target links GTest::gtest).
+Implemented behavior:
+  - SetIdleStopDelay: 0 stops at the last release (blocking Stop, as before), a positive delay
+    starts a single-shot QTimer, a negative delay keeps the process until StopForProjectClose.
+    AcquireLease stops the timer. A change applies at once when no lease is held.
+  - BeginIdleStop: kStopping, terminate, idle_stop_kill_timer_ (graceful_stop_timeout) -> kill ->
+    second timer (kill_timeout) -> kFailed / kStopTimedOut. QProcess::finished and
+    RefreshProcessExit finish the stop (FinishIdleStop: kStopped). Stop() cancels a pending
+    idle stop and stops blocking, for project close and the destructor.
+  - A start during an idle stop kills the exiting process, waits up to kill_timeout, then starts
+    a new process (Section 5.2, item 1).
+  - Restart rules: with at most the caller's lease, a start whose model_root, model_id, or
+    revision differs (paths compared after lexically_normal), or a start after
+    MarkProviderConfigsChanged, stops the process and starts a new one. With other leases the
+    process is reused. The mark is cleared by every stop and every new process.
+  - ProjectSemanticSearchProvider calls StartAndWaitInteractive on every cache miss (the call
+    returns at once for a running process of the same model, and applies the restart rule).
+  - The image analysis environment calls MarkProviderConfigsChanged when the provider configs
+    are dirty and then always calls the start, which restarts an idle process.
+  - ProjectService reads ai/sidecarIdleStopSeconds (unknown values read as 300) when it creates
+    the runtime service.
+Explicitly unimplemented items: none for SR1. On Windows, QProcess::terminate does not end the
+  console sidecar, so every idle stop ends with the kill after graceful_stop_timeout (1 s); the
+  owner thread is not blocked during that second.
+Primary success call chain:
+  search lease released -> ReleaseLease (count 0) -> idle_stop_timer_.start(300 s)
+  next search -> AcquireLease (timer stops) -> StartAndWaitInteractive -> running, ready, same
+    identity -> EmbedText
+  timer expires -> BeginIdleStop -> terminate -> idle_stop_kill_timer_ -> kill ->
+    QProcess::finished -> FinishIdleStop -> kStopped
+Primary failure and restore call chain:
+  BeginIdleStop -> process ignores terminate and kill -> second timer -> kFailed /
+    kStopTimedOut (as Stop())
+  start during kStopping -> CompleteIdleStopBeforeStart -> kill does not end it -> kFailed /
+    kStopTimedOut, the start returns false with that message
+Build and test commands with exit codes:
+  cmd /c scripts\msvc_env.cmd --build --preset win_debug --parallel 4 --target
+    AiSidecarRuntimeServiceTest AiSidecarFakeRuntime ImageAnalysisControllerTest
+    ImageAnalysisServiceTest -> 0
+  ctest --test-dir build/debug -R "AiSidecarRuntimeServiceTest|ImageAnalysisControllerTest|
+    ImageAnalysisServiceTest" --output-on-failure -> 0
+Discovered / passed / failed / skipped counts: 94 / 92 / 0 / 2 (the two live tests need
+  environment variables: DefaultGrpcClientEmbedsRawRgba8AgainstRustRuntime,
+  ValidateConnectionDiscoversOpencodeModels). Named tests, all passed:
+  LeasesStopRuntimeOnlyAfterLastRelease, IdleDelayKeepsRuntimeRunningAfterLastRelease,
+  IdleDelayStopsRuntimeWhenNoLeaseReturns, NewLeaseCancelsIdleStop,
+  NegativeDelayKeepsRuntimeUntilProjectClose, IdleStopDoesNotBlockOwnerThread,
+  StartDuringIdleStopWaitsAndStartsNewProcess, ModelIdentityChangeRestartsProcessWithoutOtherLease,
+  RunningSidecarReusesExistingProcessForDifferentOptions (changed: a second lease is held),
+  ProviderConfigChangeRestartsProcessAtNextStart, WorkerStartKeepsOwnerThreadResponsive.
+  Added: ProviderConfigChangeWaitsUntilOtherLeasesAreReleased, ZeroDelayWhileIdleStopsRunningProcess.
+Manual verification: release alcedo-cli headless session on a copy of bug_reproduce.alcd (649
+  SigLIP2-256 embeddings), three natural-language search.query calls 1.5 s apart: one
+  semantic.runtime.start line after the change (four before: the first query embedded the query
+  and the neutral text with a sidecar start each).
+Measurements: see the table in the SR3 completion record (baseline column).
+Evidence path: build/tmp/sidecar_residency_sr1/ (removed after the work).
+Remaining defects or unavailable platforms: macOS C++ not built in this phase.
 ```
 
 ### Phase SR2 — Lazy encoder load and idle unload
@@ -509,10 +574,10 @@ variable is absent.
 
 **Exit criteria**
 
-- [ ] All offline Rust tests and the named C++ tests pass.
-- [ ] The model tests pass with a local model, or are recorded as skipped with the reason.
+- [x] All offline Rust tests and the named C++ tests pass.
+- [x] The model tests pass with a local model, or are recorded as skipped with the reason.
 - [ ] Manual check with the release sidecar: an image analysis run with a remote provider shows
-      both encoders not loaded in `GetRuntimeStatus` (log line).
+      both encoders not loaded in `GetRuntimeStatus` (log line). Not run (record below).
 
 **Expected diff**
 
@@ -522,7 +587,70 @@ and proto 80–150, config 60–100, C++ 60–120, tests 150–300).
 **Completion record**
 
 ```text
-(empty — fill when the phase is complete; use Section 13)
+Phase / date / status: SR2 / 2026-10-17 / complete, with the manual image analysis check not run.
+Source revision and branch: as SR1.
+Actual changed modules: rust/puerh_mind: new service/encoder_residency.rs (EncoderResidency<T>,
+  IdleUnload, Clock, EncoderStatus), ort_clip.rs, coreml_clip.rs, embedding.rs (trait methods
+  unload_idle_encoders and encoder_status with defaults), inference.rs, config.rs
+  (EncoderResidencyConfig and four flags), main.rs (5 s interval task on the blocking pool),
+  server/semantic.rs and proto/semantic.proto (GetRuntimeStatusResponse.encoders = 6, new
+  message EncoderResidencyStatus). C++: AiSidecarRuntimeOptions text_device ("cpu"),
+  vision_device (empty uses device), text_idle_unload (empty follows the idle stop delay of the
+  service, so the setting also sets the text encoder idle time), vision_idle_unload (60 s);
+  BuildArguments; the AiSidecarRuntimeRemoteStatus encoders field and its client mapping.
+Implemented behavior:
+  - The engine validates the manifest, the files, the tokenizer, and both device values at
+    start, and loads no encoder. GetModelInfo answers from the manifest.
+  - Each encoder (text, image, or the multimodal session) loads on its first request under
+    the slot mutex and unloads when it is idle longer than its time (-1 never, 0 after each
+    request). The text encoder uses --text-device (default cpu), the image encoder and a
+    multimodal session use --vision-device (default --device). A multimodal session uses the
+    text idle time.
+  - A load failure returns the ORT or Core ML error and leaves the slot empty.
+  - model_info.provider is the image encoder device description (the --device value, as before).
+  - The fake runtime ignores the new arguments (it reads only the ones it knows).
+Explicitly unimplemented items: none.
+Primary success call chain:
+  process start -> build_semantic_engine (manifest, files, devices; no session) -> gRPC serve ->
+    GetModelInfo ok
+  EmbedText -> text slot empty -> load_session(text model, cpu) -> run -> last use = now
+  interval (5 s) -> spawn_blocking(unload_idle_encoders) -> image idle > 60 s -> drop session
+Primary failure and restore call chain:
+  EmbedImageBatch -> image slot load fails -> the request returns the ORT error (per-item errors
+    in the batch response) -> slot stays empty -> the next request loads again
+Build and test commands with exit codes:
+  cargo test -- --skip live_ (rust/puerh_mind) -> 0: lib 284 passed, 0 failed, 8 filtered;
+    integration 4 + 5 passed.
+  cargo test --lib ort_clip -- --nocapture --test-threads=1 -> 0: 30 passed; the MobileCLIP2
+    model tests loaded the repository model (rust/puerh_mind/models/mobileclip2-s2-openclip):
+    model_info_is_served_before_any_encoder_loads, text_request_loads_only_the_text_encoder,
+    embeds_text_with_ort_model, embeds_image_batch_with_ort_model,
+    real_repo_image_embeddings_are_reasonable_for_english_and_chinese_queries.
+    embeds_text_and_image_with_jina_clip_profile printed its skip message
+    (ALCEDO_MIND_TEST_JINA_CLIP_ROOT not set), so the multimodal path ran no model.
+  macOS (yurunmac.local, copy of the crate in /tmp): cargo test -- --skip live_ -> 0, lib 284
+    passed; coreml_clip.rs compiles. The Core ML model tests are not in the offline set; no
+    Core ML model was loaded, so lazy load and unload of Core ML are not run.
+  C++: build of AiSidecarRuntimeServiceTest AiSidecarFakeRuntime ImageAnalysisControllerTest
+    ImageAnalysisServiceTest -> 0; ctest same pattern -> 0, 95 / 93 / 0 / 2 (the two live
+    tests above). RuntimeArgumentsCarryModelAndDeviceConfiguration (extended) and
+    TextIdleUnloadFollowsIdleStopDelay (added) passed.
+  Named Rust tests, all passed: residency_loads_once_for_concurrent_requests,
+    residency_unloads_after_idle_time, residency_keeps_session_while_a_request_runs,
+    residency_failed_load_leaves_slot_empty, negative_idle_time_never_unloads,
+    parses_text_and_vision_device_flags, model_info_is_served_before_any_encoder_loads,
+    text_request_loads_only_the_text_encoder. Added: zero_idle_time_unloads_after_each_request,
+    idle_unload_rejects_negative_values_other_than_minus_one.
+Manual verification: release alcedo_mind.exe with the SigLIP2-256 model, driven with grpcurl:
+  GetRuntimeStatus after start reports text (cpu) and image not loaded; after EmbedText only text
+  is loaded; after EmbedImage both; 61 s after the image request the log has "unloaded image
+  encoder after 61 s idle" and the status reports the image encoder not loaded.
+  Not run: the image analysis run with a remote provider (needs a configured provider and the
+  GUI or a command that starts image analysis). The release sidecar loads no encoder at start
+  and image analysis sends no embedding request, so no encoder load line is expected.
+Evidence path: build/tmp/sidecar_residency_sr1/ (removed after the work).
+Remaining defects or unavailable platforms: Core ML lazy load not run with a model on macOS.
+  Lazy load moves a broken model file error from the start to the first request (risk table).
 ```
 
 ### Phase SR3 — Setting, prewarm, and measurements
@@ -597,10 +725,11 @@ ctest --test-dir build/debug -R "AlbumBackendSearchWorkerTest|SearchRequestWorke
 
 **Exit criteria**
 
-- [ ] All named tests pass.
-- [ ] The measurement table has the SR1 baseline and the SR3 values for items (a) to (g).
-- [ ] Manual check: open the palette with natural-language search on, wait 3 s, press Enter;
-      the log shows no sidecar start after Enter.
+- [x] All named tests pass.
+- [x] The measurement table has the SR1 baseline and the SR3 values for items (a) to (g).
+- [x] Manual check: open the palette with natural-language search on, wait 3 s, press Enter;
+      the log shows no sidecar start after Enter. Run through the headless session
+      (`search.prewarm`, then `search.query` after 3 s), not the GUI palette.
 
 **Expected diff**
 
@@ -609,7 +738,61 @@ ctest --test-dir build/debug -R "AlbumBackendSearchWorkerTest|SearchRequestWorke
 **Completion record**
 
 ```text
-(empty — fill when the phase is complete; use Section 13)
+Phase / date / status: SR3 / 2026-10-17 / complete; GUI not checked by hand.
+Source revision and branch: as SR1.
+Actual changed modules: SemanticSearchProvider (Prewarm, IsPrewarmed with defaults),
+  ProjectSemanticSearchProvider, SemanticQueryEmbeddingCache::Contains, SleeveFilterService
+  (IsSemanticSearchPrewarmed, PrewarmSemanticSearch), SearchRequestKind::kPrewarm,
+  SearchController::PrewarmNaturalLanguageSearch, SemanticGenerationController
+  (sidecarIdleStopSeconds property), SearchPalette.qml (prewarm on open and when the switch
+  turns on), SemanticGenerationSettingsPanel.qml (section "Memory", row "Keep AI model loaded",
+  AdjustmentCombo like the other rows), alcedo_main_zh_CN.ts (8 new strings, edited by hand),
+  automation command search.prewarm (cli_mcp_automation_plan.md command table).
+Implemented behavior: as Sections 2.4 and 2.5. The setting writes ai/sidecarIdleStopSeconds and
+  calls ProjectService::SetAiSidecarIdleStopSeconds at once; the text encoder idle time follows
+  the delay at the next process start. The prewarm job runs on the library worker with its own
+  kind, checks the cache on the worker (no SQL on the UI thread), and logs
+  semantic.search.prewarm.failed on failure.
+Primary success call chain: Section 5.3 (measured below).
+Primary failure and restore call chain:
+  Prewarm -> runtime start fails -> semantic.search.prewarm.failed in the log -> no cache entry
+  user Enter -> the start error in the Library error row (unchanged search path)
+Build and test commands with exit codes:
+  cmd /c scripts\msvc_env.cmd --build --preset win_debug --parallel 4 --target
+    AiSidecarRuntimeServiceTest AiSidecarFakeRuntime AlbumBackendSearchWorkerTest
+    SearchRequestWorkerTest SemanticQueryEmbeddingCacheTest FilterServiceTest
+    ImageAnalysisControllerTest alcedo_main -> 0
+  ctest --test-dir build/debug -R "AiSidecarRuntimeServiceTest|AlbumBackendSearchWorkerTest|
+    SearchRequestWorkerTest|SemanticQueryEmbeddingCacheTest|FilterServiceTest|
+    ImageAnalysisControllerTest|ImageAnalysisServiceTest" --output-on-failure -> 0
+Discovered / passed / failed / skipped counts: 178 / 176 / 0 / 2 (the two live tests). Named
+  tests, all passed: PrewarmEmbedsNeutralTextOnce, PrewarmDoesNothingWhenSwitchIsOff,
+  PrewarmDoesNotReplacePreviewRequest, IdleStopSettingAppliesToRunningService (checks that the
+  project service applies the value to the runtime service at once; the stop of an idle running
+  process at 0 is checked by ZeroDelayWhileIdleStopsRunningProcess), UnknownIdleStopSettingReadsAsDefault.
+Manual verification: headless session as in SR1 with search.prewarm, 3 s pause, search.query:
+  one sidecar start, before the query; the query embedding took 49 ms
+  (semantic.search.embed_query.end). The prewarm took 3177 ms, so the query, sent 3.0 s after
+  the prewarm, waited about 50 ms for it on the worker. The settings row was not opened in the
+  GUI: the QML compiled (qmlcachegen in the alcedo_main build) and the property is tested.
+Measurements (release build, Windows, bug_reproduce.alcd copy, SigLIP2-256, --device auto with
+  DirectML available; app values through alcedo-cli batch, which adds about 100 ms per call;
+  sidecar values through grpcurl, which adds about 160 ms per call, subtracted below):
+  | item | before (main c55c9d12d) | after |
+  | (a) natural-language query, cold | 13932 ms (two sidecar starts) | 4058 ms (one start) |
+  | (a) natural-language query, repeated | 6677 / 6603 ms (a start each) | 346 / 244 ms; text embed about 25-50 ms |
+  | (b) working set after start | 1800 MB (both encoders loaded at start) | 81 MB (no encoder) |
+  | (c) dedicated GPU memory after start | 1526 MB | 0 MB |
+  | (d) start to ready | 5.2-5.4 s (log start -> ready) | 2.0-2.2 s |
+  | (e) working set, text encoder only (CPU) | not applicable | 1184 MB steady, peak 1844 MB during the load |
+  | (f) working set, both encoders | 1800 MB, GPU 1526 MB | 1776 MB, GPU 443 MB |
+  | (g) palette open to ready text encoder | not applicable | 3177 ms |
+  After 61 s without image requests the image encoder unloads: working set 1228 MB, GPU 0 MB.
+Risk check: (a) warm is below 150 ms, so the CPU text encoder rule stays. (e) shows that the
+  SigLIP2 text encoder alone takes about 1.1 GB of RAM on the CPU; the idle setting bounds it.
+Evidence path: build/tmp/sidecar_residency_sr1/ (removed after the work).
+Remaining defects or unavailable platforms: the GUI setting row and palette prewarm were not
+  driven by hand; macOS not built for C++ or QML in this work.
 ```
 
 ## 10. Cross-phase acceptance matrix

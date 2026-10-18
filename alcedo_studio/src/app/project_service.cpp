@@ -185,16 +185,7 @@ class ProjectSemanticSearchProvider final : public SemanticSearchProvider {
     if (query.empty()) {
       throw std::runtime_error("Semantic search query is empty.");
     }
-    if (!storage_) {
-      throw std::runtime_error("Semantic storage service is unavailable.");
-    }
-
-    std::string error;
-    const auto  active_model = storage_->GetSemanticModelRegistry().ActiveModel(&error);
-    if (!active_model.has_value()) {
-      throw std::runtime_error(error.empty() ? "No active semantic model is registered." : error);
-    }
-
+    const auto             active_model = ActiveModel();
     const auto query_text   = conv::ToBytes(query);
     const auto neutral_text = std::string(SemanticVectorSearch::kNeutralText);
     SemanticQueryEmbedding embedding{.model_key_ = active_model->model_key_,
@@ -208,7 +199,38 @@ class ProjectSemanticSearchProvider final : public SemanticSearchProvider {
     return embedding;
   }
 
+  void Prewarm() override {
+    diag::TraceScope trace(diag::semanticLog(), QStringLiteral("semantic.search.prewarm"), {});
+    const auto       active_model = ActiveModel();
+    const auto       neutral_text = std::string(SemanticVectorSearch::kNeutralText);
+    (void)cache_.GetOrEmbed(active_model->model_key_, neutral_text,
+                            [&] { return EncodeText(*active_model, neutral_text); });
+  }
+
+  [[nodiscard]] auto IsPrewarmed() -> bool override {
+    if (!storage_) {
+      return false;
+    }
+    const auto active_model = storage_->GetSemanticModelRegistry().ActiveModel(nullptr);
+    return active_model.has_value() &&
+           cache_.Contains(active_model->model_key_,
+                           std::string(SemanticVectorSearch::kNeutralText));
+  }
+
  private:
+  /// The active semantic model of the project. @throws std::runtime_error when there is none.
+  [[nodiscard]] auto ActiveModel() const -> std::optional<SemanticModelRecord> {
+    if (!storage_) {
+      throw std::runtime_error("Semantic storage service is unavailable.");
+    }
+    std::string error;
+    auto        active_model = storage_->GetSemanticModelRegistry().ActiveModel(&error);
+    if (!active_model.has_value()) {
+      throw std::runtime_error(error.empty() ? "No active semantic model is registered." : error);
+    }
+    return active_model;
+  }
+
   /// Starts the runtime when needed, checks that it serves @p model, and embeds @p text.
   /// @throws std::runtime_error on a start failure, a model mismatch, or an invalid vector.
   [[nodiscard]] auto EncodeText(const SemanticModelRecord& model, const std::string& text) const
@@ -223,17 +245,16 @@ class ProjectSemanticSearchProvider final : public SemanticSearchProvider {
     if (!sidecar_lease) {
       throw std::runtime_error("Semantic runtime service is unavailable.");
     }
-    auto runtime_status = runtime->Status();
-    if (runtime_status.state != AiSidecarRuntimeState::kReady ||
-        !runtime_status.model_info.has_value()) {
-      if (!runtime->StartAndWait(runtime_options)) {
-        runtime_status = runtime->Status();
-        throw std::runtime_error(runtime_status.message.empty()
-                                     ? "Semantic runtime failed to start."
-                                     : runtime_status.message);
-      }
-      runtime_status = runtime->Status();
+    // The interactive start runs the boot on the owner (UI) thread and keeps its event loop
+    // running, so a cold start from the query worker does not freeze the UI. A running process
+    // of the same model returns at once; one of another model restarts when no other operation
+    // holds a lease.
+    if (!runtime->StartAndWaitInteractive(runtime_options)) {
+      const auto failed_status = runtime->Status();
+      throw std::runtime_error(failed_status.message.empty() ? "Semantic runtime failed to start."
+                                                             : failed_status.message);
     }
+    const auto runtime_status = runtime->Status();
     if (runtime_status.state != AiSidecarRuntimeState::kReady ||
         !runtime_status.model_info.has_value()) {
       throw std::runtime_error(runtime_status.message.empty()
@@ -322,6 +343,17 @@ auto GenerateProjectUUID() -> std::string {
   std::mt19937       generator(seed);
   uuids::uuid_random_generator uuid_gen(generator);
   return uuids::to_string(uuid_gen());
+}
+
+auto ReadAiSidecarIdleStopSeconds() -> int {
+  QSettings settings;
+  bool      ok    = false;
+  const int value = settings
+                        .value(QLatin1String(ProjectService::kAiSidecarIdleStopSecondsKey),
+                               ProjectService::kDefaultAiSidecarIdleStopSeconds)
+                        .toInt(&ok);
+  return ProjectService::NormalizedAiSidecarIdleStopSeconds(
+      ok ? value : ProjectService::kDefaultAiSidecarIdleStopSeconds);
 }
 
 auto MakeAiSidecarRuntimeService() -> std::shared_ptr<AiSidecarRuntimeService> {
@@ -676,8 +708,28 @@ auto ProjectService::GetAiSidecarRuntimeService() const
   std::lock_guard lock(ai_sidecar_runtime_mutex_);
   if (!ai_sidecar_runtime_service_) {
     ai_sidecar_runtime_service_ = MakeAiSidecarRuntimeService();
+    ai_sidecar_runtime_service_->SetIdleStopDelay(
+        std::chrono::seconds(ReadAiSidecarIdleStopSeconds()));
   }
   return ai_sidecar_runtime_service_;
+}
+
+auto ProjectService::NormalizedAiSidecarIdleStopSeconds(int seconds) -> int {
+  switch (seconds) {
+    case 0:
+    case 60:
+    case 300:
+    case 900:
+    case -1:
+      return seconds;
+    default:
+      return kDefaultAiSidecarIdleStopSeconds;
+  }
+}
+
+void ProjectService::SetAiSidecarIdleStopSeconds(int seconds) {
+  GetAiSidecarRuntimeService()->SetIdleStopDelay(
+      std::chrono::seconds(NormalizedAiSidecarIdleStopSeconds(seconds)));
 }
 
 };  // namespace alcedo

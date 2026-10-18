@@ -4,6 +4,7 @@ pub mod capabilities;
 pub mod coreml_clip;
 pub mod credential_vault;
 pub mod embedding;
+pub mod encoder_residency;
 pub mod inference;
 pub mod model_adapters;
 pub mod registry;

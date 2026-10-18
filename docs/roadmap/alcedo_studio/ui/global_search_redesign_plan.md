@@ -806,7 +806,8 @@ Remaining defects or unavailable platforms:
     #427, fixed (record below).
   - macOS not built or tested in this phase.
   - Cold sidecar start on Enter still blocks the worker (Section 12, known behavior; the
-    residency plan owns it).
+    residency plan owns it). Since residency Phase SR1 the boot no longer blocks the GUI
+    thread, and the sidecar stays running for the idle time after a search.
 ```
 
 **Follow-up record: issue #427 (relevance products only for the folder scope)**

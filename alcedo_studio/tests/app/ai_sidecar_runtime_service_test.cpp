@@ -6,6 +6,9 @@
 
 #include <gtest/gtest.h>
 
+#include <QCoreApplication>
+#include <QEventLoop>
+#include <QMetaObject>
 #include <QThread>
 #include <atomic>
 #include <chrono>
@@ -560,6 +563,8 @@ TEST(AiSidecarRuntimeServiceTest, RunningSidecarReusesExistingProcessForDifferen
   auto                    client = std::make_shared<FakeSidecarClient>();
   AiSidecarRuntimeService service(FakeFactory(client));
 
+  // A second lease is held, so the model identity change does not restart the process.
+  auto                    other_lease = service.AcquireLease();
   auto                    lease   = service.AcquireLease();
   auto                    options = BaseOptions();
   options.extra_arguments         = {"--sleep-ms", "30000"};
@@ -574,8 +579,11 @@ TEST(AiSidecarRuntimeServiceTest, RunningSidecarReusesExistingProcessForDifferen
   different_options.model_root = std::filesystem::temp_directory_path() / "another_model_root";
   ASSERT_TRUE(service.StartAndWait(different_options));
   EXPECT_EQ(service.Status().process_id, first_pid);
+  EXPECT_EQ(service.Options().model_id, "test/mobileclip");
 
   lease.reset();
+  EXPECT_EQ(service.Status().state, AiSidecarRuntimeState::kReady);
+  other_lease.reset();
   EXPECT_EQ(service.Status().state, AiSidecarRuntimeState::kStopped);
 }
 
@@ -719,8 +727,10 @@ TEST(AiSidecarRuntimeServiceTest, RuntimeArgumentsCarryModelAndDeviceConfigurati
   options.model_root      = std::filesystem::path("C:/models/mobileclip");
   options.model_id        = "repo/model:s2";
   options.revision        = "abc123";
-  options.device          = "directml:0";
-  options.extra_arguments = {"--record-args", record_path.string(), "--sleep-ms", "30000"};
+  options.device             = "directml:0";
+  options.vision_device      = "directml:1";
+  options.vision_idle_unload = std::chrono::seconds(45);
+  options.extra_arguments    = {"--record-args", record_path.string(), "--sleep-ms", "30000"};
 
   ASSERT_TRUE(service.StartAndWait(options));
   service.Stop();
@@ -733,8 +743,49 @@ TEST(AiSidecarRuntimeServiceTest, RuntimeArgumentsCarryModelAndDeviceConfigurati
   EXPECT_NE(args.find("--model-id\nrepo/model:s2"), std::string::npos);
   EXPECT_NE(args.find("--revision\nabc123"), std::string::npos);
   EXPECT_NE(args.find("--device\ndirectml:0"), std::string::npos);
+  EXPECT_NE(args.find("--text-device\ncpu\n"), std::string::npos);
+  EXPECT_NE(args.find("--vision-device\ndirectml:1\n"), std::string::npos);
+  // No text idle time in the options and idle stop delay 0: the text encoder unloads after
+  // each request.
+  EXPECT_NE(args.find("--text-idle-unload-seconds\n0\n"), std::string::npos);
+  EXPECT_NE(args.find("--vision-idle-unload-seconds\n45\n"), std::string::npos);
   EXPECT_NE(args.find("--no-download"), std::string::npos);
   EXPECT_NE(args.find("--provider-config-dir\n"), std::string::npos);
+  std::filesystem::remove(record_path);
+}
+
+TEST(AiSidecarRuntimeServiceTest, TextIdleUnloadFollowsIdleStopDelay) {
+  const auto record_path =
+      std::filesystem::temp_directory_path() / "semantic_runtime_idle_args.txt";
+  const auto read_args = [&record_path] {
+    std::ifstream in(record_path);
+    return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  };
+  auto options            = BaseOptions();
+  options.extra_arguments = {"--record-args", record_path.string(), "--sleep-ms", "30000"};
+
+  for (const auto& [delay, expected] : {std::pair{std::chrono::milliseconds(300000), "300"},
+                                        std::pair{std::chrono::milliseconds(-1), "-1"}}) {
+    std::filesystem::remove(record_path);
+    auto                    client = std::make_shared<FakeSidecarClient>();
+    AiSidecarRuntimeService service(FakeFactory(client));
+    service.SetIdleStopDelay(delay);
+    ASSERT_TRUE(service.StartAndWait(options));
+    service.StopForProjectClose();
+    EXPECT_NE(read_args().find(std::string("--text-idle-unload-seconds\n") + expected + "\n"),
+              std::string::npos)
+        << expected;
+  }
+
+  // A value in the options takes precedence over the delay.
+  std::filesystem::remove(record_path);
+  auto                    client = std::make_shared<FakeSidecarClient>();
+  AiSidecarRuntimeService service(FakeFactory(client));
+  service.SetIdleStopDelay(std::chrono::seconds(300));
+  options.text_idle_unload = std::chrono::seconds(15);
+  ASSERT_TRUE(service.StartAndWait(options));
+  service.StopForProjectClose();
+  EXPECT_NE(read_args().find("--text-idle-unload-seconds\n15\n"), std::string::npos);
   std::filesystem::remove(record_path);
 }
 
@@ -979,6 +1030,351 @@ TEST(AiSidecarRuntimeServiceTest, ProjectServiceCreatesRuntimeOnCallerThreadAfte
   std::filesystem::remove(meta_path);
 }
 
+namespace {
+
+using SteadyClock = std::chrono::steady_clock;
+
+/// Runs the Qt event loop of the calling (owner) thread for @p duration.
+void ProcessEventsFor(std::chrono::milliseconds duration) {
+  const auto deadline = SteadyClock::now() + duration;
+  while (SteadyClock::now() < deadline) {
+    QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+  }
+}
+
+/// Runs the Qt event loop until @p done returns true or @p timeout passes. Returns done().
+template <typename Done>
+auto ProcessEventsUntil(Done done, std::chrono::milliseconds timeout) -> bool {
+  const auto deadline = SteadyClock::now() + timeout;
+  while (!done()) {
+    if (SteadyClock::now() >= deadline) {
+      return false;
+    }
+    QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+  }
+  return true;
+}
+
+auto StateOf(AiSidecarRuntimeService& service) -> AiSidecarRuntimeState {
+  return service.Status().state;
+}
+
+/// Base options with a fake runtime that runs until it is stopped.
+auto LongRunningOptions() -> AiSidecarRuntimeOptions {
+  auto options            = BaseOptions();
+  options.extra_arguments = {"--sleep-ms", "30000"};
+  return options;
+}
+
+/// A fake runtime that ignores the terminate request, so only the kill after
+/// @p graceful_stop_timeout ends it.
+auto TerminateIgnoringOptions(std::chrono::milliseconds graceful_stop_timeout)
+    -> AiSidecarRuntimeOptions {
+  auto options                  = BaseOptions();
+  options.extra_arguments       = {"--ignore-terminate", "--sleep-ms", "30000"};
+  options.graceful_stop_timeout = graceful_stop_timeout;
+  options.kill_timeout          = std::chrono::milliseconds(2000);
+  return options;
+}
+
+}  // namespace
+
+TEST(AiSidecarRuntimeServiceTest, IdleDelayKeepsRuntimeRunningAfterLastRelease) {
+  auto                    client = std::make_shared<FakeSidecarClient>();
+  AiSidecarRuntimeService service(FakeFactory(client));
+  service.SetIdleStopDelay(std::chrono::seconds(2));
+
+  auto lease = service.AcquireLease();
+  ASSERT_TRUE(service.StartAndWait(LongRunningOptions()));
+  const auto pid = service.Status().process_id;
+  ASSERT_GT(pid, 0);
+
+  lease.reset();
+  ProcessEventsFor(std::chrono::milliseconds(200));
+  const auto status = service.Status();
+  EXPECT_EQ(status.state, AiSidecarRuntimeState::kReady);
+  EXPECT_EQ(status.process_id, pid);
+  service.StopForProjectClose();
+}
+
+TEST(AiSidecarRuntimeServiceTest, IdleDelayStopsRuntimeWhenNoLeaseReturns) {
+  auto                    client = std::make_shared<FakeSidecarClient>();
+  AiSidecarRuntimeService service(FakeFactory(client));
+  service.SetIdleStopDelay(std::chrono::milliseconds(300));
+
+  auto lease = service.AcquireLease();
+  ASSERT_TRUE(service.StartAndWait(LongRunningOptions()));
+  lease.reset();
+  EXPECT_EQ(StateOf(service), AiSidecarRuntimeState::kReady);
+
+  EXPECT_TRUE(
+      ProcessEventsUntil([&] { return StateOf(service) == AiSidecarRuntimeState::kStopped; },
+                         std::chrono::seconds(3)));
+  const auto status = service.Status();
+  EXPECT_EQ(status.issue, AiSidecarRuntimeIssue::kNone);
+  EXPECT_EQ(status.process_id, 0);
+  EXPECT_EQ(service.ClientSession(), nullptr);
+}
+
+TEST(AiSidecarRuntimeServiceTest, NewLeaseCancelsIdleStop) {
+  auto                    client = std::make_shared<FakeSidecarClient>();
+  AiSidecarRuntimeService service(FakeFactory(client));
+  service.SetIdleStopDelay(std::chrono::milliseconds(300));
+
+  auto lease = service.AcquireLease();
+  ASSERT_TRUE(service.StartAndWait(LongRunningOptions()));
+  const auto pid = service.Status().process_id;
+  lease.reset();
+  ProcessEventsFor(std::chrono::milliseconds(100));
+  lease = service.AcquireLease();
+
+  ProcessEventsFor(std::chrono::milliseconds(1000));
+  const auto status = service.Status();
+  EXPECT_EQ(status.state, AiSidecarRuntimeState::kReady);
+  EXPECT_EQ(status.process_id, pid);
+  lease.reset();
+  service.StopForProjectClose();
+}
+
+TEST(AiSidecarRuntimeServiceTest, NegativeDelayKeepsRuntimeUntilProjectClose) {
+  auto                    client = std::make_shared<FakeSidecarClient>();
+  AiSidecarRuntimeService service(FakeFactory(client));
+  service.SetIdleStopDelay(std::chrono::milliseconds(-1));
+
+  auto lease = service.AcquireLease();
+  ASSERT_TRUE(service.StartAndWait(LongRunningOptions()));
+  lease.reset();
+  ProcessEventsFor(std::chrono::milliseconds(1000));
+  EXPECT_EQ(StateOf(service), AiSidecarRuntimeState::kReady);
+
+  service.StopForProjectClose();
+  EXPECT_EQ(StateOf(service), AiSidecarRuntimeState::kStopped);
+  EXPECT_EQ(service.Status().process_id, 0);
+}
+
+TEST(AiSidecarRuntimeServiceTest, IdleStopDoesNotBlockOwnerThread) {
+  auto                    client = std::make_shared<FakeSidecarClient>();
+  AiSidecarRuntimeService service(FakeFactory(client));
+  service.SetIdleStopDelay(std::chrono::milliseconds(100));
+
+  // A blocking stop of this runtime would hold the owner thread for the 1 s graceful stop time.
+  auto lease = service.AcquireLease();
+  ASSERT_TRUE(service.StartAndWait(TerminateIgnoringOptions(std::chrono::milliseconds(1000))));
+  lease.reset();
+  ASSERT_TRUE(
+      ProcessEventsUntil([&] { return StateOf(service) == AiSidecarRuntimeState::kStopping; },
+                         std::chrono::seconds(2)));
+
+  const auto                             posted_at = SteadyClock::now();
+  std::optional<SteadyClock::time_point> ran_at;
+  QMetaObject::invokeMethod(
+      &service, [&ran_at] { ran_at = SteadyClock::now(); }, Qt::QueuedConnection);
+  ASSERT_TRUE(ProcessEventsUntil([&] { return ran_at.has_value(); }, std::chrono::seconds(2)));
+  EXPECT_LT(*ran_at - posted_at, std::chrono::milliseconds(50));
+  EXPECT_EQ(StateOf(service), AiSidecarRuntimeState::kStopping);
+
+  // The kill after the graceful stop time completes the stop.
+  EXPECT_TRUE(
+      ProcessEventsUntil([&] { return StateOf(service) == AiSidecarRuntimeState::kStopped; },
+                         std::chrono::seconds(4)));
+  EXPECT_EQ(service.Status().issue, AiSidecarRuntimeIssue::kNone);
+}
+
+TEST(AiSidecarRuntimeServiceTest, StartDuringIdleStopWaitsAndStartsNewProcess) {
+  auto                    client = std::make_shared<FakeSidecarClient>();
+  AiSidecarRuntimeService service(FakeFactory(client));
+  service.SetIdleStopDelay(std::chrono::milliseconds(100));
+
+  const auto options = TerminateIgnoringOptions(std::chrono::milliseconds(1000));
+  auto       lease   = service.AcquireLease();
+  ASSERT_TRUE(service.StartAndWait(options));
+  const auto first_pid = service.Status().process_id;
+  lease.reset();
+  ASSERT_TRUE(
+      ProcessEventsUntil([&] { return StateOf(service) == AiSidecarRuntimeState::kStopping; },
+                         std::chrono::seconds(2)));
+
+  lease = service.AcquireLease();
+  ASSERT_TRUE(service.StartAndWait(options));
+  const auto status = service.Status();
+  EXPECT_EQ(status.state, AiSidecarRuntimeState::kReady);
+  EXPECT_GT(status.process_id, 0);
+  EXPECT_NE(status.process_id, first_pid);
+
+  // The finished signal of the old process does not stop the new one.
+  ProcessEventsFor(std::chrono::milliseconds(300));
+  EXPECT_EQ(StateOf(service), AiSidecarRuntimeState::kReady);
+  EXPECT_EQ(service.Status().process_id, status.process_id);
+  lease.reset();
+  service.StopForProjectClose();
+}
+
+TEST(AiSidecarRuntimeServiceTest, ModelIdentityChangeRestartsProcessWithoutOtherLease) {
+  auto                    client = std::make_shared<FakeSidecarClient>();
+  AiSidecarRuntimeService service(FakeFactory(client));
+
+  auto                    lease   = service.AcquireLease();
+  const auto              options = LongRunningOptions();
+  ASSERT_TRUE(service.StartAndWait(options));
+  const auto first_pid   = service.Status().process_id;
+
+  auto       other_model = options;
+  other_model.model_id   = "another/model";
+  ASSERT_TRUE(service.StartAndWait(other_model));
+  const auto status = service.Status();
+  EXPECT_EQ(status.state, AiSidecarRuntimeState::kReady);
+  EXPECT_NE(status.process_id, first_pid);
+  EXPECT_EQ(service.Options().model_id, "another/model");
+
+  // Same identity: the process is reused.
+  ASSERT_TRUE(service.StartAndWait(other_model));
+  EXPECT_EQ(service.Status().process_id, status.process_id);
+  lease.reset();
+  EXPECT_EQ(StateOf(service), AiSidecarRuntimeState::kStopped);
+}
+
+TEST(AiSidecarRuntimeServiceTest, ProviderConfigChangeRestartsProcessAtNextStart) {
+  auto                    client = std::make_shared<FakeSidecarClient>();
+  AiSidecarRuntimeService service(FakeFactory(client));
+
+  auto                    lease   = service.AcquireLease();
+  const auto              options = LongRunningOptions();
+  ASSERT_TRUE(service.StartAndWait(options));
+  const auto first_pid = service.Status().process_id;
+
+  service.MarkProviderConfigsChanged();
+  ASSERT_TRUE(service.StartAndWait(options));
+  const auto second_pid = service.Status().process_id;
+  EXPECT_NE(second_pid, first_pid);
+
+  // The mark is consumed by the restart.
+  ASSERT_TRUE(service.StartAndWait(options));
+  EXPECT_EQ(service.Status().process_id, second_pid);
+  lease.reset();
+}
+
+TEST(AiSidecarRuntimeServiceTest, ProviderConfigChangeWaitsUntilOtherLeasesAreReleased) {
+  auto                    client = std::make_shared<FakeSidecarClient>();
+  AiSidecarRuntimeService service(FakeFactory(client));
+  service.SetIdleStopDelay(std::chrono::seconds(5));
+
+  auto       own_lease   = service.AcquireLease();
+  auto       other_lease = service.AcquireLease();
+  const auto options     = LongRunningOptions();
+  ASSERT_TRUE(service.StartAndWait(options));
+  const auto first_pid = service.Status().process_id;
+
+  service.MarkProviderConfigsChanged();
+  ASSERT_TRUE(service.StartAndWait(options));
+  EXPECT_EQ(service.Status().process_id, first_pid);
+
+  other_lease.reset();
+  ASSERT_TRUE(service.StartAndWait(options));
+  EXPECT_NE(service.Status().process_id, first_pid);
+  own_lease.reset();
+  service.StopForProjectClose();
+}
+
+TEST(AiSidecarRuntimeServiceTest, WorkerStartKeepsOwnerThreadResponsive) {
+  auto                    client = std::make_shared<FakeSidecarClient>(/*ready=*/false);
+  AiSidecarRuntimeService service(FakeFactory(client));
+  auto                    lease = service.AcquireLease();
+
+  std::atomic<bool>       worker_done{false};
+  std::atomic<bool>       worker_result{false};
+  std::thread             worker([&] {
+    auto options            = LongRunningOptions();
+    options.startup_timeout = std::chrono::milliseconds(5000);
+    worker_result           = service.StartAndWaitInteractive(options);
+    worker_done             = true;
+  });
+
+  // A second thread posts a call to the owner thread during the boot and measures how long it
+  // waits; the owner thread runs the boot because the worker calls into it.
+  std::atomic<int64_t>    post_wait_us{-1};
+  std::thread             poster([&] {
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    const auto posted_at = SteadyClock::now();
+    QMetaObject::invokeMethod(
+        &service,
+        [&post_wait_us, posted_at] {
+          post_wait_us =
+              std::chrono::duration_cast<std::chrono::microseconds>(SteadyClock::now() - posted_at)
+                  .count();
+        },
+        Qt::QueuedConnection);
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    client->SetReady(true);
+  });
+
+  EXPECT_TRUE(ProcessEventsUntil([&] { return worker_done.load(); }, std::chrono::seconds(10)));
+  poster.join();
+  worker.join();
+  EXPECT_TRUE(worker_result.load());
+  ASSERT_GE(post_wait_us.load(), 0);
+  EXPECT_LT(post_wait_us.load(), 50000);
+  lease.reset();
+}
+
+TEST(AiSidecarRuntimeServiceTest, ZeroDelayWhileIdleStopsRunningProcess) {
+  auto                    client = std::make_shared<FakeSidecarClient>();
+  AiSidecarRuntimeService service(FakeFactory(client));
+  service.SetIdleStopDelay(std::chrono::seconds(300));
+
+  auto lease = service.AcquireLease();
+  ASSERT_TRUE(service.StartAndWait(LongRunningOptions()));
+  lease.reset();
+  EXPECT_EQ(StateOf(service), AiSidecarRuntimeState::kReady);
+
+  service.SetIdleStopDelay(std::chrono::seconds(0));
+  EXPECT_TRUE(
+      ProcessEventsUntil([&] { return StateOf(service) == AiSidecarRuntimeState::kStopped; },
+                         std::chrono::seconds(3)));
+}
+
+// The project service forwards the setting to the runtime service at once. That a delay of 0
+// stops an idle running process is checked by ZeroDelayWhileIdleStopsRunningProcess.
+TEST(AiSidecarRuntimeServiceTest, IdleStopSettingAppliesToRunningService) {
+  const auto db_path   = std::filesystem::temp_directory_path() / "semantic_runtime_idle.db";
+  const auto meta_path = std::filesystem::temp_directory_path() / "semantic_runtime_idle.json";
+  std::filesystem::remove(db_path);
+  std::filesystem::remove(meta_path);
+  {
+    ProjectService project(db_path, meta_path, ProjectOpenMode::kCreateNew);
+    auto           runtime = project.GetAiSidecarRuntimeService();
+    project.SetAiSidecarIdleStopSeconds(300);
+    EXPECT_EQ(runtime->IdleStopDelay(), std::chrono::seconds(300));
+    project.SetAiSidecarIdleStopSeconds(0);
+    EXPECT_EQ(runtime->IdleStopDelay(), std::chrono::seconds(0));
+    project.SetAiSidecarIdleStopSeconds(-1);
+    EXPECT_LT(runtime->IdleStopDelay().count(), 0);
+  }
+  std::filesystem::remove(db_path);
+  std::filesystem::remove(meta_path);
+}
+
+TEST(AiSidecarRuntimeServiceTest, UnknownIdleStopSettingReadsAsDefault) {
+  EXPECT_EQ(ProjectService::NormalizedAiSidecarIdleStopSeconds(42), 300);
+  EXPECT_EQ(ProjectService::NormalizedAiSidecarIdleStopSeconds(-7), 300);
+  for (const int value : {0, 60, 300, 900, -1}) {
+    EXPECT_EQ(ProjectService::NormalizedAiSidecarIdleStopSeconds(value), value);
+  }
+
+  const auto db_path   = std::filesystem::temp_directory_path() / "semantic_runtime_unknown.db";
+  const auto meta_path = std::filesystem::temp_directory_path() / "semantic_runtime_unknown.json";
+  std::filesystem::remove(db_path);
+  std::filesystem::remove(meta_path);
+  {
+    ProjectService project(db_path, meta_path, ProjectOpenMode::kCreateNew);
+    project.SetAiSidecarIdleStopSeconds(42);
+    EXPECT_EQ(project.GetAiSidecarRuntimeService()->IdleStopDelay(), std::chrono::seconds(300));
+  }
+  std::filesystem::remove(db_path);
+  std::filesystem::remove(meta_path);
+}
+
 TEST(AiSidecarRuntimeServiceLiveTest, DefaultGrpcClientEmbedsRawRgba8AgainstRustRuntime) {
   const char* runtime_path_env = std::getenv("ALCEDO_SEMANTIC_LIVE_RUNTIME_PATH");
   const char* model_root_env   = std::getenv("ALCEDO_SEMANTIC_LIVE_MODEL_ROOT");
@@ -1053,3 +1449,10 @@ TEST(AiSidecarRuntimeServiceLiveTest, DefaultGrpcClientEmbedsRawRgba8AgainstRust
 }
 
 }  // namespace alcedo
+
+// The idle stop timer and the asynchronous stop need the Qt event loop of the owner thread.
+int main(int argc, char** argv) {
+  QCoreApplication app(argc, argv);
+  ::testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
+}

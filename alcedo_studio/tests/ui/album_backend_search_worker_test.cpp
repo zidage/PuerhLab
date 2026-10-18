@@ -356,8 +356,17 @@ class FakeSemanticSearchProvider final : public SemanticSearchProvider {
                                   .neutral_   = AxisVector(kSemanticEmbeddingDim - 1)};
   }
 
+  /// Records the call; the neutral text counts as cached after the first prewarm.
+  void Prewarm() override {
+    ++prewarm_calls_;
+    prewarmed_ = true;
+  }
+  auto              IsPrewarmed() -> bool override { return prewarmed_.load(); }
+
   std::atomic<int>  calls_{0};
   std::atomic<bool> fail_{false};
+  std::atomic<int>  prewarm_calls_{0};
+  std::atomic<bool> prewarmed_{false};
 };
 
 /// Points the default QSettings store at an INI file in @p dir, so the search settings of a
@@ -522,6 +531,43 @@ TEST_F(SearchWorkerTests, SemanticApplyShowsKeptFilesInRelevanceOrder) {
   // The embedding and the relevance select run on the query worker.
   EXPECT_TRUE(recorder.UiThreadOperations().empty())
       << JoinOperations(recorder.UiThreadOperations());
+}
+
+TEST_F(SearchWorkerTests, PrewarmEmbedsNeutralTextOnce) {
+  ScopedSearchSettings   settings(temp_dir_);
+  ApplicationModuleHost  backend;
+  SemanticLibraryProject project;
+  ASSERT_TRUE(project.Load(temp_dir_, backend, kTwelveFileSimilarities));
+  auto*                     search = backend.search();
+
+  SearchQueryThreadRecorder recorder(project.filter_service());
+  search->PrewarmNaturalLanguageSearch();
+  // A second call while the first job is pending submits nothing.
+  search->PrewarmNaturalLanguageSearch();
+  ASSERT_TRUE(WaitUntil([&]() { return project.provider().prewarm_calls_.load() == 1; }, 5000));
+  // Let the job's completion reach the UI thread, then prewarm again: the neutral text is
+  // cached, so the job returns without a provider prewarm.
+  (void)WaitUntil([]() { return false; }, 200);
+  search->PrewarmNaturalLanguageSearch();
+  (void)WaitUntil([]() { return false; }, 300);
+  EXPECT_EQ(project.provider().prewarm_calls_.load(), 1);
+  EXPECT_EQ(project.provider().calls_.load(), 0);
+  EXPECT_TRUE(recorder.UiThreadOperations().empty())
+      << JoinOperations(recorder.UiThreadOperations());
+}
+
+TEST_F(SearchWorkerTests, PrewarmDoesNothingWhenSwitchIsOff) {
+  ScopedSearchSettings   settings(temp_dir_);
+  ApplicationModuleHost  backend;
+  SemanticLibraryProject project;
+  ASSERT_TRUE(project.Load(temp_dir_, backend, kTwelveFileSimilarities));
+  auto* search = backend.search();
+  search->SetNaturalLanguageSearchEnabled(false);
+
+  search->PrewarmNaturalLanguageSearch();
+  (void)WaitUntil([]() { return false; }, 300);
+  EXPECT_EQ(project.provider().prewarm_calls_.load(), 0);
+  EXPECT_EQ(project.provider().calls_.load(), 0);
 }
 
 TEST_F(SearchWorkerTests, SemanticApplyKeepsInspectorFilters) {

@@ -1,5 +1,7 @@
 use anyhow::Result;
 
+use crate::service::encoder_residency::EncoderStatus;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EngineModelInfo {
     pub profile_id: String,
@@ -34,6 +36,13 @@ pub trait EmbeddingEngine: Send + Sync {
     fn default_text_model_name(&self) -> &str;
     fn default_image_model_name(&self) -> &str;
     fn model_info(&self) -> EngineModelInfo;
+    /// Drops each loaded encoder that is idle for longer than its idle time. Called every
+    /// 5 seconds by the server; blocks while an encoder runs a request.
+    fn unload_idle_encoders(&self) {}
+    /// Residency of each encoder; empty for engines without lazily loaded encoders.
+    fn encoder_status(&self) -> Vec<EncoderStatus> {
+        Vec::new()
+    }
 }
 
 #[allow(dead_code)]

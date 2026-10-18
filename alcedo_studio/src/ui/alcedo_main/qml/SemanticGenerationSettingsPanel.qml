@@ -259,6 +259,32 @@ ColumnLayout {
     }
 
     QtObject {
+        id: idleStopComboModel
+        property string label: ""
+        property bool enabled: panel.hasController
+        readonly property var entries: [
+            { value: 0, label: qsTr("Unload after use") },
+            { value: 60, label: qsTr("1 minute") },
+            { value: 300, label: qsTr("5 minutes") },
+            { value: 900, label: qsTr("15 minutes") },
+            { value: -1, label: qsTr("While the project is open") }
+        ]
+        property int currentIndex: {
+            const seconds = panel.hasController ? panel.semanticController.sidecarIdleStopSeconds
+                                                : 300
+            for (let i = 0; i < entries.length; ++i) {
+                if (entries[i].value === seconds)
+                    return i
+            }
+            return 2
+        }
+        function selectIndex(index) {
+            if (panel.hasController && index >= 0 && index < entries.length)
+                panel.semanticController.sidecarIdleStopSeconds = entries[index].value
+        }
+    }
+
+    QtObject {
         id: importComboModel
         property string label: ""
         property bool enabled: true
@@ -692,6 +718,45 @@ ColumnLayout {
             }
 
             Item { Layout.fillWidth: true }
+        }
+    }
+
+    SettingsSection {
+        Layout.fillWidth: true
+        title: qsTr("Memory")
+        textColor: panel.textColor
+        mutedTextColor: panel.mutedTextColor
+        dividerColor: panel.dividerColor
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 16
+
+            Label {
+                Layout.preferredWidth: 180
+                text: qsTr("Keep AI model loaded")
+                color: panel.textColor
+                font.pixelSize: 15
+                font.weight: 600
+            }
+
+            AdjustmentCombo {
+                objectName: "sidecarIdleStopControl"
+                controlObjectName: "sidecarIdleStopCombo"
+                Layout.fillWidth: true
+                controlHeight: 36
+                showResetButton: false
+                model: idleStopComboModel
+            }
+        }
+
+        Label {
+            Layout.fillWidth: true
+            Layout.leftMargin: 196
+            text: qsTr("The text model's unload time applies to the sidecar the next time it starts.")
+            color: panel.mutedTextColor
+            font.pixelSize: 12
+            wrapMode: Text.WordWrap
         }
     }
 

@@ -71,6 +71,15 @@ auto DefaultProviderConfigDir() -> std::filesystem::path {
 auto DefaultRuntimeBinary() -> std::filesystem::path;
 auto DefaultRuntimeModelRoot() -> std::filesystem::path;
 
+/// @p path in a form where `C:/a/b` and `C:\a\b\` compare equal.
+auto ComparablePath(const std::filesystem::path& path) -> std::filesystem::path {
+  auto normal = path.lexically_normal();
+  if (normal.has_filename() || normal.empty()) {
+    return normal;
+  }
+  return normal.parent_path();
+}
+
 auto NormalizeRuntimeOptions(AiSidecarRuntimeOptions options) -> AiSidecarRuntimeOptions {
   if (options.runtime_binary.empty()) {
     options.runtime_binary = DefaultRuntimeBinary();
@@ -281,6 +290,20 @@ AiSidecarRuntimeService::AiSidecarRuntimeService(AiSidecarClientFactory client_f
                 process_.errorString().toStdString());
     }
   });
+  connect(&process_, &QProcess::finished, this, [this]() {
+    if (idle_stop_pending_) {
+      FinishIdleStop();
+    }
+  });
+
+  idle_stop_timer_.setSingleShot(true);
+  connect(&idle_stop_timer_, &QTimer::timeout, this, [this]() {
+    if (active_leases_ == 0 && IsRunning()) {
+      BeginIdleStop();
+    }
+  });
+  idle_stop_kill_timer_.setSingleShot(true);
+  connect(&idle_stop_kill_timer_, &QTimer::timeout, this, [this]() { OnIdleStopKillTimeout(); });
 }
 
 AiSidecarRuntimeService::~AiSidecarRuntimeService() { StopForProjectClose(); }
@@ -318,6 +341,28 @@ void AiSidecarRuntimeService::RequestCancelStart() { cancel_start_requested_.sto
 
 auto AiSidecarRuntimeService::StartAndWaitBody(const AiSidecarRuntimeOptions& options,
                                                bool interactive) -> bool {
+  // An idle stop has sent the terminate request; the process will not serve this start.
+  if (idle_stop_pending_ && !CompleteIdleStopBeforeStart()) {
+    return false;
+  }
+  if (IsRunning()) {
+    const auto requested_options = NormalizeRuntimeOptions(options);
+    // The process stays running between operations, so it can hold an older model or older
+    // provider configs. Restart it when no other operation holds a lease; with other leases
+    // the running process is reused and the caller reports a model mismatch.
+    const bool model_changed     = ModelIdentityDiffers(requested_options);
+    if (active_leases_ <= 1 && (model_changed || provider_configs_changed_)) {
+      qCInfo(diag::semanticLog).noquote()
+          << QStringLiteral("semantic.runtime.restart pid=%1 reason=%2 model_id=%3")
+                 .arg(status_.process_id)
+                 .arg(model_changed ? QStringLiteral("model") : QStringLiteral("provider_configs"))
+                 .arg(QString::fromStdString(requested_options.model_id));
+      Stop();
+      if (IsRunning()) {
+        return false;
+      }
+    }
+  }
   if (IsRunning()) {
     const auto requested_options = NormalizeRuntimeOptions(options);
     if (requested_options.require_model_info && !status_.model_info.has_value()) {
@@ -335,6 +380,8 @@ auto AiSidecarRuntimeService::StartAndWaitBody(const AiSidecarRuntimeOptions& op
   }
 
   options_ = NormalizeRuntimeOptions(options);
+  // The new process reads the current provider configs.
+  provider_configs_changed_ = false;
   if (options_.port == 0) {
     options_.port = ChoosePort();
   }
@@ -412,6 +459,7 @@ auto AiSidecarRuntimeService::AcquireLease() -> std::shared_ptr<void> {
   }
 
   ++active_leases_;
+  idle_stop_timer_.stop();
   QPointer<AiSidecarRuntimeService> self(this);
   return std::shared_ptr<void>(new int(0), [self](int* token) {
     delete token;
@@ -426,6 +474,13 @@ void AiSidecarRuntimeService::Stop() {
     QMetaObject::invokeMethod(this, [this]() { Stop(); }, Qt::BlockingQueuedConnection);
     return;
   }
+
+  // The blocking stop below replaces an idle stop that has not finished.
+  idle_stop_timer_.stop();
+  idle_stop_kill_timer_.stop();
+  idle_stop_pending_        = false;
+  idle_stop_kill_sent_      = false;
+  provider_configs_changed_ = false;
 
   if (!IsRunning()) {
     client_.reset();
@@ -474,9 +529,121 @@ void AiSidecarRuntimeService::ReleaseLease() {
   if (active_leases_ > 0) {
     --active_leases_;
   }
-  if (active_leases_ == 0 && IsRunning()) {
-    Stop();
+  if (active_leases_ != 0 || idle_stop_pending_ || !IsRunning()) {
+    return;
   }
+  if (idle_stop_delay_.count() == 0) {
+    Stop();
+  } else if (idle_stop_delay_.count() > 0) {
+    idle_stop_timer_.start(idle_stop_delay_);
+  }
+}
+
+void AiSidecarRuntimeService::SetIdleStopDelay(std::chrono::milliseconds delay) {
+  if (QThread::currentThread() != thread()) {
+    QMetaObject::invokeMethod(
+        this, [this, delay]() { SetIdleStopDelay(delay); }, Qt::BlockingQueuedConnection);
+    return;
+  }
+  idle_stop_delay_ = delay;
+  qCInfo(diag::semanticLog).noquote() << QStringLiteral("semantic.runtime.idle_stop_delay ms=%1")
+                                             .arg(static_cast<qlonglong>(delay.count()));
+  if (active_leases_ != 0 || idle_stop_pending_ || !IsRunning()) {
+    return;
+  }
+  if (delay.count() == 0) {
+    idle_stop_timer_.stop();
+    BeginIdleStop();
+  } else if (delay.count() > 0) {
+    idle_stop_timer_.start(delay);
+  } else {
+    idle_stop_timer_.stop();
+  }
+}
+
+void AiSidecarRuntimeService::MarkProviderConfigsChanged() {
+  if (QThread::currentThread() != thread()) {
+    QMetaObject::invokeMethod(
+        this, [this]() { MarkProviderConfigsChanged(); }, Qt::BlockingQueuedConnection);
+    return;
+  }
+  provider_configs_changed_ = true;
+}
+
+void AiSidecarRuntimeService::BeginIdleStop() {
+  if (idle_stop_pending_ || !IsRunning()) {
+    return;
+  }
+  SetStatus(AiSidecarRuntimeState::kStopping, AiSidecarRuntimeIssue::kNone,
+            "Stopping idle semantic runtime");
+  qCInfo(diag::semanticLog).noquote()
+      << QStringLiteral("semantic.runtime.idle_stop pid=%1 endpoint=%2")
+             .arg(status_.process_id)
+             .arg(QString::fromStdString(endpoint_));
+  idle_stop_pending_   = true;
+  idle_stop_kill_sent_ = false;
+  process_.terminate();
+  idle_stop_kill_timer_.start(options_.graceful_stop_timeout);
+}
+
+void AiSidecarRuntimeService::OnIdleStopKillTimeout() {
+  if (!idle_stop_pending_) {
+    return;
+  }
+  if (process_.state() == QProcess::NotRunning) {
+    FinishIdleStop();
+    return;
+  }
+  if (!idle_stop_kill_sent_) {
+    idle_stop_kill_sent_ = true;
+    process_.kill();
+    idle_stop_kill_timer_.start(options_.kill_timeout);
+    return;
+  }
+  idle_stop_pending_   = false;
+  idle_stop_kill_sent_ = false;
+  SetStatus(AiSidecarRuntimeState::kFailed, AiSidecarRuntimeIssue::kStopTimedOut,
+            "Semantic runtime did not exit after kill request");
+}
+
+void AiSidecarRuntimeService::FinishIdleStop() {
+  idle_stop_kill_timer_.stop();
+  idle_stop_pending_        = false;
+  idle_stop_kill_sent_      = false;
+  provider_configs_changed_ = false;
+  AppendStdout(process_.readAllStandardOutput());
+  AppendStderr(process_.readAllStandardError());
+  ReleaseChildTreeCleanup();
+  client_.reset();
+  status_.process_id = 0;
+  SetStatus(AiSidecarRuntimeState::kStopped, AiSidecarRuntimeIssue::kNone,
+            "Semantic runtime is stopped");
+}
+
+auto AiSidecarRuntimeService::CompleteIdleStopBeforeStart() -> bool {
+  idle_stop_kill_timer_.stop();
+  if (process_.state() != QProcess::NotRunning) {
+    process_.kill();
+    process_.waitForFinished(static_cast<int>(options_.kill_timeout.count()));
+  }
+  if (process_.state() != QProcess::NotRunning) {
+    idle_stop_pending_   = false;
+    idle_stop_kill_sent_ = false;
+    SetStatus(AiSidecarRuntimeState::kFailed, AiSidecarRuntimeIssue::kStopTimedOut,
+              "Semantic runtime did not exit after kill request");
+    return false;
+  }
+  // waitForFinished emits finished(), whose handler may already have finished the stop.
+  if (idle_stop_pending_) {
+    FinishIdleStop();
+  }
+  return true;
+}
+
+auto AiSidecarRuntimeService::ModelIdentityDiffers(const AiSidecarRuntimeOptions& requested) const
+    -> bool {
+  return requested.model_id != options_.model_id || requested.revision != options_.revision ||
+         ComparablePath(requested.model_root) != ComparablePath(options_.model_root);
 }
 
 auto AiSidecarRuntimeService::Status() -> AiSidecarRuntimeStatusSnapshot {
@@ -556,6 +723,10 @@ void AiSidecarRuntimeService::RefreshProcessExit() {
   if (process_.state() != QProcess::NotRunning) {
     return;
   }
+  if (idle_stop_pending_) {
+    FinishIdleStop();
+    return;
+  }
   if (status_.state != AiSidecarRuntimeState::kReady &&
       status_.state != AiSidecarRuntimeState::kStarting &&
       status_.state != AiSidecarRuntimeState::kStopping) {
@@ -591,6 +762,17 @@ auto AiSidecarRuntimeService::BuildArguments() const -> QStringList {
     args << "--hf-endpoint" << QString::fromStdString(options_.hf_endpoint);
   }
   args << "--device" << QString::fromStdString(options_.device);
+  args << "--text-device" << QString::fromStdString(options_.text_device);
+  if (!options_.vision_device.empty()) {
+    args << "--vision-device" << QString::fromStdString(options_.vision_device);
+  }
+  // The idle stop delay is in milliseconds; a negative delay keeps the text encoder loaded.
+  const auto text_idle_unload = options_.text_idle_unload.value_or(
+      idle_stop_delay_.count() < 0
+          ? std::chrono::seconds(-1)
+          : std::chrono::duration_cast<std::chrono::seconds>(idle_stop_delay_));
+  args << "--text-idle-unload-seconds" << QString::number(text_idle_unload.count());
+  args << "--vision-idle-unload-seconds" << QString::number(options_.vision_idle_unload.count());
   args << (options_.allow_download ? "--allow-download" : "--no-download");
   args << "--batch-cap" << QString::number(options_.batch_cap);
   args << "--batch-wait-ms" << QString::number(options_.batch_wait_ms);

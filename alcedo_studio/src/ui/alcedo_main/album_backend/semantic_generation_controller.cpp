@@ -23,6 +23,7 @@
 
 #include "app/album_browse_service.hpp"
 #include "app/model_asset_catalog.hpp"
+#include "app/project_service.hpp"
 #include "storage/store/semantic/semantic_label_config.hpp"
 #include "ui/alcedo_main/album_backend/semantic_generation_controller.hpp"
 #include "ui/alcedo_main/album_backend/project_module.hpp"
@@ -236,6 +237,25 @@ QString SemanticGenerationController::ImportPreference() const {
 void SemanticGenerationController::SetImportPreference(const QString& preference) {
   QSettings{}.setValue(QLatin1String(kSemanticGenerationImportPreferenceKey),
                        NormalizedSemanticPreference(preference));
+  emit StateChanged();
+}
+
+int SemanticGenerationController::SidecarIdleStopSeconds() const {
+  bool      ok    = false;
+  const int value = QSettings{}
+                        .value(QLatin1String(ProjectService::kAiSidecarIdleStopSecondsKey),
+                               ProjectService::kDefaultAiSidecarIdleStopSeconds)
+                        .toInt(&ok);
+  return ProjectService::NormalizedAiSidecarIdleStopSeconds(
+      ok ? value : ProjectService::kDefaultAiSidecarIdleStopSeconds);
+}
+
+void SemanticGenerationController::SetSidecarIdleStopSeconds(int seconds) {
+  const int normalized = ProjectService::NormalizedAiSidecarIdleStopSeconds(seconds);
+  QSettings{}.setValue(QLatin1String(ProjectService::kAiSidecarIdleStopSecondsKey), normalized);
+  if (auto project = project_->handler().project()) {
+    project->SetAiSidecarIdleStopSeconds(normalized);
+  }
   emit StateChanged();
 }
 

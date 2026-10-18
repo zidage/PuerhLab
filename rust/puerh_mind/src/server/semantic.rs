@@ -12,9 +12,9 @@ use crate::proto::semantic::{
     EmbedImageBatchRequest, EmbedImageBatchRequestV2, EmbedImageRequest, EmbedImageRequestV2,
     EmbedTextBatchRequest, EmbedTextBatchRequestV2, EmbedTextRequest, EmbedTextRequestV2,
     EmbeddingBatchItem, EmbeddingBatchItemV2, EmbeddingBatchResponse, EmbeddingBatchResponseV2,
-    EmbeddingResponse, EmbeddingResponseV2, GetModelInfoRequest, GetModelInfoResponse,
-    GetRuntimeStatusRequest, GetRuntimeStatusResponse, PingRequest, PingResponse,
-    semantic_service_server::SemanticService,
+    EmbeddingResponse, EmbeddingResponseV2, EncoderResidencyStatus, GetModelInfoRequest,
+    GetModelInfoResponse, GetRuntimeStatusRequest, GetRuntimeStatusResponse, PingRequest,
+    PingResponse, semantic_service_server::SemanticService,
 };
 use crate::service::embedding::EmbeddingEngine;
 
@@ -621,6 +621,17 @@ impl SemanticService for SemanticServiceImpl {
             image_batch_cap: self.image_batch_cap as u32,
             image_batch_wait_ms: self.image_batch_wait.as_millis() as u32,
             uptime_ms: self.started_at.elapsed().as_millis() as u64,
+            encoders: self
+                .engine
+                .encoder_status()
+                .into_iter()
+                .map(|status| EncoderResidencyStatus {
+                    encoder: status.encoder,
+                    loaded: status.loaded,
+                    device: status.device,
+                    idle_ms: status.idle_ms,
+                })
+                .collect(),
         }))
     }
 

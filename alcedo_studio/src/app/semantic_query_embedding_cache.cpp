@@ -29,6 +29,12 @@ auto SemanticQueryEmbeddingCache::GetOrEmbed(const std::string& model_key, const
   return embedding;
 }
 
+auto SemanticQueryEmbeddingCache::Contains(const std::string& model_key,
+                                           const std::string& text) const -> bool {
+  std::lock_guard lock(mutex_);
+  return index_.contains(Key{model_key, text});
+}
+
 auto SemanticQueryEmbeddingCache::Size() const -> size_t {
   std::lock_guard lock(mutex_);
   return entries_.size();

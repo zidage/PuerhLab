@@ -213,14 +213,12 @@ class AlbumImageAnalysisEnvironment final : public IImageAnalysisEnvironment {
   }
 
   auto EnsureSidecarReady(bool provider_configs_dirty, std::string* error) -> bool override {
-    (void)provider_configs_dirty;
-    return EnsureSidecarReadyImpl(false, error);
+    return EnsureSidecarReadyImpl(false, provider_configs_dirty, error);
   }
 
   auto EnsureSidecarReadyInteractive(bool provider_configs_dirty, std::string* error)
       -> bool override {
-    (void)provider_configs_dirty;
-    return EnsureSidecarReadyImpl(true, error);
+    return EnsureSidecarReadyImpl(true, provider_configs_dirty, error);
   }
 
   void RequestSidecarStartCancel() override {
@@ -238,7 +236,8 @@ class AlbumImageAnalysisEnvironment final : public IImageAnalysisEnvironment {
   }
 
  private:
-  auto EnsureSidecarReadyImpl(bool interactive, std::string* error) -> bool {
+  auto EnsureSidecarReadyImpl(bool interactive, bool provider_configs_dirty, std::string* error)
+      -> bool {
     if (!project_) {
       if (error) {
         *error = "no project is open";
@@ -259,7 +258,11 @@ class AlbumImageAnalysisEnvironment final : public IImageAnalysisEnvironment {
       }
       return false;
     }
-    if (runtime->Status().state == AiSidecarRuntimeState::kReady) {
+    // The process can stay running after its last use (idle stop delay). A process that read
+    // older provider configs restarts at the start below.
+    if (provider_configs_dirty) {
+      runtime->MarkProviderConfigsChanged();
+    } else if (runtime->Status().state == AiSidecarRuntimeState::kReady) {
       return true;
     }
     AiSidecarRuntimeOptions options =

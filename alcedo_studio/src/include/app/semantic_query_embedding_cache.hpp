@@ -46,6 +46,9 @@ class SemanticQueryEmbeddingCache {
   [[nodiscard]] auto GetOrEmbed(const std::string& model_key, const std::string& text,
                                 const Encoder& encode) -> std::vector<float>;
 
+  /// True when (@p model_key, @p text) is cached. Does not change the use order.
+  [[nodiscard]] auto Contains(const std::string& model_key, const std::string& text) const -> bool;
+
   /// Number of stored entries.
   [[nodiscard]] auto Size() const -> size_t;
 

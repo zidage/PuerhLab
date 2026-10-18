@@ -84,6 +84,13 @@ auto ToRuntimeStatus(const semantic::GetRuntimeStatusResponse& response)
   status.image_batch_cap     = response.image_batch_cap();
   status.image_batch_wait_ms = response.image_batch_wait_ms();
   status.uptime_ms           = response.uptime_ms();
+  status.encoders.reserve(static_cast<size_t>(response.encoders_size()));
+  for (const auto& encoder : response.encoders()) {
+    status.encoders.push_back(AiSidecarEncoderResidency{.encoder = encoder.encoder(),
+                                                        .loaded  = encoder.loaded(),
+                                                        .device  = encoder.device(),
+                                                        .idle_ms = encoder.idle_ms()});
+  }
   return status;
 }
 

@@ -50,6 +50,16 @@ class ProjectService {
     return package_service_;
   }
   auto GetAiSidecarRuntimeService() const -> std::shared_ptr<AiSidecarRuntimeService>;
+
+  /// QSettings key of "Keep AI model loaded": seconds the AI sidecar keeps running after its
+  /// last use. 0 stops it at once, -1 keeps it until the project closes.
+  static constexpr const char* kAiSidecarIdleStopSecondsKey     = "ai/sidecarIdleStopSeconds";
+  static constexpr int         kDefaultAiSidecarIdleStopSeconds = 300;
+  /// @p seconds when it is one of the setting values (0, 60, 300, 900, -1), else the default.
+  [[nodiscard]] static auto    NormalizedAiSidecarIdleStopSeconds(int seconds) -> int;
+  /// Applies the "Keep AI model loaded" value @p seconds (normalized as above) to the runtime
+  /// service of this project, at once. Call on the UI thread. Does not write the setting.
+  void                         SetAiSidecarIdleStopSeconds(int seconds);
   /// Stop and release the AI sidecar runtime of this project. The runtime stops on its owner
   /// (UI) thread, so a caller that destroys the project on another thread calls this on the UI
   /// thread first; the destructor then has no UI-thread work left.
