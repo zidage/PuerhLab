@@ -24,6 +24,7 @@
 #include "edit/history/pipeline_history_format.hpp"
 #include "edit/history/version_ref.hpp"
 #include "edit/operators/models/builtin_type_ids.hpp"
+#include "edit/operators/models/color_wheel_model.hpp"
 #include "edit/operators/models/lmt_model.hpp"
 #include "edit/operators/models/scalar_operator_model.hpp"
 #include "grade_owned_mask_support.hpp"
@@ -43,6 +44,23 @@ auto LoadExpectedBytes(const std::string& name) -> std::string {
     text.pop_back();
   }
   return text;
+}
+
+/// Loads the neutral color wheel JSON of persisted format version 1 (ACEScc CDL, before the tone
+/// wheels) into the default Color Grade of @p document, as documents written before the tone
+/// wheels hold it. The Model writes this JSON back unchanged until a wheel changes.
+void LoadVersionOneNeutralColorWheels(PipelineDocument& document) {
+  auto* wheels = dynamic_cast<ColorWheelModel*>(
+      document.PrimaryGrade()->FindAdjustmentByType(type_ids::ColorWheel()));
+  ASSERT_NE(wheels, nullptr);
+  const auto neutral = [](double base) {
+    return nlohmann::json{{"color_offset", {{"x", base}, {"y", base}, {"z", base}}},
+                          {"disc", {{"x", 0.0}, {"y", 0.0}}},
+                          {"luminance_offset", 0.0},
+                          {"strength", 1.0}};
+  };
+  wheels->LoadJson({{"gain", neutral(1.0)}, {"gamma", neutral(1.0)}, {"lift", neutral(0.0)}});
+  EXPECT_TRUE(wheels->IsDefault());
 }
 
 auto MultiGradeDocument() -> PipelineDocument {
@@ -118,9 +136,10 @@ TEST(PipelineDocumentCheckpointFormat,
   // raw_root_before_raster_input.json and raw_checkpoint_before_raster_input.json were written by
   // the document code of main (abdb000c8) before raster input existed: the default document with
   // a bound camera profile, element 42. The same RAW document must encode to the same bytes, keep
-  // its root id, and never gain the Develop "input" key.
+  // its root id, and never gain the Develop "input" key. Its color wheels are version 1 JSON.
   auto document = CreateDefaultPipelineDocument();
   gpu_dag_test::EnsureTestCameraProfile(document);
+  LoadVersionOneNeutralColorWheels(document);
   const auto raw_json   = nlohmann::json{{"CameraModel", "RootStateCamera"}};
   const auto root_bytes = LoadExpectedBytes("raw_root_before_raster_input.json");
   EXPECT_EQ(EncodePipelineRootState(42, document, raw_json).dump(), root_bytes);
@@ -157,9 +176,11 @@ TEST(PipelineDocumentCheckpointFormat,
   // the document code of 8f8e71220, before LMT input and output encodings existed: the default
   // document with a bound camera profile, element 42, and a library LUT at strength 0.35. The
   // same document must encode to the same bytes, keep its root id, read both encodings as
-  // ACEScc, and never gain the encoding keys (lut_color_encoding_plan.md, section 6.1).
+  // ACEScc, and never gain the encoding keys (lut_color_encoding_plan.md, section 6.1). Its color
+  // wheels are version 1 JSON.
   auto document = CreateDefaultPipelineDocument();
   gpu_dag_test::EnsureTestCameraProfile(document);
+  LoadVersionOneNeutralColorWheels(document);
   auto* lmt =
       dynamic_cast<LmtModel*>(document.PrimaryGrade()->FindAdjustmentByType(type_ids::Lmt()));
   ASSERT_NE(lmt, nullptr);

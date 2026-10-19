@@ -3016,6 +3016,11 @@ Original source files on disk will be kept.</source>
         <translation>主控</translation>
     </message>
     <message>
+        <location line="+3"/>
+        <source>Changes the brightness of this tonal range, in stops (EV).</source>
+        <translation>调整该影调区域的亮度，单位为档（EV）。</translation>
+    </message>
+    <message>
         <location line="+137"/>
         <source>Look</source>
         <translation>外观</translation>
@@ -3062,18 +3067,43 @@ Original source files on disk will be kept.</source>
     </message>
     <message>
         <location line="+14"/>
-        <source>Gamma</source>
-        <translation>Gamma</translation>
+        <source>Shadows (Lift)</source>
+        <translation>暗部 (Lift)</translation>
     </message>
     <message>
-        <location line="+12"/>
-        <source>Lift</source>
-        <translation>Lift</translation>
+        <location line="+1"/>
+        <source>Changes mostly the color and brightness of the shadows. The effect is largest near black, and the highlights stay almost the same.</source>
+        <translation>主要调整暗部的颜色和亮度。越接近黑色影响越大，高光基本不变。</translation>
     </message>
     <message>
-        <location line="+8"/>
-        <source>Gain</source>
-        <translation>Gain</translation>
+        <location line="+1"/>
+        <source>Midtones (Gamma)</source>
+        <translation>中间调 (Gamma)</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Changes mostly the midtones. The effect is largest near middle grey, and the darkest and brightest areas stay almost the same.</source>
+        <translation>主要调整中间调。影响集中在中灰附近，最暗和最亮的部分基本不变。</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Highlights (Gain)</source>
+        <translation>高光 (Gain)</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Changes mostly the color and brightness of the highlights. The effect is largest near white, and the shadows stay almost the same.</source>
+        <translation>主要调整亮部的颜色和亮度。越接近白色影响越大，暗部基本不变。</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Offset</source>
+        <translation>整体 (Offset)</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Changes the color and brightness of all tones by the same amount, as an exposure change per color channel.</source>
+        <translation>对所有影调做相同的颜色和亮度偏移，类似逐通道调整曝光。</translation>
     </message>
     <message>
         <location line="+12"/>

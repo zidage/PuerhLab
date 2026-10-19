@@ -2770,6 +2770,11 @@ Original source files on disk will be kept.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <location line="+3"/>
+        <source>Changes the brightness of this tonal range, in stops (EV).</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <location line="+137"/>
         <source>Look</source>
         <translation type="unfinished"></translation>
@@ -2816,17 +2821,42 @@ Original source files on disk will be kept.</source>
     </message>
     <message>
         <location line="+14"/>
-        <source>Gamma</source>
+        <source>Shadows (Lift)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+12"/>
-        <source>Lift</source>
+        <location line="+1"/>
+        <source>Changes mostly the color and brightness of the shadows. The effect is largest near black, and the highlights stay almost the same.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+8"/>
-        <source>Gain</source>
+        <location line="+1"/>
+        <source>Midtones (Gamma)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Changes mostly the midtones. The effect is largest near middle grey, and the darkest and brightest areas stay almost the same.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Highlights (Gain)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Changes mostly the color and brightness of the highlights. The effect is largest near white, and the shadows stay almost the same.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Offset</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Changes the color and brightness of all tones by the same amount, as an exposure change per color channel.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>

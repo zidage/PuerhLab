@@ -106,6 +106,23 @@ static inline float ApplyCurve(float value, device const GradeAdjustmentParams& 
   return ExtrapolateCurve(value, p, p.count - 2, p.count - 1);
 }
 
+// Tone color wheels (edit/operators/models/color_wheel_tone.hpp). values[0..2]: Offset as an ACEScc
+// increment; [3..5]: Lift K / R; [6..8]: Gamma exponent; [9..11]: Gain K / R; [12]: ACEScc at
+// t = 0; [13]: ACEScc width of the tone range.
+static inline float ApplyToneWheel(float c, device const GradeAdjustmentParams& p, int ch) {
+  // Neutral Lift, Gamma, and Gain leave the value exact (only the Offset applies).
+  if (p.values[3 + ch] == 0.0f && p.values[6 + ch] == 1.0f && p.values[9 + ch] == 0.0f) {
+    return c + p.values[ch];
+  }
+  const float black = p.values[12];
+  const float range = p.values[13];
+  float       t     = (c + p.values[ch] - black) / range;
+  t += p.values[3 + ch] * clamp(1.0f - t, 0.0f, 1.0f);
+  if (t > 0.0f && t < 1.0f) t = pow(t, p.values[6 + ch]);
+  t += p.values[9 + ch] * max(t, 0.0f);
+  return black + t * range;
+}
+
 static inline float3 ApplyHls(float3 c, device const GradeAdjustmentParams& p) {
   const float maximum = max(c.x, max(c.y, c.z));
   const float minimum = min(c.x, min(c.y, c.z));
@@ -240,15 +257,9 @@ static inline float3 ApplyAdjustment(float3 c, device const GradeAdjustmentParam
     }
     c             = l + (c - l) * scale;
   } else if (behavior == 11u) {
-    const float gamma_x = max(p.values[4] + p.values[7], 1.0e-4f);
-    const float gamma_y = max(p.values[5] + p.values[7], 1.0e-4f);
-    const float gamma_z = max(p.values[6] + p.values[7], 1.0e-4f);
-    const float gain_x  = p.values[8] + p.values[11];
-    const float gain_y  = p.values[9] + p.values[11];
-    const float gain_z  = p.values[10] + p.values[11];
-    c.x = copysign(pow(fabs(c.x + p.values[0] + p.values[3]), gamma_x), c.x) * gain_x;
-    c.y = copysign(pow(fabs(c.y + p.values[1] + p.values[3]), gamma_y), c.y) * gain_y;
-    c.z = copysign(pow(fabs(c.z + p.values[2] + p.values[3]), gamma_z), c.z) * gain_z;
+    c.x = ApplyToneWheel(c.x, p, 0);
+    c.y = ApplyToneWheel(c.y, p, 1);
+    c.z = ApplyToneWheel(c.z, p, 2);
   } else if (behavior == 14u) {
     const float l     = Luma(c);
     const float scale = 1.0f + value * 0.0025f;

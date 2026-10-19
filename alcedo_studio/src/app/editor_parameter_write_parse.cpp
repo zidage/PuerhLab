@@ -352,8 +352,22 @@ auto ParseColorWheelControl(const nlohmann::json& value, std::string_view contex
 
 auto ParseColorWheelUpdate(const nlohmann::json& params) -> ColorWheelUpdate {
   const auto& object = UnwrapObject(params, {"color_wheel"}, "color_wheel");
-  RejectUnknownKeys(object, {"lift", "gamma", "gain"}, "color_wheel");
+  RejectUnknownKeys(object, {"version", "lift", "gamma", "gain", "offset"}, "color_wheel");
   ColorWheelUpdate update;
+  // JSON without a version is persisted format version 1: the complete ACEScc CDL JSON that an
+  // older project stores (its root, its history values, and Model JSON read before an edit). The
+  // Model converts it. Version 2 is a patch of the tone wheels.
+  const auto       version = object.contains("version") ? object.at("version") : nlohmann::json(1);
+  if (version == 1) {
+    RejectUnknownKeys(object, {"version", "lift", "gamma", "gain"}, "color_wheel");
+    nlohmann::json values = object;
+    values.erase("version");
+    update.version_one_json = std::move(values);
+    return update;
+  }
+  if (version != 2) {
+    throw std::invalid_argument("color_wheel.version must be 1 or 2");
+  }
   if (object.contains("lift")) {
     update.lift = ParseColorWheelControl(object.at("lift"), "color_wheel.lift");
   }
@@ -362,6 +376,9 @@ auto ParseColorWheelUpdate(const nlohmann::json& params) -> ColorWheelUpdate {
   }
   if (object.contains("gain")) {
     update.gain = ParseColorWheelControl(object.at("gain"), "color_wheel.gain");
+  }
+  if (object.contains("offset")) {
+    update.offset = ParseColorWheelControl(object.at("offset"), "color_wheel.offset");
   }
   return update;
 }

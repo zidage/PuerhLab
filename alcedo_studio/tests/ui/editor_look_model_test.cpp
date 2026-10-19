@@ -355,7 +355,8 @@ TEST(EditorLookModelTest, CdlDefaultParamsMatchOperatorShape) {
   const auto root = ParseObject(model.paramsJson());
   ASSERT_TRUE(root.contains(QStringLiteral("color_wheel")));
   const auto cw = root.value(QStringLiteral("color_wheel")).toObject();
-  for (const char* key : {"lift", "gamma", "gain"}) {
+  EXPECT_EQ(cw.value(QStringLiteral("version")).toInt(), 2);
+  for (const char* key : {"lift", "gamma", "gain", "offset"}) {
     ASSERT_TRUE(cw.contains(QString::fromUtf8(key))) << key;
     const auto wheel = cw.value(QString::fromUtf8(key)).toObject();
     EXPECT_TRUE(wheel.contains(QStringLiteral("disc")));
@@ -386,21 +387,40 @@ TEST(EditorLookModelTest, CdlDiscDragInteractiveThenOneSettled) {
   ASSERT_TRUE(update->lift.has_value());
   ASSERT_TRUE(update->lift->disc.has_value());
   EXPECT_NEAR(update->lift->disc->x, 0.4, 1e-3);
+  // A drag writes only its own wheel.
+  EXPECT_FALSE(update->gamma.has_value());
+  EXPECT_FALSE(update->gain.has_value());
+  EXPECT_FALSE(update->offset.has_value());
 }
 
-TEST(EditorLookModelTest, CdlGammaMasterUiIsInverted) {
+TEST(EditorLookModelTest, CdlMasterDragStoresStopsWithoutSignChange) {
   RecordingSubmitter      sub;
   EditorCdlTrackballModel model;
   model.setSubmitter(&sub);
 
   model.beginMasterDrag(QStringLiteral("gamma"));
-  // Positive UI drag should store negative gamma master (legacy invert).
-  model.updateMasterDragUi(QStringLiteral("gamma"), 400);
+  model.updateMasterDrag(QStringLiteral("gamma"), 0.5);
   model.finishMasterDrag();
 
-  EXPECT_LT(model.gammaMaster(), 0.0);
-  EXPECT_EQ(model.gammaMasterUi(), 400);
+  EXPECT_DOUBLE_EQ(model.gammaMaster(), 0.5);
   EXPECT_EQ(sub.settledCount(), 1);
+  const auto* update = std::get_if<alcedo::ColorWheelUpdate>(sub.lastSettledWrite());
+  ASSERT_NE(update, nullptr);
+  ASSERT_TRUE(update->gamma.has_value());
+  ASSERT_TRUE(update->gamma->luminance_offset.has_value());
+  EXPECT_FLOAT_EQ(*update->gamma->luminance_offset, 0.5f);
+}
+
+TEST(EditorLookModelTest, CdlMasterDragClampsToTheMasterRange) {
+  RecordingSubmitter      sub;
+  EditorCdlTrackballModel model;
+  model.setSubmitter(&sub);
+
+  model.beginMasterDrag(QStringLiteral("offset"));
+  model.updateMasterDrag(QStringLiteral("offset"), -5.0);
+  model.finishMasterDrag();
+
+  EXPECT_DOUBLE_EQ(model.offsetMaster(), -2.0);
 }
 
 TEST(EditorLookModelTest, CdlResetWheelSettlesOnce) {

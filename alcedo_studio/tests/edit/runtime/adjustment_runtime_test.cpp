@@ -246,24 +246,28 @@ TEST(GpuDagAdjustmentRuntime, PackedGradeParamsMatchOwnerFieldsWithoutFullDtoCop
 
   ColorWheelModel         wheel;
   ColorWheelUpdate        wheel_update;
+  ColorWheelControlUpdate offset_update;
+  offset_update.color_offset     = Vec3f{0.5f, -0.25f, -0.25f};
+  offset_update.luminance_offset = 1.0f;
   ColorWheelControlUpdate lift_update;
-  lift_update.color_offset     = Vec3f{0.1f, 0.2f, 0.3f};
-  lift_update.luminance_offset = 0.05f;
+  lift_update.luminance_offset = 1.2f;
   ColorWheelControlUpdate gain_update;
-  gain_update.color_offset     = Vec3f{1.1f, 0.9f, 0.8f};
-  gain_update.luminance_offset = -0.2f;
+  gain_update.luminance_offset = -0.6f;
+  wheel_update.offset          = offset_update;
   wheel_update.lift            = lift_update;
   wheel_update.gain            = gain_update;
   wheel.ApplyUpdate(wheel_update);
   const auto packed_wheel = MakeGradeRuntimeParams(wheel, AdjustmentBehavior::ColorWheel);
-  EXPECT_FLOAT_EQ(packed_wheel.values[0], 0.1f);
-  EXPECT_FLOAT_EQ(packed_wheel.values[1], 0.2f);
-  EXPECT_FLOAT_EQ(packed_wheel.values[2], 0.3f);
-  EXPECT_FLOAT_EQ(packed_wheel.values[3], 0.05f);
-  EXPECT_FLOAT_EQ(packed_wheel.values[8], 1.1f);
-  EXPECT_FLOAT_EQ(packed_wheel.values[9], 0.9f);
-  EXPECT_FLOAT_EQ(packed_wheel.values[10], 0.8f);
-  EXPECT_FLOAT_EQ(packed_wheel.values[11], -0.2f);
+  // Offset: ACEScc increment of (disc + Master) stops.
+  EXPECT_FLOAT_EQ(packed_wheel.values[0], 1.5f / 17.52f);
+  EXPECT_FLOAT_EQ(packed_wheel.values[1], 0.75f / 17.52f);
+  EXPECT_FLOAT_EQ(packed_wheel.values[2], 0.75f / 17.52f);
+  // Lift and Gain: stops / tone range (12 stops). Neutral Gamma: exponent 1.
+  EXPECT_FLOAT_EQ(packed_wheel.values[3], 0.1f);
+  EXPECT_FLOAT_EQ(packed_wheel.values[6], 1.0f);
+  EXPECT_FLOAT_EQ(packed_wheel.values[9], -0.05f);
+  EXPECT_FLOAT_EQ(packed_wheel.values[12], 0.41358840f - 6.0f / 17.52f);
+  EXPECT_FLOAT_EQ(packed_wheel.values[13], 12.0f / 17.52f);
 
   SharpenModel sharpen;
   sharpen.SetAmount(40.0f);

@@ -17,10 +17,10 @@
 #include "edit/geometry/types.hpp"
 #include "edit/graph/develop_raster_input.hpp"
 #include "edit/operators/models/cat02_white_balance_model.hpp"
+#include "edit/operators/models/color_wheel_tone.hpp"
 #include "edit/operators/models/curve_model.hpp"
 #include "edit/operators/models/hls_model.hpp"
 #include "ui/alcedo_main/editor_support/modules/color_temp.hpp"
-#include "ui/alcedo_main/editor_support/modules/color_wheel_math.hpp"
 #include "ui/alcedo_main/editor_support/modules/geometry.hpp"
 #include "ui/alcedo_main/editor_support/modules/hls_math.hpp"
 
@@ -984,35 +984,30 @@ auto HlsValidate(const json& ui_value, std::string* error) -> bool {
 }
 
 // ---------------------------------------------------------------------------------------------
-// color_wheel: lift, gamma, and gain wheels. The UI value is the disc position of each wheel in
-// the unit disc and its Master slider value.
+// color_wheel: the Lift, Gamma, Gain, and Offset tone wheels. The UI value is the disc position of
+// each wheel in the unit disc and its Master value in stops.
 
-constexpr std::array<const char*, 3> kWheelNames = {"lift", "gamma", "gain"};
+constexpr std::array<const char*, 4> kWheelNames = {"lift", "gamma", "gain", "offset"};
 
-constexpr auto WheelProperties() -> std::array<EditorParameterProperty, 9> {
-  std::array<EditorParameterProperty, 9> result{};
-  constexpr std::array<std::array<std::string_view, 3>, 3> kNames = {{
+constexpr auto WheelProperties() -> std::array<EditorParameterProperty, 12> {
+  std::array<EditorParameterProperty, 12> result{};
+  constexpr std::array<std::array<std::string_view, 3>, 4> kNames = {{
       {"lift_x", "lift_y", "lift_master"},
       {"gamma_x", "gamma_y", "gamma_master"},
       {"gain_x", "gain_y", "gain_master"},
+      {"offset_x", "offset_y", "offset_master"},
   }};
+  constexpr double kMasterMax = static_cast<double>(color_wheel::kMasterMaxStops);
   for (std::size_t wheel = 0; wheel < kNames.size(); ++wheel) {
     result[wheel * 3]     = {kNames[wheel][0], PropertyType::Number, {}, -1.0, 1.0, 0.001, 3};
     result[wheel * 3 + 1] = {kNames[wheel][1], PropertyType::Number, {}, -1.0, 1.0, 0.001, 3};
-    result[wheel * 3 + 2] = {kNames[wheel][2], PropertyType::Number, {},
-                             static_cast<double>(ui::color_wheel::kSliderUiMin),
-                             static_cast<double>(ui::color_wheel::kSliderUiMax), 1.0, 0};
+    result[wheel * 3 + 2] = {
+        kNames[wheel][2], PropertyType::Number, {}, -kMasterMax, kMasterMax, 0.01, 2};
   }
   return result;
 }
 
 constexpr auto kColorWheelProperties = WheelProperties();
-
-/// Gamma inverts its disc delta and its Master: a positive Master brightens every wheel.
-auto WheelSign(std::string_view wheel) -> double { return wheel == "gamma" ? -1.0 : 1.0; }
-
-/// Neutral color offset: 0 for lift, 1 for gamma and gain.
-auto WheelBase(std::string_view wheel) -> double { return wheel == "lift" ? 0.0 : 1.0; }
 
 auto ColorWheelUiDefault() -> json {
   json ui = json::object();
@@ -1048,41 +1043,37 @@ auto ColorWheelModelToUi(const json& model_json, std::string* error) -> std::opt
     if (!RequireObject(*disc, "color_wheel." + name + ".disc", error)) {
       return std::nullopt;
     }
-    double x = 0.0, y = 0.0, offset = 0.0;
+    double x = 0.0, y = 0.0, master = 0.0;
     if (!ReadNumber(*disc, "x", 0.0, "color_wheel", &x, error) ||
         !ReadNumber(*disc, "y", 0.0, "color_wheel", &y, error) ||
-        !ReadNumber(*control, "luminance_offset", 0.0, "color_wheel", &offset, error)) {
+        !ReadNumber(*control, "luminance_offset", 0.0, "color_wheel", &master, error)) {
       return std::nullopt;
     }
     ui[name + "_x"]      = x;
     ui[name + "_y"]      = y;
-    ui[name + "_master"] =
-        WheelSign(name) * offset * static_cast<double>(ui::color_wheel::kSliderToParam);
+    ui[name + "_master"] = master;
   }
   return ui;
 }
 
 auto ColorWheelUiToModel(const json& ui_value) -> json {
-  // The CDL trackball write: the disc, the panel strength, the color offset of the disc, and the
-  // Master as the luminance offset.
-  json wheels = json::object();
+  // The trackball write: the persisted format version, and the disc, the panel strength, the
+  // per-channel disc stops, and the Master stops of each wheel.
+  json wheels       = json::object();
+  wheels["version"] = 2;
   for (const char* wheel : kWheelNames) {
     const std::string name{wheel};
     const double      x     = ui_value.at(name + "_x").get<double>();
     const double      y     = ui_value.at(name + "_y").get<double>();
-    const double      sign  = WheelSign(name);
-    const double      base  = WheelBase(name);
-    const auto        delta = ui::color_wheel::DiscToCdlDelta(
-        static_cast<float>(x), static_cast<float>(y), ui::color_wheel::kStrengthDefault);
-    wheels[name] = {
-        {"disc", {{"x", x}, {"y", y}}},
-        {"strength", static_cast<double>(ui::color_wheel::kStrengthDefault)},
-        {"color_offset",
-         {{"x", static_cast<double>(static_cast<float>(base + sign * delta[0]))},
-          {"y", static_cast<double>(static_cast<float>(base + sign * delta[1]))},
-          {"z", static_cast<double>(static_cast<float>(base + sign * delta[2]))}}},
-        {"luminance_offset", sign * ui_value.at(name + "_master").get<double>() /
-                                 static_cast<double>(ui::color_wheel::kSliderToParam)}};
+    const auto stops = color_wheel::DiscToChannelStops(static_cast<float>(x), static_cast<float>(y),
+                                                       color_wheel::kDiscMaxStops);
+    wheels[name]     = {{"disc", {{"x", x}, {"y", y}}},
+                        {"strength", static_cast<double>(color_wheel::kDiscMaxStops)},
+                        {"color_offset",
+                         {{"x", static_cast<double>(stops[0])},
+                          {"y", static_cast<double>(stops[1])},
+                          {"z", static_cast<double>(stops[2])}}},
+                        {"luminance_offset", ui_value.at(name + "_master").get<double>()}};
   }
   return {{"color_wheel", std::move(wheels)}};
 }
@@ -1092,7 +1083,7 @@ auto ColorWheelValidate(const json& ui_value, std::string* error) -> bool {
     const std::string name{wheel};
     const double      x = ui_value.at(name + "_x").get<double>();
     const double      y = ui_value.at(name + "_y").get<double>();
-    if (x * x + y * y > 1.0 + static_cast<double>(ui::color_wheel::kEpsilon)) {
+    if (x * x + y * y > 1.0 + static_cast<double>(color_wheel::kEpsilon)) {
       return SetError(error, "color_wheel." + name + "_x and " + name +
                                  "_y must be inside the unit disc (x * x + y * y <= 1)");
     }

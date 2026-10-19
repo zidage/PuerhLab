@@ -140,7 +140,7 @@ gtest_discover_tests(LensCalibDevelopResolveTest TEST_PREFIX "LensCalibDevelopRe
   PROPERTIES LABELS "ci_core_flow;edit;operators")
 alcedo_register_test_target(LensCalibDevelopResolveTest edit)
 
-# Pipeline frame sink: CPU frame delivery contract.
+# Pipeline frame sink: CPU frame delivery to the sink interface.
 add_executable(PipelineFrameSinkTest ${ALCEDO_TEST_ROOT}/edit/pipeline/pipeline_frame_sink_test.cpp)
 target_include_directories(PipelineFrameSinkTest PUBLIC ${ALCEDO_INCLUDE_DIR})
 target_link_libraries(PipelineFrameSinkTest PRIVATE GTest::gtest_main AcceleratorBackend
@@ -215,6 +215,7 @@ add_executable(GpuDagModelGraphTest
   ${ALCEDO_TEST_ROOT}/edit/graph/json_roundtrip_test.cpp
   ${ALCEDO_TEST_ROOT}/edit/graph/drt_diffusion_filter_model_test.cpp
   ${ALCEDO_TEST_ROOT}/edit/graph/lmt_model_test.cpp
+  ${ALCEDO_TEST_ROOT}/edit/graph/color_wheel_tone_test.cpp
   ${ALCEDO_TEST_ROOT}/edit/graph/color_grade_mask_model_test.cpp
   ${ALCEDO_TEST_ROOT}/edit/graph/header_hygiene_test.cpp
   ${ALCEDO_TEST_ROOT}/edit/graph/develop_color_transform_test.cpp

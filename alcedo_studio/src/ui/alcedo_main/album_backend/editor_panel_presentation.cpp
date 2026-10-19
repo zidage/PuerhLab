@@ -95,6 +95,7 @@ auto FieldMap(const alcedo::EditorPanelFieldPresentation& field) -> QVariantMap 
           wheels.insert(QStringLiteral("lift"), ControlMap(value.lift));
           wheels.insert(QStringLiteral("gamma"), ControlMap(value.gamma));
           wheels.insert(QStringLiteral("gain"), ControlMap(value.gain));
+          wheels.insert(QStringLiteral("offset"), ControlMap(value.offset));
           map.insert(QStringLiteral("color_wheel"), wheels);
         } else if constexpr (std::is_same_v<T, alcedo::EditorPanelColorTempValue>) {
           QVariantMap temp;

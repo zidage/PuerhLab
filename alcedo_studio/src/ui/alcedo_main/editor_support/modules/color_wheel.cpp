@@ -7,13 +7,14 @@
 namespace alcedo::ui::color_wheel {
 
 auto ClampDiscPoint(const QPointF& p) -> QPointF {
-  const auto clamped = ClampDiscPoint(static_cast<float>(p.x()), static_cast<float>(p.y()));
+  const auto clamped =
+      alcedo::color_wheel::ClampDiscPoint(static_cast<float>(p.x()), static_cast<float>(p.y()));
   return QPointF(clamped[0], clamped[1]);
 }
 
-auto DiscToCdlDelta(const QPointF& position, float strength) -> std::array<float, 3> {
-  return DiscToCdlDelta(static_cast<float>(position.x()), static_cast<float>(position.y()),
-                        strength);
+auto DiscToChannelStops(const QPointF& position, float strength) -> std::array<float, 3> {
+  return alcedo::color_wheel::DiscToChannelStops(static_cast<float>(position.x()),
+                                                 static_cast<float>(position.y()), strength);
 }
 
 }  // namespace alcedo::ui::color_wheel
