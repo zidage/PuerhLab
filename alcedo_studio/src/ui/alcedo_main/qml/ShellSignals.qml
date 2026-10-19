@@ -108,27 +108,10 @@ Item {
         }
     }
 
-    Connections {
-        target: appModules.stats
-        ignoreUnknownSignals: true
-        function onStatsFilterChanged() {
-            if (root.imageActionsController
-                    && root.imageActionsController.requestEditorLibraryListSync) {
-                root.imageActionsController.requestEditorLibraryListSync()
-            }
-        }
-    }
-
-    Connections {
-        target: appModules.search
-        ignoreUnknownSignals: true
-        function onSearchStateChanged() {
-            if (root.imageActionsController
-                    && root.imageActionsController.requestEditorLibraryListSync) {
-                root.imageActionsController.requestEditorLibraryListSync()
-            }
-        }
-    }
+    // Stats filter and search changes reach the editor through the accepted
+    // library result (ImageActionsController, LibraryModule.queryUpdating).
+    // StatsFilterChanged and SearchStateChanged start with an upper-case
+    // letter, so a QML handler for them does not run.
 
     Connections {
         target: appModules.importExport

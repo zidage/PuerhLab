@@ -761,6 +761,36 @@ alcedo_ui_gtest_discover_tests(EditorFilmstripQmlTest
 )
 alcedo_register_test_target(EditorFilmstripQmlTest ui)
 
+# Issue 442: the editor closes its open image when the accepted, filtered
+# Library list no longer contains it (ImageActionsController list sync).
+add_executable(EditorLibraryListSyncQmlTest
+    ${ALCEDO_TEST_ROOT}/ui/editor_library_list_sync_qml_test.cpp
+    ${ALCEDO_TEST_ROOT}/ui/widget_test_main.cpp
+)
+target_include_directories(EditorLibraryListSyncQmlTest
+    PUBLIC ${ALCEDO_INCLUDE_DIR}
+    PRIVATE ${ALCEDO_TEST_DIR}
+)
+target_link_libraries(EditorLibraryListSyncQmlTest
+    PRIVATE
+        AlbumBackendLib
+        GTest::gtest
+        Qt6::Core
+        Qt6::Test
+        Qt6::Qml
+        Qt6::Quick
+        Qt6::QuickControls2
+        Qt6::Widgets
+)
+target_compile_definitions(EditorLibraryListSyncQmlTest
+    PRIVATE ALCEDO_TEST_SRC_DIR="${ALCEDO_SRC_DIR}"
+)
+alcedo_ui_gtest_discover_tests(EditorLibraryListSyncQmlTest
+    TEST_PREFIX "EditorLibraryListSyncQmlTest."
+    PROPERTIES LABELS "workspace_qml;editor_filmstrip"
+)
+alcedo_register_test_target(EditorLibraryListSyncQmlTest ui)
+
 # Phase A2: RegisteredShortcut wrapper behavior (scope checks, editable-focus
 # suppression, live rebinding, auto-repeat) without booting the full shell.
 add_executable(RegisteredShortcutQmlTest

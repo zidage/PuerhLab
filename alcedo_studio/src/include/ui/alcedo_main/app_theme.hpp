@@ -60,7 +60,7 @@ class AppTheme final : public QObject {
   Q_PROPERTY(QVariantList availableThemes READ availableThemes CONSTANT)
 
   // ── Design tokens — structural (theme-invariant) ─────────────────────────
-  // Canonical visual-identity contract: see src/ui/alcedo_main/DESIGN.md.
+  // Canonical visual-identity specification: see src/ui/alcedo_main/DESIGN.md.
   // Literal getters (CONSTANT) for radii, icon geometry, spacing, motion
   // durations, and QML-facing typography sizes/weights. Only reduceMotion is
   // stateful (QSettings-backed "ui/reduceMotion"). cardSurfaceColor /
@@ -179,6 +179,10 @@ class AppTheme final : public QObject {
                  NOTIFY ThemeChanged)
   Q_PROPERTY(QColor editorListFavoriteActiveOnSelectedColor READ
                  editorListFavoriteActiveOnSelectedColor NOTIFY ThemeChanged)
+  // Editor filmstrip: the light gray well of a Library-selected tile that the editor does not
+  // show, and the dark caption under the file name and rating, below a thumbnail image.
+  Q_PROPERTY(QColor filmstripSelectedFillColor READ filmstripSelectedFillColor NOTIFY ThemeChanged)
+  Q_PROPERTY(QColor thumbnailCaptionBarColor READ thumbnailCaptionBarColor NOTIFY ThemeChanged)
   Q_PROPERTY(QColor scopeGridColor READ scopeGridColor NOTIFY ThemeChanged)
   Q_PROPERTY(QColor scopePlotBorderColor READ scopePlotBorderColor NOTIFY ThemeChanged)
   Q_PROPERTY(QColor scopeHistogramRedColor READ scopeHistogramRedColor NOTIFY ThemeChanged)
@@ -406,6 +410,8 @@ class AppTheme final : public QObject {
   auto editorListFavoriteActiveColor() const -> QColor;
   auto editorListFavoriteIdleOnSelectedColor() const -> QColor;
   auto editorListFavoriteActiveOnSelectedColor() const -> QColor;
+  auto filmstripSelectedFillColor() const -> QColor;
+  auto thumbnailCaptionBarColor() const -> QColor;
   auto scopeGridColor() const -> QColor;
   auto scopePlotBorderColor() const -> QColor;
   auto scopeHistogramRedColor() const -> QColor;

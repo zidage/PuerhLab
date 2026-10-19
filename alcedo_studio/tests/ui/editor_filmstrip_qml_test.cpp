@@ -23,6 +23,9 @@
 #include <filesystem>
 #include <vector>
 
+#include "ui/alcedo_main/album_backend/album_thumbnail_model.hpp"
+#include "ui/alcedo_main/album_backend/album_types.hpp"
+#include "ui/alcedo_main/album_backend/library_selection.hpp"
 #include "ui/alcedo_main/app_theme.hpp"
 #include "ui/alcedo_main/shortcut_registry.hpp"
 
@@ -36,122 +39,49 @@ struct FilmstripRow {
   int     rating = 0;
 };
 
-class FilmstripModel final : public QAbstractListModel {
-  Q_OBJECT
-  Q_PROPERTY(int count READ count NOTIFY countChanged)
-  Q_PROPERTY(int totalCount READ count NOTIFY countChanged)
-  Q_PROPERTY(bool hasMore READ hasMore CONSTANT)
-  Q_PROPERTY(bool loading READ loading NOTIFY loadingChanged)
-
- public:
-  enum Role {
-    ElementIdRole = Qt::UserRole + 1,
-    ImageIdRole,
-    FileNameRole,
-    RatingRole,
-    ThumbUrlRole,
-    ThumbLoadingRole,
-    ThumbMissingSourceRole,
-    ThumbErrorTextRole,
-  };
-
-  FilmstripModel() {
-    for (int i = 0; i < 8; ++i) {
-      rows_.push_back({1000 + i, 2000 + i, QStringLiteral("film_%1.arw").arg(i), i == 0 ? 3 : 0});
-    }
+auto DefaultFilmstripRows() -> std::vector<FilmstripRow> {
+  std::vector<FilmstripRow> rows;
+  for (int i = 0; i < 8; ++i) {
+    rows.push_back({1000 + i, 2000 + i, QStringLiteral("film_%1.arw").arg(i), i == 0 ? 3 : 0});
   }
+  return rows;
+}
 
-  [[nodiscard]] int  count() const { return static_cast<int>(rows_.size()); }
-  [[nodiscard]] bool hasMore() const { return false; }
-  [[nodiscard]] bool loading() const { return false; }
-
-  [[nodiscard]] int  rowCount(const QModelIndex& parent = {}) const override {
-    return parent.isValid() ? 0 : count();
-  }
-
-  [[nodiscard]] QVariant data(const QModelIndex& index, int role) const override {
-    if (!index.isValid() || index.row() < 0 || index.row() >= count()) {
-      return {};
-    }
-    const auto& row = rows_[static_cast<size_t>(index.row())];
-    switch (role) {
-      case ElementIdRole:
-        return row.element_id;
-      case ImageIdRole:
-        return row.image_id;
-      case FileNameRole:
-        return row.file_name;
-      case RatingRole:
-        return row.rating;
-      case ThumbUrlRole:
-        return QString{};
-      case ThumbLoadingRole:
-        return false;
-      case ThumbMissingSourceRole:
-        return false;
-      case ThumbErrorTextRole:
-        return QString{};
-      default:
-        return {};
-    }
-  }
-
-  [[nodiscard]] QHash<int, QByteArray> roleNames() const override {
-    return {{ElementIdRole, "elementId"},
-            {ImageIdRole, "imageId"},
-            {FileNameRole, "fileName"},
-            {RatingRole, "rating"},
-            {ThumbUrlRole, "thumbUrl"},
-            {ThumbLoadingRole, "thumbLoading"},
-            {ThumbMissingSourceRole, "thumbMissingSource"},
-            {ThumbErrorTextRole, "thumbErrorText"}};
-  }
-
-  Q_INVOKABLE QVariantMap getItemAt(int index) const {
-    if (index < 0 || index >= count()) {
-      return {};
-    }
-    const auto& row = rows_[static_cast<size_t>(index)];
-    return {{QStringLiteral("elementId"), row.element_id},
-            {QStringLiteral("imageId"), row.image_id},
-            {QStringLiteral("fileName"), row.file_name},
-            {QStringLiteral("rating"), row.rating}};
-  }
-
-  Q_INVOKABLE int rowByElementId(int element_id) const {
-    for (int i = 0; i < count(); ++i) {
-      if (rows_[static_cast<size_t>(i)].element_id == element_id) {
-        return i;
-      }
-    }
-    return -1;
-  }
-
-  void resetRows(std::vector<FilmstripRow> rows) {
-    beginResetModel();
-    rows_ = std::move(rows);
-    endResetModel();
-    emit countChanged();
-  }
-
- signals:
-  void countChanged();
-  void loadingChanged();
-
- private:
-  std::vector<FilmstripRow> rows_;
-};
-
+// The library side of the filmstrip: the production thumbnail model and the production
+// selection, so the tests read ratings and selection through the same objects as the app.
 class FilmstripLibrary final : public QObject {
   Q_OBJECT
-  Q_PROPERTY(FilmstripModel* thumbnailModel READ thumbnailModel CONSTANT)
+  Q_PROPERTY(QObject* thumbnailModel READ thumbnailModel CONSTANT)
+  Q_PROPERTY(LibrarySelection* selection READ selection CONSTANT)
 
  public:
-  explicit FilmstripLibrary(QObject* parent = nullptr) : QObject(parent) {}
+  explicit FilmstripLibrary(QObject* parent = nullptr) : QObject(parent) {
+    resetRows(DefaultFilmstripRows());
+  }
 
-  [[nodiscard]] FilmstripModel* thumbnailModel() { return &model_; }
+  [[nodiscard]] auto thumbnailModel() -> QObject* { return &model_; }
+  [[nodiscard]] auto model() -> AlbumThumbnailModel& { return model_; }
+  [[nodiscard]] auto selection() -> LibrarySelection* { return &selection_; }
 
-  void             resetRows(std::vector<FilmstripRow> rows) { model_.resetRows(std::move(rows)); }
+  void resetRows(const std::vector<FilmstripRow>& rows) {
+    std::vector<AlbumItem> items;
+    items.reserve(rows.size());
+    for (const auto& row : rows) {
+      AlbumItem item;
+      item.element_id = static_cast<sl_element_id_t>(row.element_id);
+      item.file_id    = static_cast<sl_element_id_t>(row.element_id);
+      item.image_id   = static_cast<image_id_t>(row.image_id);
+      item.file_name  = row.file_name;
+      item.rating     = row.rating;
+      items.push_back(std::move(item));
+    }
+    model_.resetModel(items, items.size());
+  }
+
+  // Library Select All: every photo of the query.
+  Q_INVOKABLE void SelectAllInCurrentView() {
+    selection_.Replace(model_.getItemsInRange(0, model_.count() - 1));
+  }
 
   Q_INVOKABLE void SetThumbnailVisible(int element_id, int image_id, bool visible, int max_edge) {
     Q_UNUSED(image_id);
@@ -201,10 +131,11 @@ class FilmstripLibrary final : public QObject {
     int  max_edge   = 0;
   };
 
-  FilmstripModel    model_;
-  QSet<QString>     pinned_;
-  std::vector<Call> calls_;
-  int               last_max_edge_ = 0;
+  AlbumThumbnailModel model_;
+  LibrarySelection    selection_{nullptr};
+  QSet<QString>       pinned_;
+  std::vector<Call>   calls_;
+  int                 last_max_edge_ = 0;
 };
 
 class FilmstripSession final : public QObject {
@@ -244,7 +175,7 @@ class FilmstripSession final : public QObject {
     emit filmstripCollapsedChanged();
   }
   void setFilmstripExpandedHeight(double height) {
-    const double clamped = qBound(128.0, height, 4096.0);
+    const double clamped = qBound(168.0, height, 4096.0);
     if (qFuzzyCompare(filmstrip_expanded_height_ + 1.0, clamped + 1.0)) return;
     filmstrip_expanded_height_ = clamped;
     emit filmstripExpandedHeightChanged();
@@ -297,7 +228,7 @@ class FilmstripSession final : public QObject {
 
  private:
   bool    filmstrip_collapsed_       = false;
-  double  filmstrip_expanded_height_ = 128.0;
+  double  filmstrip_expanded_height_ = 168.0;
   double  filmstrip_scroll_position_ = 0.0;
   int     element_id_                = 1000;
   int     image_id_                  = 2000;
@@ -406,6 +337,16 @@ ApplicationWindow {
             item.editorSession = appModules.editorSession
             item.interactionPolicy = appModules.interactionPolicy
             item.theme = null
+            // Same routing as EditorWorkspace: filmstrip selection signals write
+            // the shared Library selection.
+            item.replaceSelection.connect(function(items) {
+                appModules.library.selection.Replace(items)
+            })
+            item.imageSelectionChanged.connect(function(elementId, imageId, fileName, isHdr,
+                                                        selected) {
+                appModules.library.selection.SetImageSelected(elementId, imageId, fileName,
+                                                             isHdr, selected)
+            })
             item.contextMenuRequested.connect(function(menuItem, sceneX, sceneY) {
                 root.menuRequests.push({
                     elementId: Number(menuItem.elementId),
@@ -633,7 +574,38 @@ TEST(EditorFilmstripQmlTest, ModelResetRebindsToNewFilteredRows) {
   EXPECT_EQ(filmstrip->property("currentFileName").toString(), QStringLiteral("album_two.arw"));
 }
 
-TEST(EditorFilmstripQmlTest, FileNameSitsBelowThumbnailWithMonochromeSelectedTile) {
+// The strip creates delegates only for visible tiles (cacheBuffer 0): scroll the tile into view
+// before reading it.
+auto TileAt(QQuickItem* list, int index) -> QQuickItem* {
+  constexpr int kContain = 4;  // ListView.Contain
+  QMetaObject::invokeMethod(list, "positionViewAtIndex", Qt::DirectConnection, Q_ARG(int, index),
+                            Q_ARG(int, kContain));
+  ProcessEvents(10);
+  QQuickItem* tile = nullptr;
+  QMetaObject::invokeMethod(list, "itemAtIndex", Qt::DirectConnection,
+                            Q_RETURN_ARG(QQuickItem*, tile), Q_ARG(int, index));
+  return tile;
+}
+
+auto CardOf(QQuickItem* tile) -> QObject* {
+  return tile ? tile->findChild<QObject*>(QStringLiteral("editorFilmstripTileCard")) : nullptr;
+}
+
+// Counts the tiles that show the editing state or the selected state.
+auto HighlightedTileCount(QQuickItem* list) -> int {
+  int count = 0;
+  for (int index = 0; index < list->property("count").toInt(); ++index) {
+    QObject* card = CardOf(TileAt(list, index));
+    if (card && (card->property("editing").toBool() || card->property("selected").toBool())) {
+      ++count;
+    }
+  }
+  return count;
+}
+
+// Issue 442 item 4: the image sits above a fixed two-line caption: the stars on the upper line,
+// right-aligned, and the file name on the lower line. The caption never covers the image.
+TEST(EditorFilmstripQmlTest, StarsAndFileNameSitInCaptionBelowImage) {
   FilmstripQmlHarness harness;
   ASSERT_NE(harness.window_, nullptr) << harness.warnings_.join('\n').toStdString();
   ASSERT_TRUE(harness.warnings_.isEmpty()) << harness.warnings_.join('\n').toStdString();
@@ -642,43 +614,194 @@ TEST(EditorFilmstripQmlTest, FileNameSitsBelowThumbnailWithMonochromeSelectedTil
   ASSERT_NE(list, nullptr);
   QTRY_COMPARE_WITH_TIMEOUT(list->property("count").toInt(), 8, 2000);
 
-  QQuickItem* selected_tile = nullptr;
-  ASSERT_TRUE(QMetaObject::invokeMethod(list, "itemAtIndex", Qt::DirectConnection,
-                                        Q_RETURN_ARG(QQuickItem*, selected_tile), Q_ARG(int, 0)));
-  ASSERT_NE(selected_tile, nullptr);
-
-  const auto surfaces =
-      selected_tile->findChildren<QObject*>(QStringLiteral("editorFilmstripTileSurface"));
-  const auto frames =
-      selected_tile->findChildren<QObject*>(QStringLiteral("editorFilmstripThumbnailFrame"));
-  const auto labels =
-      selected_tile->findChildren<QObject*>(QStringLiteral("editorFilmstripFileNameLabel"));
-  const auto rating_overlays =
-      selected_tile->findChildren<QObject*>(QStringLiteral("editorFilmstripRatingOverlay"));
-  const auto rating_labels =
-      selected_tile->findChildren<QObject*>(QStringLiteral("editorFilmstripRatingLabel"));
-  ASSERT_EQ(surfaces.size(), 1);
-  ASSERT_EQ(frames.size(), 1);
-  ASSERT_EQ(labels.size(), 1);
-  ASSERT_EQ(rating_overlays.size(), 1);
-  ASSERT_EQ(rating_labels.size(), 1);
-
-  auto* frame = qobject_cast<QQuickItem*>(frames.front());
-  auto* label = qobject_cast<QQuickItem*>(labels.front());
+  QQuickItem* editing_tile = TileAt(list, 0);
+  ASSERT_NE(editing_tile, nullptr);
+  auto* surface =
+      editing_tile->findChild<QQuickItem*>(QStringLiteral("editorFilmstripTileSurface"));
+  auto* frame =
+      editing_tile->findChild<QQuickItem*>(QStringLiteral("editorFilmstripThumbnailFrame"));
+  auto* bar = editing_tile->findChild<QQuickItem*>(QStringLiteral("editorFilmstripCaptionBar"));
+  auto* image =
+      editing_tile->findChild<QQuickItem*>(QStringLiteral("editorFilmstripThumbnailImage"));
+  auto* name_label =
+      editing_tile->findChild<QQuickItem*>(QStringLiteral("editorFilmstripFileNameLabel"));
+  auto* rating_label =
+      editing_tile->findChild<QQuickItem*>(QStringLiteral("editorFilmstripRatingLabel"));
+  ASSERT_NE(surface, nullptr);
   ASSERT_NE(frame, nullptr);
-  ASSERT_NE(label, nullptr);
-  EXPECT_EQ(labels.front()->property("text").toString(), QStringLiteral("film_0.arw"));
-  EXPECT_TRUE(rating_overlays.front()->property("visible").toBool());
-  EXPECT_EQ(rating_labels.front()->property("text").toString(), QStringLiteral("★★★☆☆"));
-  // Monochrome rating badge: dark well + light stars (no gold accent).
-  EXPECT_EQ(rating_overlays.front()->property("color").value<QColor>(),
-            AppTheme::Instance().editorListSelectedInkColor());
-  EXPECT_EQ(rating_labels.front()->property("color").value<QColor>(),
-            AppTheme::Instance().editorListSelectedFillColor());
-  EXPECT_GT(label->y(), frame->y());
-  EXPECT_GT(label->height(), 0.0);
-  QTRY_COMPARE_WITH_TIMEOUT(surfaces.front()->property("color").value<QColor>(),
+  ASSERT_NE(bar, nullptr);
+  ASSERT_NE(image, nullptr);
+  ASSERT_NE(name_label, nullptr);
+  ASSERT_NE(rating_label, nullptr);
+  // The separate rating badge is gone.
+  EXPECT_EQ(editing_tile->findChild<QObject*>(QStringLiteral("editorFilmstripRatingOverlay")),
+            nullptr);
+
+  // The file name and the stars are children of the bar, and the bar sits on the bottom edge
+  // of the thumbnail frame.
+  EXPECT_EQ(name_label->parentItem(), bar);
+  EXPECT_EQ(rating_label->parentItem(), bar);
+  EXPECT_EQ(bar->parentItem(), frame);
+  EXPECT_NEAR(bar->y() + bar->height(), frame->height() - 1.0, 0.5);
+  // The image ends where the caption starts: no overlap.
+  EXPECT_EQ(image->parentItem(), frame);
+  EXPECT_LE(image->y() + image->height(), bar->y() + 0.5);
+  EXPECT_GT(image->height(), bar->height());
+  EXPECT_EQ(name_label->property("text").toString(), QStringLiteral("film_0.arw"));
+  EXPECT_TRUE(rating_label->isVisible());
+  EXPECT_EQ(rating_label->property("text").toString(), QStringLiteral("★★★☆☆"));
+  // Stars on the upper line, right-aligned; the file name on the lower line, full width.
+  EXPECT_LT(rating_label->y() + rating_label->height(), name_label->y() + 0.5);
+  EXPECT_NEAR(rating_label->x() + rating_label->width(),
+              bar->width() - AppTheme::Instance().spaceSm(), 0.5);
+  EXPECT_NEAR(name_label->width(), bar->width() - AppTheme::Instance().spaceSm() * 2, 0.5);
+
+  // The thumbnail frame fills the tile except for the small inset.
+  const qreal inset = AppTheme::Instance().spaceXs();
+  EXPECT_NEAR(frame->height(), editing_tile->height() - inset * 2, 0.5);
+  EXPECT_NEAR(frame->width(), editing_tile->width() - inset * 2, 0.5);
+
+  // An unrated image shows the file name without stars.
+  QQuickItem* unrated_tile = TileAt(list, 1);
+  ASSERT_NE(unrated_tile, nullptr);
+  auto* unrated_stars =
+      unrated_tile->findChild<QQuickItem*>(QStringLiteral("editorFilmstripRatingLabel"));
+  auto* unrated_bar =
+      unrated_tile->findChild<QQuickItem*>(QStringLiteral("editorFilmstripCaptionBar"));
+  ASSERT_NE(unrated_stars, nullptr);
+  ASSERT_NE(unrated_bar, nullptr);
+  EXPECT_FALSE(unrated_stars->isVisible());
+  // The caption keeps both lines without stars, so every image has the same size.
+  EXPECT_NEAR(unrated_bar->height(), bar->height(), 0.5);
+
+  // Editing tile: monochrome bone well.
+  QTRY_COMPARE_WITH_TIMEOUT(surface->property("color").value<QColor>(),
                             AppTheme::Instance().editorListSelectedFillColor(), 2000);
+}
+
+// Issue 442 item 4: a rating change shows on the tile at once (model dataChanged on the rating
+// role, the same update that ImageController sends after a rating).
+TEST(EditorFilmstripQmlTest, RatingChangeUpdatesTileStarsImmediately) {
+  FilmstripQmlHarness harness;
+  ASSERT_NE(harness.window_, nullptr) << harness.warnings_.join('\n').toStdString();
+
+  auto* list = harness.list();
+  ASSERT_NE(list, nullptr);
+  QTRY_COMPARE_WITH_TIMEOUT(list->property("count").toInt(), 8, 2000);
+  QQuickItem* tile = TileAt(list, 1);
+  ASSERT_NE(tile, nullptr);
+  auto* stars = tile->findChild<QQuickItem*>(QStringLiteral("editorFilmstripRatingLabel"));
+  ASSERT_NE(stars, nullptr);
+  EXPECT_FALSE(stars->isVisible());
+
+  ASSERT_TRUE(harness.library_.model().updateRating(1001, 2001, 4));
+  EXPECT_TRUE(stars->isVisible());
+  EXPECT_EQ(stars->property("text").toString(), QStringLiteral("★★★★☆"));
+  EXPECT_EQ(tile->property("displayRating").toInt(), 4);
+
+  ASSERT_TRUE(harness.library_.model().updateRating(1001, 2001, 0));
+  EXPECT_FALSE(stars->isVisible());
+  EXPECT_TRUE(harness.warnings_.isEmpty()) << harness.warnings_.join('\n').toStdString();
+}
+
+// Issue 442 item 2: the filmstrip shares the Library selection, but a Library-selected image
+// that the editor does not show has its own light gray state. The editing tile keeps the bone
+// well, so a click in the Library never moves the editing highlight.
+TEST(EditorFilmstripQmlTest, LibrarySelectionShowsGraySelectedStateSeparateFromEditingTile) {
+  FilmstripQmlHarness harness;
+  ASSERT_NE(harness.window_, nullptr) << harness.warnings_.join('\n').toStdString();
+
+  auto* list = harness.list();
+  ASSERT_NE(list, nullptr);
+  QTRY_COMPARE_WITH_TIMEOUT(list->property("count").toInt(), 8, 2000);
+
+  // A single click in the Library selects image 3 and does not open it.
+  harness.library_.selection()->Replace(harness.library_.model().getItemsInRange(3, 3));
+  ProcessEvents();
+
+  {
+    QQuickItem* tile = TileAt(list, 0);
+    ASSERT_NE(tile, nullptr);
+    QObject* card = CardOf(tile);
+    ASSERT_NE(card, nullptr);
+    EXPECT_TRUE(card->property("editing").toBool());
+    EXPECT_FALSE(card->property("selected").toBool());
+    EXPECT_EQ(card->property("tileState").toString(), QStringLiteral("editing"));
+    auto* surface = tile->findChild<QQuickItem*>(QStringLiteral("editorFilmstripTileSurface"));
+    ASSERT_NE(surface, nullptr);
+    QTRY_COMPARE_WITH_TIMEOUT(surface->property("color").value<QColor>(),
+                              AppTheme::Instance().editorListSelectedFillColor(), 2000);
+  }
+  {
+    QQuickItem* tile = TileAt(list, 3);
+    ASSERT_NE(tile, nullptr);
+    QObject* card = CardOf(tile);
+    ASSERT_NE(card, nullptr);
+    EXPECT_FALSE(card->property("editing").toBool());
+    EXPECT_TRUE(card->property("selected").toBool());
+    EXPECT_EQ(card->property("tileState").toString(), QStringLiteral("selected"));
+    auto* surface = tile->findChild<QQuickItem*>(QStringLiteral("editorFilmstripTileSurface"));
+    ASSERT_NE(surface, nullptr);
+    QTRY_COMPARE_WITH_TIMEOUT(surface->property("color").value<QColor>(),
+                              AppTheme::Instance().filmstripSelectedFillColor(), 2000);
+  }
+  EXPECT_NE(AppTheme::Instance().filmstripSelectedFillColor(),
+            AppTheme::Instance().editorListSelectedFillColor());
+  // The editor did not switch.
+  EXPECT_EQ(harness.router_.openCount(), 0);
+  EXPECT_EQ(harness.session_.elementId(), 1000);
+
+  // Ctrl+click in the filmstrip adds to the shared selection without opening the image.
+  ASSERT_TRUE(QMetaObject::invokeMethod(
+      harness.filmstrip(), "handleIndexSelection", Q_ARG(QVariant, QVariant(5)),
+      Q_ARG(QVariant, QVariant(static_cast<int>(Qt::ControlModifier))),
+      Q_ARG(QVariant, QVariant(false))));
+  ProcessEvents();
+  EXPECT_EQ(harness.library_.selection()->SelectedCount(), 2);
+  EXPECT_TRUE(harness.library_.selection()->IsSelected(1005));
+  EXPECT_TRUE(CardOf(TileAt(list, 5))->property("selected").toBool());
+  EXPECT_EQ(harness.router_.openCount(), 0);
+  EXPECT_TRUE(harness.warnings_.isEmpty()) << harness.warnings_.join('\n').toStdString();
+}
+
+// Issue 442 item 3: after a click on image A and several Left/Right presses, the filmstrip shows
+// one highlighted tile: the open image is also the only selected image.
+TEST(EditorFilmstripQmlTest, LeftRightNavigationKeepsOneHighlightedTile) {
+  FilmstripQmlHarness harness;
+  ASSERT_NE(harness.window_, nullptr) << harness.warnings_.join('\n').toStdString();
+
+  auto* filmstrip = harness.filmstrip();
+  auto* list      = harness.list();
+  ASSERT_NE(filmstrip, nullptr);
+  ASSERT_NE(list, nullptr);
+  QTRY_COMPARE_WITH_TIMEOUT(list->property("count").toInt(), 8, 2000);
+
+  // Plain click on image 1 opens it and selects it.
+  ASSERT_TRUE(QMetaObject::invokeMethod(filmstrip, "handleIndexSelection",
+                                        Q_ARG(QVariant, QVariant(1)), Q_ARG(QVariant, QVariant(0)),
+                                        Q_ARG(QVariant, QVariant(true))));
+  ProcessEvents();
+  EXPECT_EQ(harness.session_.elementId(), 1001);
+  EXPECT_TRUE(harness.library_.selection()->IsSelected(1001));
+  EXPECT_EQ(HighlightedTileCount(list), 1);
+
+  list->forceActiveFocus();
+  for (int i = 0; i < 3; ++i) {
+    QTest::keyClick(harness.window_, Qt::Key_Right);
+    ProcessEvents();
+    EXPECT_EQ(HighlightedTileCount(list), 1) << "after Right press " << (i + 1);
+  }
+  EXPECT_EQ(harness.session_.elementId(), 1004);
+  EXPECT_EQ(harness.library_.selection()->SelectedCount(), 1);
+  EXPECT_TRUE(harness.library_.selection()->IsSelected(1004));
+
+  QTest::keyClick(harness.window_, Qt::Key_Left);
+  ProcessEvents();
+  EXPECT_EQ(harness.session_.elementId(), 1003);
+  EXPECT_EQ(HighlightedTileCount(list), 1);
+  EXPECT_TRUE(harness.library_.selection()->IsSelected(1003));
+  EXPECT_FALSE(harness.library_.selection()->IsSelected(1001));
+  EXPECT_TRUE(harness.warnings_.isEmpty()) << harness.warnings_.join('\n').toStdString();
 }
 
 TEST(EditorFilmstripQmlTest, CollapseKeepsThumbnailPinsAndRestoresHorizontalScroll) {
@@ -766,7 +889,7 @@ TEST(EditorFilmstripQmlTest, LocalSelectionKeepsHorizontalScrollUnchanged) {
 
 // The filmstrip no longer owns a local menu: right-click forwards a menu
 // request (clicked row + scene point) to Main, which opens the shared image
-// context menu. This test pins the emission contract, including that a
+// context menu. This test checks the emitted request payload, including that a
 // non-current row (row 1 while the session sits on row 0) still produces a
 // request targeted at that row.
 TEST(EditorFilmstripQmlTest, ContextMenuRequestCarriesClickedRowAndScenePoint) {
@@ -844,9 +967,9 @@ TEST(EditorFilmstripQmlTest, HeightResizeGrowsTilesWithoutChangingThumbnailMaxEd
   ASSERT_NE(list, nullptr);
   QTRY_COMPARE_WITH_TIMEOUT(list->property("count").toInt(), 8, 2000);
 
-  EXPECT_NEAR(filmstrip->property("minExpandedHeight").toReal(), 128.0, 0.5);
+  EXPECT_NEAR(filmstrip->property("minExpandedHeight").toReal(), 168.0, 0.5);
   EXPECT_EQ(filmstrip->property("filmstripThumbnailMaxEdge").toInt(), 512);
-  EXPECT_NEAR(filmstrip->property("expandedHeight").toReal(), 128.0, 0.5);
+  EXPECT_NEAR(filmstrip->property("expandedHeight").toReal(), 168.0, 0.5);
 
   QQuickItem* tile_before = nullptr;
   ASSERT_TRUE(QMetaObject::invokeMethod(list, "itemAtIndex", Qt::DirectConnection,
@@ -862,7 +985,7 @@ TEST(EditorFilmstripQmlTest, HeightResizeGrowsTilesWithoutChangingThumbnailMaxEd
   ProcessEvents();
   EXPECT_NEAR(filmstrip->property("expandedHeight").toReal(), 220.0, 0.5);
   // Live drag does not commit to the session until release.
-  EXPECT_NEAR(harness.session_.filmstripExpandedHeight(), 128.0, 0.5);
+  EXPECT_NEAR(harness.session_.filmstripExpandedHeight(), 168.0, 0.5);
 
   QQuickItem* tile_during = nullptr;
   ASSERT_TRUE(QMetaObject::invokeMethod(list, "itemAtIndex", Qt::DirectConnection,
@@ -887,7 +1010,7 @@ TEST(EditorFilmstripQmlTest, HeightResizeGrowsTilesWithoutChangingThumbnailMaxEd
                                         Q_ARG(QVariant, QVariant(40.0))));
   ASSERT_TRUE(QMetaObject::invokeMethod(filmstrip, "commitExpandedHeight"));
   ProcessEvents();
-  EXPECT_NEAR(harness.session_.filmstripExpandedHeight(), 128.0, 0.5);
+  EXPECT_NEAR(harness.session_.filmstripExpandedHeight(), 168.0, 0.5);
 
   // Ceiling is half the harness window (640 → 320).
   ASSERT_TRUE(QMetaObject::invokeMethod(filmstrip, "setExpandedHeightLive",
