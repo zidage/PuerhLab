@@ -2,8 +2,9 @@
 
 Date: 2026-10-19
 
-Status: SM1 export and runtime proof of concept done on 2026-10-19 (#448). The SM1 user review
-and user decisions are open (#449, #454). The other phases are planned.
+Status: SM1 export and runtime proof of concept done on 2026-10-19 (#448). The SM1 quality review
+failed: the EfficientSAM3 follow-up work is stopped, and the model and interaction set are under
+re-evaluation (section 8.16, #458). The other phases wait for that decision.
 
 Target release: Alcedo Studio 0.3.4. The AI Segmentation Mask is the main feature of that release.
 
@@ -40,7 +41,7 @@ decision.
 | ID | Decision |
 | --- | --- |
 | D1 | The 0.3.4 main feature is the AI Segmentation Mask. CFA-domain neural denoise and DAG node blending by luminance or color are not the main feature of this release. |
-| D2 | The model family is EfficientSAM3. The product must support text prompts and point or box prompts, subject to the SM1 results. |
+| D2 | The model family is EfficientSAM3. The product must support text prompts and point or box prompts, subject to the SM1 results. Under re-evaluation since 2026-10-19 (section 8.16, #458). |
 | D3 | The interaction is visually rich. The exact interaction set is decided in the UI phase. |
 | D4 | The installer does not contain model weights. Alcedo Studio supplies a built-in downloader and the inference runtime. The weights come from the user-owned Cloudflare R2 bucket or from a Hugging Face repository. |
 | D5 | The model files are treated as subject to the Meta SAM License. Each published model directory contains a copy of that license. SAM 2.1 is not a replacement candidate. |
@@ -258,7 +259,7 @@ The project storage owns the R8 bytes. No owner keeps a copy of another owner's 
 
 | Phase | Result | Main modules | Dependency | Expected diff | Status |
 | --- | --- | --- | --- | ---: | --- |
-| SM1 | Model export, runtime feasibility, latency, and quality evidence | `scripts/ai_models`, `rust/puerh_mind` | none | 900-1500 | proof of concept done; review open (#448) |
+| SM1 | Model export, runtime feasibility, latency, and quality evidence | `scripts/ai_models`, `rust/puerh_mind` | none | 900-1500 | proof of concept done; quality review failed, re-evaluation (#458) |
 | SM2 | Segmentation model download from R2 or Hugging Face | model catalog, download service, settings | SM1 | 800-1400 | outline |
 | SM3 | Sidecar segmentation service and C++ client | proto, Rust service, `sidecar_client`, app service | SM1 | 1400-2000, split if over | outline |
 | SM4 | Analysis render in ReferenceSpace | geometry, scheduler, app service | none | 600-1200 | outline |
@@ -750,6 +751,103 @@ p95 0.32, maximum 0.60 ms; new channel per call p50 0.52, p95 13.4, maximum 26.6
   register (#451).
 - The SM1 diff is about 2,550 lines (Rust example 1,406 after `rustfmt`, Python and README about
   1,100), more than the 900-1500 estimate of section 8.14.
+
+### 8.16 Grid holes and model re-evaluation
+
+**Date and status:** 2026-10-19. The user stopped the EfficientSAM3 follow-up work after the quality
+review. Closed as not planned: #449, #450, #452, #453, #454. #451 stays open because it also affects
+the CLIP encoders. The exploration of section 8.16.4 is tracked in #458.
+
+#### 8.16.1 Cause of the grid holes
+
+The holes are also in the PyTorch output (the ONNX graphs match PyTorch, section 8.15). They come
+from the student image encoder:
+
+| Student trunk | Native output at a 1008 px input |
+| --- | --- |
+| EfficientViT-B1 | 256 x 32 x 32 |
+| RepViT-M1.1 | 512 x 32 x 32 |
+| TinyViT-11M | 1024 tokens (32 x 32) |
+
+- The SAM3 teacher ViT (patch 14) gives a native 72 x 72 grid. `ImageStudentEncoder`
+  (`sam3/model_builder.py`) resizes the 32 x 32 student output to 72 x 72 with bilinear
+  interpolation. One student cell covers about 31.5 input pixels.
+- Stage 1 distillation uses only MSE and cosine loss on the final 72 x 72 embedding
+  (`stage1/configs/base_stage1.yaml`). The point and box decoder is never trained on student
+  features.
+- On difficult prompts the decoder logits stay near 0. The neck and the decoder upscale with
+  transposed convolutions (kernel 2, stride 2, no overlap), which add a fixed pattern per cell. Near
+  0, this pattern decides the sign of each pixel and makes the regular dots and holes.
+
+Measurement (EfficientViT-M, PyTorch, 288 x 288 logits; script `build/tmp/sm1/probe/grid_probe.py`,
+not committed):
+
+| Prompt | Share of \|logit\| < 2 | Share of logit > 4 | Grid energy |
+| --- | ---: | ---: | ---: |
+| `DSC00674` box (close-up, fails) | 0.826 | 0.000 | 0.288 |
+| `DSC00728` sky point (grid on the cliff) | 0.213 | 0.105 | 0.374 |
+| `DSC00326` box (correct) | 0.012 | 0.019 | 0.031 |
+| `DSC_1535` box (correct) | 0.049 | 0.089 | 0.022 |
+
+Grid energy is the share of the high-pass logit spectrum on the lines of period 4 and 9 cells.
+
+Mitigations that do not correct the mask:
+
+- Four encoder passes with half-cell shifts, logits aligned and averaged: grid energy 0.29 to 0.16
+  on `DSC00674`, but the hole and island area stays the same.
+- A box filter on `high_res_feats_0` and `high_res_feats_1`: no improvement.
+- Zero high-resolution features: the grid stays (grid energy 0.46), so it comes from the image
+  embedding.
+- A Gaussian blur of the logits (1.5 cells): no dots, but the mask is still wrong (the face is left
+  out).
+- A 2304 px input (native 72 x 72 student output): the face is included, but new holes appear.
+
+Result: post-processing cannot correct the EfficientSAM3 point and box masks. The model is uncertain
+on these regions.
+
+#### 8.16.2 Prompt dependence
+
+- One point is ambiguous (`DSC_1535` torso: suit only; `DSC_1188`: squirrel without the tail).
+- The text path misses squirrels, ducks, flowers, trees, trams, kayaks, and most people in crowds at
+  the 0.5 score threshold.
+- The user must know which prompt type works for which subject. This is not acceptable for the 0.3.4
+  main feature.
+
+#### 8.16.3 Practice in other photo applications
+
+This review does not use RapidRAW or similar new raw editors.
+
+| Application | Main entry | Other objects | Edge stage |
+| --- | --- | --- | --- |
+| Lightroom | One click: Subject, Sky, Background, People with body parts (skin, hair, eyes, lips, teeth, clothes), Landscape | Objects (brush or box) | Feather and Edge controls |
+| Capture One | One click: Subject, Background (inverted Subject) | AI Select | not documented |
+| Photoshop | Select Subject (Device or Cloud quality) | Object Selection tool | Select and Mask |
+| Apple Photos (Vision) | Subject lift: all foreground instances in one pass; a tap selects an instance (`VNInstanceMaskObservation`, `instanceAtPoint`) | not applicable | 512 x 512 network, then guided-filter upsampling to full resolution on the GPU; a confidence branch hides unreliable results |
+| DaVinci Resolve | Magic Mask with Person and Object modes, Faster and Better quality | add and subtract strokes | consistency controls |
+
+Common pattern:
+
+- Task masks with dedicated models are the main entry. The user selects a task, not a prompt type.
+- A click or box tool is the second entry. Candidates are computed before the click, so a click
+  selects a candidate instead of asking the model to resolve an ambiguous point.
+- The coarse mask and the edge quality are separate stages.
+- A confidence check hides an unreliable mask instead of showing it.
+
+#### 8.16.4 Exploration steps (#458)
+
+Evidence rules: use the quality set and prompts of section 8.6 (`build/tmp/sm1/quality/`). Keep
+weights, ONNX files, and reports under `build/tmp/explore/`; do not commit them. Run on the Windows
+DirectML machine first; record macOS Core ML results when a candidate is selected. Record the
+license of each model; a license that does not permit commercial use excludes the model.
+
+| Step | Work | Question that it answers |
+| --- | --- | --- |
+| E1 | Run the grid probe with the SAM3 teacher image encoder (`backbone_type="sam3"`). Export the teacher encoder to ONNX and measure DirectML latency and memory. Needs the `facebook/sam3` license on Hugging Face (user action). | Does the student cause the holes? Is one teacher encoder pass per photo affordable for the click tool? |
+| E2 | Run a dichotomous image segmentation model (BiRefNet lite and BiRefNet 1024, MIT license) on the 14 photos. Measure latency, memory, file size, and the soft matte on hair and fur. Record photos with more than one subject (crowd, ducks). | Can one model supply the one-click Subject mask and the hair edge without a separate matte step? |
+| E3 | Select and measure candidate models for Sky (semantic segmentation) and People body parts (human parsing: skin, hair, clothes, lips, eyes). | Which models give the Sky and People task masks with an acceptable license? |
+| E4 | Compute instance candidates when the tool opens (automatic mask generation with the E1 result, or a class-agnostic instance model). A click selects a candidate; the pointer position highlights it. Measure the candidate time and the single-point cases of section 8.16.2. | Does candidate selection remove the single-point ambiguity at an acceptable time? |
+| E5 | Only if E2 is not sufficient: compare guided-filter upsampling of a soft matte (the Apple method) with the SM1 projection matte (section 8.15, method (d)). | Which edge stage is robust on textured backgrounds? |
+| E6 | Write one table per task (Subject, Sky, People parts, object click): model, latency, file size, license, quality, recommendation. | The user decides the revision of D2 and the interaction set. SM2 and later phases are replanned after that decision. |
 
 ---
 
