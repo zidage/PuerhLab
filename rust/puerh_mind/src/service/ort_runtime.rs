@@ -4,7 +4,10 @@ use std::sync::OnceLock;
 use anyhow::{Result, bail};
 use ort::{
     ep,
-    session::{Session, builder::GraphOptimizationLevel},
+    session::{
+        Session,
+        builder::{GraphOptimizationLevel, SessionBuilder},
+    },
 };
 
 const DEVICE_ERROR_MESSAGE: &str = "expected \"auto\", \"cpu\", \"directml\", \"dml\", \"directml:N\", \"dml:N\", \"coreml\", \"coreml:all\", \"coreml:cpuandgpu\", or \"coreml:cpuonly\" for ORT backend device";
@@ -12,7 +15,7 @@ const DEVICE_ERROR_MESSAGE: &str = "expected \"auto\", \"cpu\", \"directml\", \"
 static ORT_ENVIRONMENT_INIT: OnceLock<bool> = OnceLock::new();
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum DeviceRequest {
+pub enum DeviceRequest {
     Auto,
     Cpu,
     DirectMl(Option<i32>),
@@ -20,13 +23,13 @@ pub(crate) enum DeviceRequest {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum CoreMlMode {
+pub enum CoreMlMode {
     All,
     CpuAndGpu,
     CpuOnly,
 }
 
-pub(crate) fn parse_device_request(value: &str) -> Result<DeviceRequest> {
+pub fn parse_device_request(value: &str) -> Result<DeviceRequest> {
     let value = value.trim();
     if value.is_empty() {
         bail!("unsupported ALCEDO_MIND_DEVICE value {value:?}, {DEVICE_ERROR_MESSAGE}");
@@ -90,7 +93,7 @@ pub(crate) fn parse_device_request(value: &str) -> Result<DeviceRequest> {
     bail!("unsupported ALCEDO_MIND_DEVICE value {value:?}, {DEVICE_ERROR_MESSAGE}")
 }
 
-pub(crate) fn initialize_ort_environment() -> Result<()> {
+pub fn initialize_ort_environment() -> Result<()> {
     let _ = ORT_ENVIRONMENT_INIT.get_or_init(|| {
         ort::init()
             .with_execution_providers([ep::CPU::default().build()])
@@ -100,7 +103,7 @@ pub(crate) fn initialize_ort_environment() -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn describe_device_request(device_request: DeviceRequest) -> String {
+pub fn describe_device_request(device_request: DeviceRequest) -> String {
     match device_request {
         DeviceRequest::Auto => {
             if cfg!(target_os = "windows") {
@@ -174,18 +177,24 @@ fn execution_providers_for_device_request(
     }
 }
 
-pub(crate) fn load_session(path: &Path, device_request: DeviceRequest) -> Result<Session> {
+/// Returns a session builder with the production optimization level and execution providers.
+/// `load_session` commits this builder. A caller that needs another session option (for example
+/// profiling in a measurement program) adds it to this builder, so the production settings stay
+/// in one place.
+pub fn session_builder(device_request: DeviceRequest) -> Result<SessionBuilder> {
     let builder = Session::builder()
         .map_err(|e| anyhow::anyhow!("failed to create ORT session builder: {e}"))?;
     let builder = builder
         .with_optimization_level(GraphOptimizationLevel::Level3)
         .map_err(|e| anyhow::anyhow!("failed to set ORT optimization level: {e}"))?;
     let execution_providers = execution_providers_for_device_request(device_request)?;
-    let mut builder = builder
-        .with_execution_providers(execution_providers)
-        .map_err(|e| anyhow::anyhow!("failed to configure ORT execution providers: {e}"))?;
-
     builder
+        .with_execution_providers(execution_providers)
+        .map_err(|e| anyhow::anyhow!("failed to configure ORT execution providers: {e}"))
+}
+
+pub fn load_session(path: &Path, device_request: DeviceRequest) -> Result<Session> {
+    session_builder(device_request)?
         .commit_from_file(path)
         .map_err(|e| anyhow::anyhow!("failed to load ONNX model {}: {e}", path.display()))
 }
