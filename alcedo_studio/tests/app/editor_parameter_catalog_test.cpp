@@ -8,6 +8,8 @@
 // JSON must parse through ParseEditorParameterWrite, the parser that history replay and the QML
 // collection boundary use.
 
+#include "app/editor_parameter_catalog.hpp"
+
 #include <gtest/gtest.h>
 
 #include <array>
@@ -22,15 +24,14 @@
 
 #include "app/editor_adjustment_context.hpp"
 #include "app/editor_adjustment_pipeline.hpp"
-#include "app/editor_parameter_catalog.hpp"
 #include "app/editor_parameter_write.hpp"
 #include "edit/geometry/crop_frame.hpp"
 #include "edit/geometry/types.hpp"
 #include "edit/graph/drt_node_model.hpp"
 #include "edit/operators/models/cat02_white_balance_model.hpp"
 #include "edit/operators/models/color_wheel_model.hpp"
+#include "edit/operators/models/color_wheel_tone.hpp"
 #include "edit/operators/models/hls_model.hpp"
-#include "ui/alcedo_main/editor_support/modules/color_wheel_math.hpp"
 #include "ui/alcedo_main/editor_support/modules/hls_math.hpp"
 
 namespace alcedo {
@@ -855,38 +856,48 @@ TEST(EditorParameterCatalogTest, HlsUiScaleMatchesModuleConstant) {
 TEST(EditorParameterCatalogTest, ColorWheelUiMatchesTrackballWrite) {
   std::string error;
   const auto  model = EditorParameterCatalog::ToModelJson(
-      "color_wheel", {{"lift_x", 0.5}, {"lift_y", 0.0}, {"gamma_master", 100}}, nlohmann::json{},
-      &error);
+      "color_wheel",
+      {{"lift_x", 0.5}, {"lift_y", 0.0}, {"gamma_master", 0.75}, {"offset_master", -0.5}},
+      nlohmann::json{}, &error);
   ASSERT_TRUE(model.has_value()) << error;
-  const auto& lift  = model->at("color_wheel").at("lift");
-  const auto& gamma = model->at("color_wheel").at("gamma");
-  const auto& gain  = model->at("color_wheel").at("gain");
-  // Lift: the disc color offset at the panel strength around 0.
-  const auto  delta = ui::color_wheel::DiscToCdlDelta(0.5f, 0.0f, ui::color_wheel::kStrengthDefault);
-  EXPECT_FLOAT_EQ(lift.at("color_offset").at("x").get<float>(), delta[0]);
-  EXPECT_FLOAT_EQ(lift.at("strength").get<float>(), ui::color_wheel::kStrengthDefault);
-  // Gamma: the Master is inverted on the Model scale; the neutral offset is 1.
-  EXPECT_DOUBLE_EQ(gamma.at("luminance_offset").get<double>(),
-                   -100.0 / ui::color_wheel::kSliderToParam);
-  EXPECT_FLOAT_EQ(gain.at("color_offset").at("y").get<float>(), 1.0f);
+  const auto& lift   = model->at("color_wheel").at("lift");
+  const auto& gamma  = model->at("color_wheel").at("gamma");
+  const auto& gain   = model->at("color_wheel").at("gain");
+  const auto& offset = model->at("color_wheel").at("offset");
+  // Lift: the per-channel disc stops at the panel strength.
+  const auto  stops  = color_wheel::DiscToChannelStops(0.5f, 0.0f, color_wheel::kDiscMaxStops);
+  EXPECT_FLOAT_EQ(lift.at("color_offset").at("x").get<float>(), stops[0]);
+  EXPECT_FLOAT_EQ(lift.at("strength").get<float>(), color_wheel::kDiscMaxStops);
+  // Master values are stops without a sign change; the neutral value of every wheel is 0.
+  EXPECT_DOUBLE_EQ(gamma.at("luminance_offset").get<double>(), 0.75);
+  EXPECT_DOUBLE_EQ(offset.at("luminance_offset").get<double>(), -0.5);
+  EXPECT_FLOAT_EQ(gain.at("color_offset").at("y").get<float>(), 0.0f);
 
   const auto write = ParseEditorParameterWrite("color_wheel", *model, &error);
   ASSERT_TRUE(write.has_value()) << error;
   const auto ui = EditorParameterCatalog::ToUiValue("color_wheel", *model, &error);
   ASSERT_TRUE(ui.has_value()) << error;
-  EXPECT_DOUBLE_EQ(ui->at("gamma_master").get<double>(), 100.0);
+  EXPECT_DOUBLE_EQ(ui->at("gamma_master").get<double>(), 0.75);
+  EXPECT_DOUBLE_EQ(ui->at("offset_master").get<double>(), -0.5);
   EXPECT_DOUBLE_EQ(ui->at("lift_x").get<double>(), 0.5);
 
   // Ranges of the panel, and a disc point outside the wheel.
-  EXPECT_FALSE(EditorParameterCatalog::ToModelJson("color_wheel", {{"gain_master", 900}},
+  EXPECT_FALSE(EditorParameterCatalog::ToModelJson("color_wheel", {{"gain_master", 2.5}},
                                                    nlohmann::json{}, &error)
                    .has_value());
-  EXPECT_EQ(error, "color_wheel.gain_master must be in [-800, 800]");
+  EXPECT_EQ(error, "color_wheel.gain_master must be in [-2, 2]");
   EXPECT_FALSE(EditorParameterCatalog::ToModelJson(
                    "color_wheel", {{"gain_x", 0.8}, {"gain_y", 0.8}}, nlohmann::json{}, &error)
                    .has_value());
   EXPECT_EQ(error,
             "color_wheel.gain_x and gain_y must be inside the unit disc (x * x + y * y <= 1)");
+}
+
+TEST(EditorParameterCatalogTest, ColorWheelWriteWithAnUnknownVersionIsRejected) {
+  std::string error;
+  EXPECT_FALSE(ParseEditorParameterWrite("color_wheel", {{"color_wheel", {{"version", 3}}}}, &error)
+                   .has_value());
+  EXPECT_NE(error.find("color_wheel.version must be 1 or 2"), std::string::npos) << error;
 }
 
 TEST(EditorParameterCatalogTest, DefaultHlsAndColorWheelModelsConvertBackToTheSameModelJson) {

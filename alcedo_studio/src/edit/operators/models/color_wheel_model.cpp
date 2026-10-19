@@ -4,11 +4,18 @@
 
 #include "edit/operators/models/color_wheel_model.hpp"
 
+#include <stdexcept>
+
+#include "edit/operators/models/color_wheel_tone.hpp"
 #include "edit/operators/models/json_read.hpp"
 
 namespace alcedo {
 
 namespace {
+
+/// Persisted format version of the tone wheels. JSON without a version is version 1: the ACEScc
+/// CDL values that LoadJson converts with color_wheel::ConvertLegacyColorWheel.
+constexpr int kColorWheelFormatVersion = 2;
 
 auto ControlToJson(const ColorWheelControl& control) -> nlohmann::json {
   return {{"disc", {{"x", control.disc.x}, {"y", control.disc.y}}},
@@ -43,16 +50,28 @@ auto ControlFromJson(const nlohmann::json& json, ColorWheelControl fallback) -> 
   return control;
 }
 
+auto IsNeutral(const ColorWheelControl& control) -> bool {
+  return control.color_offset.x == 0.0f && control.color_offset.y == 0.0f &&
+         control.color_offset.z == 0.0f && control.luminance_offset == 0.0f;
+}
+
 auto IsIdentity(const ColorWheelPayload& payload) -> bool {
-  const auto lift_ok = payload.lift.disc.x == 0.0f && payload.lift.disc.y == 0.0f &&
-                       payload.lift.color_offset.x == 0.0f && payload.lift.color_offset.y == 0.0f &&
-                       payload.lift.color_offset.z == 0.0f && payload.lift.luminance_offset == 0.0f;
-  const auto gamma_ok = payload.gamma.color_offset.x == 1.0f &&
-                        payload.gamma.color_offset.y == 1.0f &&
-                        payload.gamma.color_offset.z == 1.0f;
-  const auto gain_ok = payload.gain.color_offset.x == 1.0f && payload.gain.color_offset.y == 1.0f &&
-                       payload.gain.color_offset.z == 1.0f;
-  return lift_ok && gamma_ok && gain_ok;
+  return IsNeutral(payload.lift) && IsNeutral(payload.gamma) && IsNeutral(payload.gain) &&
+         IsNeutral(payload.offset);
+}
+
+auto LegacyValuesFromJson(const nlohmann::json& json) -> color_wheel::LegacyColorWheelValues {
+  color_wheel::LegacyColorWheelValues legacy;
+  if (json.contains("lift")) {
+    legacy.lift_ = ControlFromJson(json["lift"], legacy.lift_);
+  }
+  if (json.contains("gamma")) {
+    legacy.gamma_ = ControlFromJson(json["gamma"], legacy.gamma_);
+  }
+  if (json.contains("gain")) {
+    legacy.gain_ = ControlFromJson(json["gain"], legacy.gain_);
+  }
+  return legacy;
 }
 
 }  // namespace
@@ -73,27 +92,41 @@ auto ColorWheelModel::Gain() const -> ColorWheelControl {
   return Read([](const ColorWheelPayload& payload) { return payload.gain; });
 }
 
+auto ColorWheelModel::Offset() const -> ColorWheelControl {
+  return Read([](const ColorWheelPayload& payload) { return payload.offset; });
+}
+
 void ColorWheelModel::ApplyUpdate(ColorWheelUpdate update) {
   MutateWithDirtyFields([update = std::move(update)](ColorWheelPayload& payload) mutable {
-    bool       changed       = false;
-    const auto apply_control = [&changed](ColorWheelControl&             control,
-                                          const ColorWheelControlUpdate& change) {
+    bool changed = false;
+    if (update.version_one_json.has_value()) {
+      auto converted =
+          color_wheel::ConvertLegacyColorWheel(LegacyValuesFromJson(*update.version_one_json));
+      converted.version_one_json = std::move(*update.version_one_json);
+      changed = converted.lift != payload.lift || converted.gamma != payload.gamma ||
+                converted.gain != payload.gain || converted.offset != payload.offset ||
+                converted.version_one_json != payload.version_one_json;
+      payload = std::move(converted);
+    }
+    bool       wheel_changed = false;
+    const auto apply_control = [&wheel_changed](ColorWheelControl&             control,
+                                                const ColorWheelControlUpdate& change) {
       if (change.disc.has_value() && control.disc != *change.disc) {
         control.disc = *change.disc;
-        changed      = true;
+        wheel_changed = true;
       }
       if (change.strength.has_value() && control.strength != *change.strength) {
         control.strength = *change.strength;
-        changed          = true;
+        wheel_changed    = true;
       }
       if (change.color_offset.has_value() && control.color_offset != *change.color_offset) {
         control.color_offset = *change.color_offset;
-        changed              = true;
+        wheel_changed        = true;
       }
       if (change.luminance_offset.has_value() &&
           control.luminance_offset != *change.luminance_offset) {
         control.luminance_offset = *change.luminance_offset;
-        changed                  = true;
+        wheel_changed            = true;
       }
     };
     if (update.lift.has_value()) {
@@ -105,19 +138,42 @@ void ColorWheelModel::ApplyUpdate(ColorWheelUpdate update) {
     if (update.gain.has_value()) {
       apply_control(payload.gain, *update.gain);
     }
+    if (update.offset.has_value()) {
+      apply_control(payload.offset, *update.offset);
+    }
+    if (wheel_changed) {
+      // The values are no longer the converted version 1 values.
+      payload.version_one_json.reset();
+      changed = true;
+    }
     return changed ? DirtyFieldMask{ColorWheelDirty::Wheels} : DirtyFieldMask{};
   });
 }
 
 auto ColorWheelModel::ToJson() const -> nlohmann::json {
   const auto payload = PayloadCopy();
-  return {{"lift", ControlToJson(payload.lift)},
+  if (payload.version_one_json.has_value()) {
+    return *payload.version_one_json;
+  }
+  return {{"version", kColorWheelFormatVersion},
+          {"lift", ControlToJson(payload.lift)},
           {"gamma", ControlToJson(payload.gamma)},
-          {"gain", ControlToJson(payload.gain)}};
+          {"gain", ControlToJson(payload.gain)},
+          {"offset", ControlToJson(payload.offset)}};
 }
 
 void ColorWheelModel::LoadJson(const nlohmann::json& json) {
   Mutate(ColorWheelDirty::Wheels, [&json](ColorWheelPayload& payload) {
+    if (!json.contains("version")) {
+      payload                  = color_wheel::ConvertLegacyColorWheel(LegacyValuesFromJson(json));
+      payload.version_one_json = json;
+      return;
+    }
+    if (json["version"] != kColorWheelFormatVersion) {
+      throw std::invalid_argument("color_wheel: unsupported persisted format version " +
+                                  json["version"].dump());
+    }
+    payload.version_one_json.reset();
     if (json.contains("lift")) {
       payload.lift = ControlFromJson(json["lift"], payload.lift);
     }
@@ -126,6 +182,9 @@ void ColorWheelModel::LoadJson(const nlohmann::json& json) {
     }
     if (json.contains("gain")) {
       payload.gain = ControlFromJson(json["gain"], payload.gain);
+    }
+    if (json.contains("offset")) {
+      payload.offset = ControlFromJson(json["offset"], payload.offset);
     }
   });
 }

@@ -23,15 +23,16 @@
 #include "edit/graph/pipeline_document.hpp"
 #include "edit/input/raw_input_loader.hpp"
 #include "edit/operators/models/cat02_white_balance_model.hpp"
+#include "edit/operators/models/color_wheel_tone.hpp"
 #include "edit/operators/models/hls_model.hpp"
 #include "edit/operators/models/i_operator_model.hpp"
 #include "edit/operators/models/lmt_model.hpp"
 #include "edit/operators/models/scalar_operator_model.hpp"
 #include "edit/operators/models/sharpen_model.hpp"
-#include "edit/runtime/local_tone_mapping.hpp"
 #include "edit/runtime/adjustment_runtime.hpp"
 #include "edit/runtime/frame_scene_binding.hpp"
 #include "edit/runtime/graph_compiler.hpp"
+#include "edit/runtime/local_tone_mapping.hpp"
 #include "edit/runtime/metal/metal_develop_pass.hpp"
 #include "edit/runtime/metal/metal_drt_pass.hpp"
 #include "edit/runtime/metal/metal_pass_encoder.hpp"
@@ -216,18 +217,18 @@ auto CpuApplyAdjustment(Rgba c, const GradeAdjustmentParams& p, std::uint32_t pi
     c.g           = l + (c.g - l) * scale;
     c.b           = l + (c.b - l) * scale;
   } else if (behavior == AdjustmentBehavior::ColorWheel) {
-    const float gamma_x = std::max(p.values[4] + p.values[7], 1.0e-4f);
-    const float gamma_y = std::max(p.values[5] + p.values[7], 1.0e-4f);
-    const float gamma_z = std::max(p.values[6] + p.values[7], 1.0e-4f);
-    const float gain_x  = p.values[8] + p.values[11];
-    const float gain_y  = p.values[9] + p.values[11];
-    const float gain_z  = p.values[10] + p.values[11];
-    c.r = std::copysign(std::pow(std::fabs(c.r + p.values[0] + p.values[3]), gamma_x), c.r) *
-          gain_x;
-    c.g = std::copysign(std::pow(std::fabs(c.g + p.values[1] + p.values[3]), gamma_y), c.g) *
-          gain_y;
-    c.b = std::copysign(std::pow(std::fabs(c.b + p.values[2] + p.values[3]), gamma_z), c.b) *
-          gain_z;
+    color_wheel::ToneWheelKernelParams wheel;
+    for (std::size_t ch = 0; ch < 3; ++ch) {
+      wheel.offset_acescc_[ch]  = p.values[ch];
+      wheel.lift_scale_[ch]     = p.values[3 + ch];
+      wheel.gamma_exponent_[ch] = p.values[6 + ch];
+      wheel.gain_scale_[ch]     = p.values[9 + ch];
+    }
+    wheel.tone_black_acescc_ = p.values[12];
+    wheel.tone_range_acescc_ = p.values[13];
+    c.r                      = color_wheel::ApplyToneWheels(c.r, 0, wheel);
+    c.g                      = color_wheel::ApplyToneWheels(c.g, 1, wheel);
+    c.b                      = color_wheel::ApplyToneWheels(c.b, 2, wheel);
   } else if (behavior == AdjustmentBehavior::Sharpen) {
     const float l     = Luma(c);
     const float scale = 1.0f + value * 0.0025f;

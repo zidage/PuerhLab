@@ -64,6 +64,7 @@ struct EditorPanelColorWheelValue {
   ColorWheelControl lift{};
   ColorWheelControl gamma{};
   ColorWheelControl gain{};
+  ColorWheelControl offset{};
 };
 
 struct EditorPanelColorTempValue {

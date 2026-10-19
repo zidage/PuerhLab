@@ -510,33 +510,26 @@ auto SummarizeHls(const nlohmann::json& after, const nlohmann::json& before) -> 
 
 auto SummarizeColorWheel(const nlohmann::json& after, const nlohmann::json& before)
     -> CommitSummary {
-  static const std::array<std::pair<const char*, const char*>, 3> kWheels = {
-      {{"lift", "Lift"}, {"gamma", "Gamma"}, {"gain", "Gain"}}};
+  static const std::array<std::pair<const char*, const char*>, 4> kWheels = {
+      {{"lift", "Shadows"}, {"gamma", "Midtones"}, {"gain", "Highlights"}, {"offset", "Offset"}}};
+  // The panel strength is a fixed scale of the disc; the Master value is the edit to report. A
+  // value without a version is version 1 JSON, whose Master is not in stops.
+  const bool before_in_stops = JsonNumberAtPath(before, {"color_wheel", "version"}) == 2.0;
   for (const auto& [key, label] : kWheels) {
-    const auto strength     = JsonNumberAtPath(after, {"color_wheel", key, "strength"});
-    const auto old_strength = JsonNumberAtPath(before, {"color_wheel", key, "strength"});
-    if (strength.has_value() &&
-        (!old_strength.has_value() || std::fabs(*strength - *old_strength) > 1e-6)) {
-      const QString after_text = FormatNumber(*strength);
-      const QString before_text =
-          old_strength.has_value() ? FormatNumber(*old_strength) : QString();
-      return {before_text.isEmpty()
-                  ? QString()
-                  : QStringLiteral("%1 Strength %2").arg(QString::fromLatin1(label), before_text),
-              QStringLiteral("%1 Strength %2").arg(QString::fromLatin1(label), after_text),
-              QStringLiteral("%1 Strength %2 \u2192 %3")
-                  .arg(QString::fromLatin1(label), before_text, after_text)};
-    }
     const auto lum     = JsonNumberAtPath(after, {"color_wheel", key, "luminance_offset"});
-    const auto old_lum = JsonNumberAtPath(before, {"color_wheel", key, "luminance_offset"});
+    const auto old_lum = before_in_stops
+                             ? JsonNumberAtPath(before, {"color_wheel", key, "luminance_offset"})
+                             : std::nullopt;
     if (lum.has_value() && (!old_lum.has_value() || std::fabs(*lum - *old_lum) > 1e-6)) {
-      const QString after_text  = FormatSigned(*lum);
-      const QString before_text = old_lum.has_value() ? FormatSigned(*old_lum) : QString();
+      const QString after_text  = WithUnit(FormatSigned(*lum), QStringLiteral("EV"), true);
+      const QString before_text = old_lum.has_value()
+                                      ? WithUnit(FormatSigned(*old_lum), QStringLiteral("EV"), true)
+                                      : QString();
       return {before_text.isEmpty()
                   ? QString()
-                  : QStringLiteral("%1 Lum %2").arg(QString::fromLatin1(label), before_text),
-              QStringLiteral("%1 Lum %2").arg(QString::fromLatin1(label), after_text),
-              QStringLiteral("%1 Lum %2 \u2192 %3")
+                  : QStringLiteral("%1 Master %2").arg(QString::fromLatin1(label), before_text),
+              QStringLiteral("%1 Master %2").arg(QString::fromLatin1(label), after_text),
+              QStringLiteral("%1 Master %2 \u2192 %3")
                   .arg(QString::fromLatin1(label), before_text, after_text)};
     }
   }

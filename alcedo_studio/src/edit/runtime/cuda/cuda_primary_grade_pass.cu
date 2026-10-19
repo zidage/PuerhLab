@@ -146,6 +146,23 @@ __device__ auto ApplyCurve(float value, const CudaAdjustmentParams& p) -> float 
   return ExtrapolateCurve(value, p, p.count - 2, p.count - 1);
 }
 
+// Tone color wheels (edit/operators/models/color_wheel_tone.hpp). values[0..2]: Offset as an ACEScc
+// increment; [3..5]: Lift K / R; [6..8]: Gamma exponent; [9..11]: Gain K / R; [12]: ACEScc at
+// t = 0; [13]: ACEScc width of the tone range.
+__device__ auto ApplyToneWheel(float c, const CudaAdjustmentParams& p, int ch) -> float {
+  // Neutral Lift, Gamma, and Gain leave the value exact (only the Offset applies).
+  if (p.values[3 + ch] == 0.0f && p.values[6 + ch] == 1.0f && p.values[9 + ch] == 0.0f) {
+    return c + p.values[ch];
+  }
+  const float black = p.values[12];
+  const float range = p.values[13];
+  float       t     = (c + p.values[ch] - black) / range;
+  t += p.values[3 + ch] * fminf(fmaxf(1.0f - t, 0.0f), 1.0f);
+  if (t > 0.0f && t < 1.0f) t = powf(t, p.values[6 + ch]);
+  t += p.values[9 + ch] * fmaxf(t, 0.0f);
+  return black + t * range;
+}
+
 __device__ auto ApplyHls(float3 c, const CudaAdjustmentParams& p) -> float3 {
   const float maximum = fmaxf(c.x, fmaxf(c.y, c.z));
   const float minimum = fminf(c.x, fminf(c.y, c.z));
@@ -302,15 +319,9 @@ __device__ auto ApplyAdjustment(float3 c, const CudaAdjustmentParams& p, const f
     c.y           = l + (c.y - l) * scale;
     c.z           = l + (c.z - l) * scale;
   } else if (behavior == CudaAdjustmentBehavior::ColorWheel) {
-    const float gamma_x = fmaxf(p.values[4] + p.values[7], 1.0e-4f);
-    const float gamma_y = fmaxf(p.values[5] + p.values[7], 1.0e-4f);
-    const float gamma_z = fmaxf(p.values[6] + p.values[7], 1.0e-4f);
-    const float gain_x  = p.values[8] + p.values[11];
-    const float gain_y  = p.values[9] + p.values[11];
-    const float gain_z  = p.values[10] + p.values[11];
-    c.x = copysignf(powf(fabsf(c.x + p.values[0] + p.values[3]), gamma_x), c.x) * gain_x;
-    c.y = copysignf(powf(fabsf(c.y + p.values[1] + p.values[3]), gamma_y), c.y) * gain_y;
-    c.z = copysignf(powf(fabsf(c.z + p.values[2] + p.values[3]), gamma_z), c.z) * gain_z;
+    c.x = ApplyToneWheel(c.x, p, 0);
+    c.y = ApplyToneWheel(c.y, p, 1);
+    c.z = ApplyToneWheel(c.z, p, 2);
   } else if (behavior == CudaAdjustmentBehavior::Lmt && value > 0.0f && lut_edge > 1U &&
              lut != nullptr) {
     // value is the LUT strength a in (0, 1]: c + a * (L(c) - c) in ACEScc; a = 1 is L(c).

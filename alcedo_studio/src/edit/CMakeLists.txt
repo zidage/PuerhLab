@@ -58,6 +58,7 @@ set(EDIT_GRAPH_SRCS
     ${ALCEDO_SRC_ROOT}/edit/operators/models/adjustment_catalog.cpp
     ${ALCEDO_SRC_ROOT}/edit/operators/models/cat02_white_balance_model.cpp
     ${ALCEDO_SRC_ROOT}/edit/operators/models/color_wheel_model.cpp
+    ${ALCEDO_SRC_ROOT}/edit/operators/models/color_wheel_tone.cpp
     ${ALCEDO_SRC_ROOT}/edit/operators/models/curve_model.cpp
     ${ALCEDO_SRC_ROOT}/edit/operators/models/hls_model.cpp
     ${ALCEDO_SRC_ROOT}/edit/operators/models/lmt_model.cpp

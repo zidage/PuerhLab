@@ -16,6 +16,7 @@
 #include "edit/operators/models/builtin_type_ids.hpp"
 #include "edit/operators/models/cat02_white_balance_model.hpp"
 #include "edit/operators/models/color_wheel_model.hpp"
+#include "edit/operators/models/color_wheel_tone.hpp"
 #include "edit/operators/models/curve_model.hpp"
 #include "edit/operators/models/hls_model.hpp"
 #include "edit/operators/models/i_operator_model.hpp"
@@ -242,15 +243,18 @@ auto MakeGradeRuntimeParams(const IOperatorModel& model, AdjustmentBehavior beha
     case AdjustmentBehavior::ColorWheel:
       return RequireModel<ColorWheelModel>(model).Read(
           [behavior](const ColorWheelPayload& payload) {
+            // Layout read by ApplyToneWheel in the CUDA, OpenCL, and Metal grade kernels.
             GradeAdjustmentParams packed;
-            packed.behavior                     = static_cast<std::uint32_t>(behavior);
-            const ColorWheelControl controls[3] = {payload.lift, payload.gamma, payload.gain};
-            for (int i = 0; i < 3; ++i) {
-              packed.values[i * 4]     = controls[i].color_offset.x;
-              packed.values[i * 4 + 1] = controls[i].color_offset.y;
-              packed.values[i * 4 + 2] = controls[i].color_offset.z;
-              packed.values[i * 4 + 3] = controls[i].luminance_offset;
+            packed.behavior   = static_cast<std::uint32_t>(behavior);
+            const auto params = color_wheel::ResolveToneWheelKernelParams(payload);
+            for (std::size_t ch = 0; ch < 3; ++ch) {
+              packed.values[ch]     = params.offset_acescc_[ch];
+              packed.values[3 + ch] = params.lift_scale_[ch];
+              packed.values[6 + ch] = params.gamma_exponent_[ch];
+              packed.values[9 + ch] = params.gain_scale_[ch];
             }
+            packed.values[12] = params.tone_black_acescc_;
+            packed.values[13] = params.tone_range_acescc_;
             return packed;
           });
     case AdjustmentBehavior::Sharpen:

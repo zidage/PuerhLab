@@ -271,9 +271,10 @@ auto ReadColorWheel(const PipelineDocument& document, const EditorParameterTarge
     return SetError(error, "Adjustment Model type does not match field color_wheel");
   }
   EditorPanelColorWheelValue value;
-  value.lift  = typed->Lift();
-  value.gamma = typed->Gamma();
-  value.gain  = typed->Gain();
+  value.lift   = typed->Lift();
+  value.gamma  = typed->Gamma();
+  value.gain   = typed->Gain();
+  value.offset = typed->Offset();
   return FinishField(target, std::move(value), out);
 }
 

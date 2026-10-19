@@ -3,8 +3,8 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Alcedo.Main 1.0
 
-// Color Grade Look panel: global color amount, selective HSL, CDL
-// trackballs (Gamma top / Lift+Gain bottom). Clarity, Sharpen, Film Grain, Halation, and
+// Color Grade Look panel: global color amount, selective HSL, tone color wheels
+// (Shadows / Midtones / Highlights / Offset in a 2x2 grid). Clarity, Sharpen, Film Grain, Halation, and
 // Diffusion live on the Post Processing page (EditorPostProcessPanel.qml).
 // Camera white balance lives on the RAW Decode page; the Color section holds the
 // CAT02 grade white balance. LUT strength is EditorLutControlPanel.qml; choosing a LUT is
@@ -111,6 +111,7 @@ Item {
         applyWheel("lift", cw.lift)
         applyWheel("gamma", cw.gamma)
         applyWheel("gain", cw.gain)
+        applyWheel("offset", cw.offset)
     }
 
     EditorGradeWhiteBalanceModel {
@@ -412,32 +413,38 @@ Item {
         }
     }
 
+    // Master value of one wheel, in stops.
     component MasterSlider: ColumnLayout {
         id: masterRoot
         property string wheelRole: "lift"
-        property int valueUi: 0
+        property real value: 0
         Layout.fillWidth: true
         spacing: 2
 
-        Text {
+        RowLayout {
             Layout.alignment: Qt.AlignHCenter
-            text: qsTr("Master")
-            color: root.colMuted
-            font.pixelSize: appTheme.fontSizeCaption
+            spacing: appTheme.spaceXs
+            Text {
+                text: qsTr("Master")
+                color: root.colMuted
+                font.pixelSize: appTheme.fontSizeCaption
+            }
+            EditorInfoHint {
+                text: qsTr("Changes the brightness of this tonal range, in stops (EV).")
+            }
         }
         MonoSlider {
             from: root.cdlMasterSpec.ui_min
             to: root.cdlMasterSpec.ui_max
-            externalValue: masterRoot.valueUi
+            stepSize: root.cdlMasterSpec.ui_step
+            externalValue: masterRoot.value
             enabled: root.controlsEnabled
             onBegin: function () { cdlModel.beginMasterDrag(masterRoot.wheelRole) }
-            onUpdate: function (v) {
-                cdlModel.updateMasterDragUi(masterRoot.wheelRole, Math.round(v))
-            }
+            onUpdate: function (v) { cdlModel.updateMasterDrag(masterRoot.wheelRole, v) }
             onFinish: function () { cdlModel.finishMasterDrag() }
             onReset: function () {
                 cdlModel.beginMasterDrag(masterRoot.wheelRole)
-                cdlModel.updateMasterDragUi(masterRoot.wheelRole, 0)
+                cdlModel.updateMasterDrag(masterRoot.wheelRole, 0)
                 cdlModel.finishMasterDrag()
             }
         }
@@ -446,18 +453,26 @@ Item {
     component WheelColumn: ColumnLayout {
         id: wheelCol
         property string title: ""
+        property string hint: ""
         property string role: "lift"
         property string deltaText: ""
-        property int masterUi: 0
-        property int discSize: 132
+        property real masterValue: 0
+        property int discSize: 120
         Layout.fillWidth: true
+        Layout.preferredWidth: 1
         spacing: 6
 
-        Text {
+        RowLayout {
             Layout.alignment: Qt.AlignHCenter
-            text: wheelCol.title
-            color: root.colMuted
-            font.pixelSize: appTheme.fontSizeCaption
+            spacing: appTheme.spaceXs
+            Text {
+                text: wheelCol.title
+                color: root.colMuted
+                font.pixelSize: appTheme.fontSizeCaption
+            }
+            EditorInfoHint {
+                text: wheelCol.hint
+            }
         }
         EditorCdlTrackballItem {
             Layout.alignment: Qt.AlignHCenter
@@ -486,7 +501,7 @@ Item {
         }
         MasterSlider {
             wheelRole: wheelCol.role
-            valueUi: wheelCol.masterUi
+            value: wheelCol.masterValue
         }
     }
 
@@ -751,33 +766,43 @@ Item {
                     anchors.margins: 6
                     spacing: 10
 
-                    WheelColumn {
-                        objectName: "lookCdlGammaColumn"
-                        title: qsTr("Gamma")
-                        role: "gamma"
-                        deltaText: cdlModel.gammaDeltaText
-                        masterUi: cdlModel.gammaMasterUi
-                        discSize: 148
-                    }
-
-                    RowLayout {
+                    GridLayout {
                         Layout.fillWidth: true
-                        spacing: 10
+                        columns: 2
+                        columnSpacing: 10
+                        rowSpacing: 12
+
                         WheelColumn {
                             objectName: "lookCdlLiftColumn"
-                            title: qsTr("Lift")
+                            title: qsTr("Shadows (Lift)")
+                            hint: qsTr("Changes mostly the color and brightness of the shadows. The effect is largest near black, and the highlights stay almost the same.")
                             role: "lift"
                             deltaText: cdlModel.liftDeltaText
-                            masterUi: cdlModel.liftMasterUi
-                            discSize: 128
+                            masterValue: cdlModel.liftMaster
+                        }
+                        WheelColumn {
+                            objectName: "lookCdlGammaColumn"
+                            title: qsTr("Midtones (Gamma)")
+                            hint: qsTr("Changes mostly the midtones. The effect is largest near middle grey, and the darkest and brightest areas stay almost the same.")
+                            role: "gamma"
+                            deltaText: cdlModel.gammaDeltaText
+                            masterValue: cdlModel.gammaMaster
                         }
                         WheelColumn {
                             objectName: "lookCdlGainColumn"
-                            title: qsTr("Gain")
+                            title: qsTr("Highlights (Gain)")
+                            hint: qsTr("Changes mostly the color and brightness of the highlights. The effect is largest near white, and the shadows stay almost the same.")
                             role: "gain"
                             deltaText: cdlModel.gainDeltaText
-                            masterUi: cdlModel.gainMasterUi
-                            discSize: 128
+                            masterValue: cdlModel.gainMaster
+                        }
+                        WheelColumn {
+                            objectName: "lookCdlOffsetColumn"
+                            title: qsTr("Offset")
+                            hint: qsTr("Changes the color and brightness of all tones by the same amount, as an exposure change per color channel.")
+                            role: "offset"
+                            deltaText: cdlModel.offsetDeltaText
+                            masterValue: cdlModel.offsetMaster
                         }
                     }
 

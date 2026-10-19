@@ -295,16 +295,18 @@ TEST(EditorPipelineCommandServiceTest, ApplyingColorWheelPatchUpdatesOneTypedCon
   std::string error;
   ASSERT_TRUE(ApplyEditorParameterPatch(
       document, test::ColorGradeFieldTarget("color_wheel"),
-      {{"color_wheel", {{"lift", {{"disc", {{"x", 0.25}, {"y", -0.1}}}}}}}}, &error))
+      {{"color_wheel", {{"version", 2}, {"lift", {{"disc", {{"x", 0.25}, {"y", -0.1}}}}}}}},
+      &error))
       << error;
   EXPECT_FLOAT_EQ(model->Lift().disc.x, 0.25f);
-  EXPECT_FLOAT_EQ(model->Gamma().color_offset.x, 1.0f);
+  EXPECT_FLOAT_EQ(model->Gamma().color_offset.x, 0.0f);
   EXPECT_NE(model->Revision(), model_revision);
   model_revision = model->Revision();
 
   ASSERT_TRUE(ApplyEditorParameterPatch(
       document, test::ColorGradeFieldTarget("color_wheel"),
-      {{"color_wheel", {{"lift", {{"disc", {{"x", 0.25}, {"y", -0.1}}}}}}}}, &error))
+      {{"color_wheel", {{"version", 2}, {"lift", {{"disc", {{"x", 0.25}, {"y", -0.1}}}}}}}},
+      &error))
       << error;
   EXPECT_EQ(model->Revision(), model_revision);
 }

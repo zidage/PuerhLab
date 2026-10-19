@@ -9,6 +9,7 @@
 
 #include "edit/operators/models/builtin_type_ids.hpp"
 #include "edit/operators/models/operator_model_base.hpp"
+#include "json.hpp"
 
 namespace alcedo {
 
@@ -31,12 +32,28 @@ inline auto operator==(const Vec3f& lhs, const Vec3f& rhs) -> bool {
   return lhs.x == rhs.x && lhs.y == rhs.y && lhs.z == rhs.z;
 }
 
+namespace color_wheel {
+
+/// Per-channel change in stops of the dominant channel direction at full disc radius.
+constexpr float kDiscMaxStops   = 1.0f;
+/// Master slider limit in stops.
+constexpr float kMasterMaxStops = 2.0f;
+
+}  // namespace color_wheel
+
+/**
+ * @brief One color wheel. All values are changes in stops at the target tone of the wheel; the
+ * neutral value of every field except strength is 0. See color_wheel_tone.hpp for the tone math.
+ */
 struct ColorWheelControl {
+  /// Disc position in the unit disc.
   Vec2f disc{};
-  // The strength that the color wheel panel writes for every edit, so writing the default panel
-  // value back does not change the Model.
-  float strength = 0.10f;
+  /// Disc stops at full radius. The color wheel panel writes this value for every edit, so writing
+  /// the default panel value back does not change the Model.
+  float strength = color_wheel::kDiscMaxStops;
+  /// Per-channel disc stops (zero mean). This value, not the disc, sets the rendering.
   Vec3f color_offset{};
+  /// Master stops, added to every channel.
   float luminance_offset = 0.0f;
 };
 
@@ -46,9 +63,15 @@ inline auto operator==(const ColorWheelControl& lhs, const ColorWheelControl& rh
 }
 
 struct ColorWheelPayload {
-  ColorWheelControl lift{};
-  ColorWheelControl gamma{Vec2f{}, 0.10f, Vec3f{1.0f, 1.0f, 1.0f}, 0.0f};
-  ColorWheelControl gain{Vec2f{}, 0.10f, Vec3f{1.0f, 1.0f, 1.0f}, 0.0f};
+  ColorWheelControl             lift{};
+  ColorWheelControl             gamma{};
+  ColorWheelControl             gain{};
+  ColorWheelControl             offset{};
+  /// Persisted format version 1 JSON that the wheel values were converted from, as stored. ToJson
+  /// writes it back until a wheel value changes: the root id of a project and the before / after
+  /// values of its history are hashes and byte comparisons of this JSON, so an unedited older
+  /// project must serialize to the same bytes.
+  std::optional<nlohmann::json> version_one_json;
 };
 
 enum class ColorWheelDirty : std::uint32_t {
@@ -68,16 +91,23 @@ struct ColorWheelControlUpdate {
 };
 
 /**
- * @brief Focused lift/gamma/gain update applied as one Model operation.
+ * @brief Focused lift/gamma/gain/offset update applied as one Model operation.
  */
 struct ColorWheelUpdate {
+  /// Persisted format version 1 JSON (lift / gamma / gain, without a version key). Replaces every
+  /// wheel with its converted values before the control updates apply.
+  std::optional<nlohmann::json>          version_one_json;
   std::optional<ColorWheelControlUpdate> lift;
   std::optional<ColorWheelControlUpdate> gamma;
   std::optional<ColorWheelControlUpdate> gain;
+  std::optional<ColorWheelControlUpdate> offset;
 };
 
 /**
- * @brief Lift / gamma / gain color wheels. Identity uses zero lift and unity gamma/gain.
+ * @brief Lift / Gamma / Gain / Offset tone color wheels. Identity is zero in every wheel.
+ *
+ * ToJson writes the persisted format version 2. LoadJson reads JSON without a version as version 1
+ * (the ACEScc CDL values of older projects) and converts it to version 2 values.
  */
 class ColorWheelModel final
     : public OperatorModelBase<ColorWheelModel, ColorWheelPayload, ColorWheelDirty> {
@@ -93,6 +123,7 @@ class ColorWheelModel final
   [[nodiscard]] auto                Lift() const -> ColorWheelControl;
   [[nodiscard]] auto                Gamma() const -> ColorWheelControl;
   [[nodiscard]] auto                Gain() const -> ColorWheelControl;
+  [[nodiscard]] auto                Offset() const -> ColorWheelControl;
 
   /**
    * @brief Apply validated color-wheel fields atomically and avoid dirtying equal values.
