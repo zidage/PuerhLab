@@ -1,0 +1,5 @@
+# Comparison images of the AI Mask candidate reports.
+# They show photos that must not be shared again, so they are not distributed with the GitHub
+# repository. Each report states how to make them again from the local evidence under
+# build/tmp/explore/.
+images/

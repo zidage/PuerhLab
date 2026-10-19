@@ -1,7 +1,8 @@
-//! SM1 measurement program for the EfficientSAM3 ONNX graphs.
+//! SM1 measurement program for the EfficientSAM3 ONNX graphs, also used for the SAM 2.1 point and
+//! box graphs of the model re-evaluation (#458).
 //!
-//! `runtime` mode loads the graphs that `scripts/ai_models/efficientsam3/export_onnx.py` writes
-//! through `ort_runtime::load_session`, the session settings of the production sidecar. It runs
+//! `runtime` mode loads the graphs that `scripts/ai_models/efficientsam3/export_onnx.py` or
+//! `scripts/ai_models/sam2/export_onnx.py` writes through `ort_runtime::load_session`, the session settings of the production sidecar. It runs
 //! the point, box, and text prompts of a prompts JSON file on real photos and writes one JSON
 //! report with:
 //!
@@ -34,8 +35,6 @@ use ort::value::Tensor;
 use serde_json::{Value, json};
 use tokenizers::Tokenizer;
 
-const IMAGE_SIZE: usize = 1008;
-const LOW_RES_MASK_SIZE: usize = 288;
 const TEXT_CONTEXT_LENGTH: usize = 16;
 const TEXT_SCORE_THRESHOLD: f32 = 0.5;
 const STABILITY_DELTA: f32 = 0.05;
@@ -55,6 +54,68 @@ const GRAPH_NAMES: [&str; 4] = [
     TEXT_ENCODER,
     DETECTOR_GROUNDING,
 ];
+
+/// Input size, low-resolution mask size, and pixel normalization of the exported graphs.
+/// `export_report.json` states them in `model_input` (SAM 2.1 exports of
+/// `scripts/ai_models/sam2/export_onnx.py`). A report without `model_input` is an EfficientSAM3
+/// export: 1008 px, 288 px masks, mean and std 0.5.
+#[derive(Clone, Copy, Debug)]
+struct ModelInput {
+    image_size: usize,
+    low_res_mask_size: usize,
+    mean: [f32; 3],
+    std: [f32; 3],
+}
+
+impl ModelInput {
+    const EFFICIENTSAM3: Self = Self {
+        image_size: 1008,
+        low_res_mask_size: 288,
+        mean: [0.5; 3],
+        std: [0.5; 3],
+    };
+
+    fn from_export_report(report: &Value) -> Result<Self> {
+        let entry = &report["model_input"];
+        if entry.is_null() {
+            return Ok(Self::EFFICIENTSAM3);
+        }
+        let size = |key: &str| -> Result<usize> {
+            entry[key]
+                .as_u64()
+                .map(|v| v as usize)
+                .ok_or_else(|| anyhow!("model_input.{key} must be a positive integer"))
+        };
+        let triple = |key: &str| -> Result<[f32; 3]> {
+            let values: Vec<f32> = entry[key]
+                .as_array()
+                .ok_or_else(|| anyhow!("model_input.{key} must be a list"))?
+                .iter()
+                .map(|v| v.as_f64().map(|v| v as f32))
+                .collect::<Option<_>>()
+                .ok_or_else(|| anyhow!("model_input.{key} must hold numbers"))?;
+            values
+                .try_into()
+                .map_err(|_| anyhow!("model_input.{key} must have three values"))
+        };
+        Ok(Self {
+            image_size: size("image_size")?,
+            low_res_mask_size: size("low_res_mask_size")?,
+            mean: triple("pixel_mean")?,
+            std: triple("pixel_std")?,
+        })
+    }
+}
+
+/// Side length of a square NCHW pixel tensor with three channels.
+fn pixel_side(pixels: &[f32]) -> usize {
+    ((pixels.len() / 3) as f64).sqrt().round() as usize
+}
+
+/// Side length of one square plane in a tensor of `planes` planes.
+fn plane_side(values: usize, planes: usize) -> usize {
+    ((values / planes) as f64).sqrt().round() as usize
+}
 
 fn main() -> Result<()> {
     let mut args = std::env::args().skip(1);
@@ -379,20 +440,17 @@ mod process_memory {
 // ---------------------------------------------------------------------------------------------
 // Image and mask helpers
 
-/// The preprocessing of `Sam3Processor.set_image`: stretch to 1008 x 1008 (no letterbox), then
-/// (value / 255 - 0.5) / 0.5 in NCHW order.
-fn preprocess(image: &RgbImage) -> Vec<f32> {
-    let resized = image::imageops::resize(
-        image,
-        IMAGE_SIZE as u32,
-        IMAGE_SIZE as u32,
-        FilterType::Triangle,
-    );
-    let plane = IMAGE_SIZE * IMAGE_SIZE;
+/// The preprocessing of `Sam3Processor.set_image` and `SAM2Transforms`: stretch to the square
+/// model input (no letterbox), then (value / 255 - mean) / std in NCHW order.
+fn preprocess(image: &RgbImage, input: &ModelInput) -> Vec<f32> {
+    let size = input.image_size;
+    let resized = image::imageops::resize(image, size as u32, size as u32, FilterType::Triangle);
+    let plane = size * size;
     let mut pixels = vec![0.0f32; 3 * plane];
     for (index, pixel) in resized.pixels().enumerate() {
         for channel in 0..3 {
-            pixels[channel * plane + index] = (pixel[channel] as f32 / 255.0 - 0.5) / 0.5;
+            pixels[channel * plane + index] =
+                (pixel[channel] as f32 / 255.0 - input.mean[channel]) / input.std[channel];
         }
     }
     pixels
@@ -576,7 +634,8 @@ fn shape_usize(shape: &[i64]) -> Vec<usize> {
 }
 
 fn run_point_encoder(session: &mut Session, pixels: &[f32]) -> Result<PointFeatures> {
-    let input = Tensor::from_array(([1usize, 3, IMAGE_SIZE, IMAGE_SIZE], pixels.to_vec()))
+    let side = pixel_side(pixels);
+    let input = Tensor::from_array(([1usize, 3, side, side], pixels.to_vec()))
         .map_err(|e| anyhow!("failed to build pixel tensor: {e}"))?;
     let outputs = session
         .run(ort::inputs! { "pixel_values" => input })
@@ -606,6 +665,8 @@ fn run_point_decoder(
     labels: &[f32],
 ) -> Result<DecoderOutput> {
     let count = coords.len();
+    // The low-resolution mask has the size of the stride-4 features (`high_res_feats_0`).
+    let mask_size = features.shapes[1].last().copied().unwrap_or(0) as usize;
     let tensor = |shape: &[i64], data: &[f32]| {
         Tensor::from_array((shape_usize(shape), data.to_vec()))
             .map_err(|e| anyhow!("failed to build decoder input: {e}"))
@@ -618,8 +679,8 @@ fn run_point_decoder(
             "point_coords" => Tensor::from_array(([1usize, count, 2], coords.concat()))?,
             "point_labels" => Tensor::from_array(([1usize, count], labels.to_vec()))?,
             "mask_input" => Tensor::from_array((
-                [1usize, 1, LOW_RES_MASK_SIZE, LOW_RES_MASK_SIZE],
-                vec![0.0f32; LOW_RES_MASK_SIZE * LOW_RES_MASK_SIZE],
+                [1usize, 1, mask_size, mask_size],
+                vec![0.0f32; mask_size * mask_size],
             ))?,
             "has_mask_input" => Tensor::from_array(([1usize], vec![0.0f32]))?,
         })
@@ -641,7 +702,7 @@ fn run_point_decoder(
 /// Mask selection of `MaskDecoder.forward`: tokens 1-3 for multimask output; token 0, or the best
 /// multimask token when token 0 is not stable, for single-mask output. Returns (token, score).
 fn select_masks(output: &DecoderOutput, multimask: bool) -> Vec<(usize, f32)> {
-    let plane = LOW_RES_MASK_SIZE * LOW_RES_MASK_SIZE;
+    let plane = output.mask_logits.len() / 4;
     if multimask {
         return (1..4)
             .map(|token| (token, output.iou_scores[token]))
@@ -665,7 +726,7 @@ fn select_masks(output: &DecoderOutput, multimask: bool) -> Vec<(usize, f32)> {
 }
 
 fn token_logits(output: &DecoderOutput, token: usize) -> Vec<f32> {
-    let plane = LOW_RES_MASK_SIZE * LOW_RES_MASK_SIZE;
+    let plane = output.mask_logits.len() / 4;
     output.mask_logits[token * plane..(token + 1) * plane]
         .iter()
         .map(|v| v.clamp(-LOW_RES_LOGIT_LIMIT, LOW_RES_LOGIT_LIMIT))
@@ -709,7 +770,7 @@ struct Detections {
 fn run_detector(session: &mut Session, pixels: &[f32], text: &TextFeatures) -> Result<Detections> {
     let outputs = session
         .run(ort::inputs! {
-            "pixel_values" => Tensor::from_array(([1usize, 3, IMAGE_SIZE, IMAGE_SIZE], pixels.to_vec()))?,
+            "pixel_values" => Tensor::from_array(([1usize, 3, pixel_side(pixels), pixel_side(pixels)], pixels.to_vec()))?,
             "language_features" => Tensor::from_array((
                 shape_usize(&text.language_features_shape),
                 text.language_features.clone(),
@@ -851,10 +912,10 @@ struct PromptSet {
 }
 
 impl PromptSet {
-    /// Model-input coordinates: normalized image coordinates multiplied by 1008. A box becomes two
-    /// points with labels 2 and 3 at the start of the list.
-    fn model_inputs(&self) -> (Vec<[f32; 2]>, Vec<f32>) {
-        let size = IMAGE_SIZE as f32;
+    /// Model-input coordinates: normalized image coordinates multiplied by the model input size
+    /// (1008 or 1024). A box becomes two points with labels 2 and 3 at the start of the list.
+    fn model_inputs(&self, input: &ModelInput) -> (Vec<[f32; 2]>, Vec<f32>) {
+        let size = input.image_size as f32;
         let mut coords = Vec::new();
         let mut labels = Vec::new();
         for b in &self.boxes {
@@ -916,11 +977,19 @@ fn run_runtime_report(options: &RuntimeOptions) -> Result<()> {
         &fs::read_to_string(options.onnx_dir.join("export_report.json"))
             .context("failed to read export_report.json")?,
     )?;
+    let model_input = ModelInput::from_export_report(&export_report)?;
+    let low_res_mask_size = model_input.low_res_mask_size;
     let prompts: Value = serde_json::from_str(&fs::read_to_string(&options.prompts)?)?;
     let mut report = json!({
         "device_request": options.device_text,
         "graph_device_overrides": options.graph_devices,
         "session_settings": options.settings.label(),
+        "model_input": {
+            "image_size": model_input.image_size,
+            "low_res_mask_size": low_res_mask_size,
+            "pixel_mean": model_input.mean,
+            "pixel_std": model_input.std,
+        },
         "device_description": ort_runtime::describe_device_request(options.device),
         "os": std::env::consts::OS,
         "arch": std::env::consts::ARCH,
@@ -1004,7 +1073,7 @@ fn run_runtime_report(options: &RuntimeOptions) -> Result<()> {
             .to_rgb8();
         let decode_ms = milliseconds(started.elapsed());
         let started = Instant::now();
-        let pixels = preprocess(&photo);
+        let pixels = preprocess(&photo, &model_input);
         let preprocess_ms = milliseconds(started.elapsed());
         let (width, height) = photo.dimensions();
         let mut image_report = json!({
@@ -1040,22 +1109,22 @@ fn run_runtime_report(options: &RuntimeOptions) -> Result<()> {
 
         if let (Some(features), Some(decoder)) = (&features, sessions.get_mut(POINT_DECODER)) {
             for (set_index, set) in prompt_sets(entry)?.iter().enumerate() {
-                let (coords, labels) = set.model_inputs();
+                let (coords, labels) = set.model_inputs(&model_input);
                 let started = Instant::now();
                 let output = run_point_decoder(decoder, features, &coords, &labels)?;
                 let decode_ms = milliseconds(started.elapsed());
                 if shape_check.is_none() {
                     let expected = &export_report["graphs"][POINT_DECODER]["outputs"];
                     let observed = &output.shapes;
-                    let matches = observed["mask_logits"]
-                        == [1, 4, LOW_RES_MASK_SIZE as i64, LOW_RES_MASK_SIZE as i64]
+                    let mask_side = low_res_mask_size as i64;
+                    let matches = observed["mask_logits"] == [1, 4, mask_side, mask_side]
                         && observed["iou_scores"] == [1, 4]
                         && observed["object_score_logits"] == [1, 1];
                     shape_check = Some(json!({
                         "status": if matches { "passed" } else { "failed" },
                         "observed": observed,
                         "exported_specification": expected,
-                        "required": { "mask_logits": [1, 4, 288, 288], "iou_scores": [1, 4], "object_score_logits": [1, 1] },
+                        "required": { "mask_logits": [1, 4, mask_side, mask_side], "iou_scores": [1, 4], "object_score_logits": [1, 1] },
                     }));
                 }
                 if first_image && set_index == 0 {
@@ -1085,7 +1154,7 @@ fn run_runtime_report(options: &RuntimeOptions) -> Result<()> {
                         let started = Instant::now();
                         let mask = upsample_to_mask(
                             &token_logits(&output, token),
-                            LOW_RES_MASK_SIZE,
+                            plane_side(output.mask_logits.len(), 4),
                             width,
                             height,
                         );
@@ -1268,7 +1337,7 @@ fn run_runtime_report(options: &RuntimeOptions) -> Result<()> {
     report["operator_placement"] = json!({ "status": "unavailable", "reason": "not profiled yet" });
     write_report(&options.out, &report)?;
     if let Some(profile_dir) = &options.profile_dir {
-        report["operator_placement"] = profile_graphs(options, profile_dir)?;
+        report["operator_placement"] = profile_graphs(options, &model_input, profile_dir)?;
     } else {
         report["operator_placement"] =
             json!({ "status": "unavailable", "reason": "no --profile-dir" });
@@ -1285,10 +1354,14 @@ fn write_report(path: &Path, report: &Value) -> Result<()> {
     Ok(())
 }
 
-fn profile_graphs(options: &RuntimeOptions, profile_dir: &Path) -> Result<Value> {
+fn profile_graphs(
+    options: &RuntimeOptions,
+    model_input: &ModelInput,
+    profile_dir: &Path,
+) -> Result<Value> {
     let device_tag = options.device_text.replace(':', "_");
     let mut placement = json!({});
-    let pixels = vec![0.0f32; 3 * IMAGE_SIZE * IMAGE_SIZE];
+    let pixels = vec![0.0f32; 3 * model_input.image_size * model_input.image_size];
     let path = |name: &str| options.onnx_dir.join(format!("{name}.onnx"));
     let prefix = |name: &str| profile_dir.join(format!("{name}_{device_tag}"));
     let wanted = |name: &str| options.profile_graphs.iter().any(|n| n == name);

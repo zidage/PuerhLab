@@ -850,6 +850,15 @@ license of each model; a license that does not permit commercial use excludes th
 | E5 | Only if E2 is not sufficient: compare guided-filter upsampling of a soft matte (the Apple method) with the SM1 projection matte (section 8.15, method (d)). | Which edge stage is robust on textured backgrounds? |
 | E6 | Write one table per task (Subject, Sky, People parts, object click): model, latency, file size, license, quality, recommendation. | The user decides the revision of D2 and the interaction set. SM2 and later phases are replanned after that decision. |
 
+Reports of the steps are in [`ai_mask_candidate/`](ai_mask_candidate/README.md).
+
+- E1 (2026-10-19, [report](ai_mask_candidate/e1_sam2_1_point_box_evaluation.md)): SAM 2.1
+  removes the grid holes in all four sizes (largest grid energy 0.04 to 0.11, EfficientSAM3 0.54)
+  and gives the whole person on the `DSC00674` close-up box. One point still selects a part (E4).
+  DirectML encoder warm p50: tiny 76 ms, small 87 ms, base plus 161 ms, large 322 ms; decoder
+  about 10.5 ms. Peak dedicated GPU memory 1.36 to 3.10 GB. Apache-2.0. Recommendation: tiny,
+  with base plus as the quality alternative. The user review is open.
+
 ---
 
 ## 9. Outline phases
