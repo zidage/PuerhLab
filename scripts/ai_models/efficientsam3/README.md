@@ -78,7 +78,19 @@ $PY scripts/ai_models/efficientsam3/compare_onnx_outputs.py --repository $REPO \
 $PY scripts/ai_models/efficientsam3/refine_edges_prototype.py \
   --onnx-dir build/tmp/sm1/onnx/efficientvit --photos build/tmp/sm1/photos \
   --prompts build/tmp/sm1/prompts.json --out-dir build/tmp/sm1/refine
+
+# Quality set (#449): stretch, letterbox, and dual encoder preprocessing
+$PY scripts/ai_models/efficientsam3/compare_preprocessing.py \
+  --onnx-dir build/tmp/sm1/onnx/efficientvit --photos build/tmp/sm1/quality/photos \
+  --prompts build/tmp/sm1/quality/prompts.json \
+  --out-dir build/tmp/sm1/quality/preprocess/efficientvit
 ```
+
+`refine_edges_prototype.py` writes four masks per prompt: (a) bilinear, (b) the gray guided
+filter, (c) a second encoder pass on a rectangle around the subject when the rectangle covers less
+than half of the photo, and (d) a soft projection matte in a band around the (c) edge. The
+`rectangle_iou` value in `refine_timings.json` is the IoU of (a) and (c): the quality cost of the
+whole-image encoder input for small subjects (plan section 8.6, cases 5 and 6).
 
 ```powershell
 # Rust measurement program (PowerShell, Windows). Use --device coreml on macOS.
@@ -91,6 +103,7 @@ cmd /c script\cargo_msvc.cmd build --release --example segmentation_runtime_repo
   --tokenizer ..\..\build\tmp\sm1\tokenizer\tokenizer.json `
   --overlay-dir ..\..\build\tmp\sm1\overlays\directml --profile-dir ..\..\build\tmp\sm1\profiles `
   --out ..\..\build\tmp\sm1\runtime\windows_directml.json
+# Add --overlay-max-edge 2048 to write smaller overlay images of 40 MP photos.
 
 # gRPC round trip against a running sidecar (alcedo_mind --port 50581)
 .\target\release\examples\segmentation_runtime_report.exe ping `

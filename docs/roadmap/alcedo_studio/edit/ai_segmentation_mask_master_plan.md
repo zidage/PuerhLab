@@ -596,8 +596,7 @@ tokens; the host selects the masks as `MaskDecoder.forward` does. The Rust progr
 model preprocessing, the prompt mapping, the mask selection, the bilinear upsampling, and the CLIP
 BPE tokens, and compares its masks with the PyTorch masks.
 
-**Explicitly unimplemented items:** 12-photo quality set and user review (#449); rectangle-crop IoU
-of cases 5 and 6 (#449); Ping with the C++ client, GPU memory, 40 MP photo (#453); a correct Core ML
+**Explicitly unimplemented items:** user review of the quality set (#449); Ping with the C++ client, GPU memory, 40 MP photo (#453); a correct Core ML
 configuration (#450); text path with one shared image embedding (#452).
 
 **Primary success call chain:**
@@ -668,11 +667,58 @@ Mul 7, Reshape 3, Equal 1, OneHot 1, Where 1), 6.4 ms of kernel time in two runs
 (production): `point_encoder` 72 Core ML and 50 CPU nodes, `point_decoder` 56 and 220,
 `text_encoder` 30 and 42. The Core ML detector profile did not finish in 30 minutes.
 
-**Quality review (user result per case):** not done (#449). Developer observation on the three
-sample photos: the three variants give similar masks; all miss a striped sleeve in one box prompt.
+**Quality review (user result per case):** user result not recorded yet (#449). The quality set has
+14 user photos in `build/tmp/sm1/quality/` (prompts in `quality/prompts.json`, 48 point and box
+prompts, 28 text prompts). No panorama (case 9): the user removed it from the set on 2026-10-19.
+Case 7 uses `DSC00674.jpg` (ISO 1250, visible grain at 100 percent) as a weak low-light substitute.
+Two extra hard photos: `P1024439.jpg` (backlit hair, microphone stand and cable in front of the
+subject) and `Nikon-D800e-raw-00007.jpg` (lupine field, mountain horizon).
 
-**Edge refinement review (user result):** not done (#449). The guided filter changes 0.04 to 0.40
-percent of the mask pixels and takes 16 to 188 ms at up to 1800 x 1200 in Python.
+| Case | Photo | Developer observation (EfficientViT-M; RepViT-M and TinyViT-M are similar unless stated) |
+| --- | --- | --- |
+| 1 | `DSC_1535.jpg` | Box and three points: whole person. One torso point: suit only. Text `person`: the subject and one pedestrian; `hair` correct. |
+| 2 | `DSC00326.jpg` | Box: coarse edge and holes in the legs. The rectangle pass gives a clean body with legs. Text `person` and `hair` correct. |
+| 3 | `DSC_1188.jpg` | Box and two points: whole squirrel. One body point misses the tail. Text `squirrel`: no detection (top score 0.03). |
+| 4 | `DSC00527.jpg` | Sky point: whole sky, the tree horizon is coarse. Tree point: one tree. Text `sky` correct; `tree` no detection; `person` finds 1 of about 30 people. |
+| 5 | `2088064441.jpg` | Box: person and board as one blob. Rectangle IoU (box) 0.661 EfficientViT-M, 0.663 RepViT-M, 0.635 TinyViT-M; the rectangle pass is clearly better. |
+| 6 | `DSC00728.jpg` | Box: balloon with a wrong edge. Rectangle IoU (box) 0.800 EfficientViT-M, 0.791 RepViT-M, 0.826 TinyViT-M; the rectangle pass gives the correct outline. Sky point: sky with a gap above the mountains and a false patch on the cliff with grid artifacts. |
+| 7 | `DSC00674.jpg` | Head-and-shoulders close-up. Box and points fail in all three variants: the face is left out and the mask has grid holes. Letterbox input fixes the box prompt. Text `person` and `hair` correct. |
+| 8 | `5761824892.jpg` (45.6 MP) | Box: whole car. Kayak point correct. Text `car` correct; `kayak` and `tree` no detection. |
+| 10 | `DSC00936.jpg` | Box and points: whole person; the edge is about 20 px outside the body, and the rectangle pass and the matte correct it. |
+| 11 | `DSC00562.jpg` | One duck correct. Three duck points: ducks and the hedge behind them. Text `duck`: no detection; `building`: 10 buildings, correct. |
+| 12 | `DSC00602.jpg` (42.3 MP) | Box: tram, ragged bottom edge near the shadow. Text `tram`: no detection (top score 0.23). |
+| extra | `DSC_1456.jpg` | Car box and point correct. Text `car` correct; `person` finds 1 of many pedestrians. |
+| extra | `P1024439.jpg` | Box and three points: bassist with the bass. Text `person`: both musicians. The rectangle pass loses part of the right arm. |
+| extra | `Nikon-D800e-raw-00007.jpg` | Sky point: empty mask (EfficientViT-M), sky with grid artifacts in the clouds (RepViT-M), correct (TinyViT-M). Rock point: the whole lupine field. Text `sky` and `mountain` correct; `flower` no detection. |
+
+Findings across the set:
+
+- The point and box decoder often shows a regular grid of holes and islands (the 72 x 72 embedding
+  grid) on large or low-contrast regions, in all three variants and on CPU and DirectML.
+- Encoder preprocessing (`compare_preprocessing.py`): letterbox input (aspect ratio kept, gray
+  padding) fixes the close-up portrait and the Nikon sky, but makes some single-point prompts worse
+  (`DSC_1535` torso, car points). "Dual" (both encoder passes, the mask with the higher decoder IoU
+  score) picks the better input in most prompts, but not for the close-up hair point.
+- A second decoder pass with the selected logits as `mask_input` makes single-point masks smaller
+  or wrong on this model. It is not recommended.
+- The text path is the most reliable path for people, hair, sky, buildings, and mountains. It
+  misses animals, ducks, flowers, trees, trams, kayaks, and most people in crowds at the 0.5 score
+  threshold.
+
+**Edge refinement review (user result):** user result not recorded yet (#449).
+`refine_edges_prototype.py` compares (a) bilinear, (b) the gray guided filter (radius 8, eps 1e-3),
+(c) a rectangle pass, and (d) a projection matte:
+
+- (b) changes 0.00 to 1.04 percent of the mask pixels on the quality set; the change is not visible
+  on hair or fur.
+- (c) encodes a square of the source photo around the subject when the square covers less than half
+  of the photo. It gives the largest quality gain for small and medium subjects (cases 2, 5, 6, 10).
+  It does not change D7: the whole photo is still the first input.
+- (d) projects each pixel color in a band of one logit cell around the (c) edge onto the line
+  between the local mean colors of the sure foreground and the sure background, then smooths the
+  result with a small color guided filter. It keeps single hairs and fur against smooth
+  backgrounds (cases 3, 7, `P1024439`). It adds speckle on textured backgrounds such as asphalt
+  (case 1, shoes). The Python prototype takes 0.04 to 12 s per mask on the CPU at 4096 pixels.
 
 **Ping results** (Rust tonic client, 1000 calls, Windows loopback): persistent channel p50 0.20,
 p95 0.32, maximum 0.60 ms; new channel per call p50 0.52, p95 13.4, maximum 26.6 ms.
@@ -693,7 +739,9 @@ p95 0.32, maximum 0.60 ms; new channel per call p50 0.52, p95 13.4, maximum 26.6
 **Recommendations and user decisions:** recommendations are in #454. No user decision yet.
 
 **Evidence path:** `build/tmp/sm1/` on the Windows machine: `inspect/`, `onnx/`, `compare*/`,
-`runtime/`, `profiles*/`, `overlays/`, `refine/`, `variant_contact_sheet.png`.
+`runtime/`, `profiles*/`, `overlays/`, `refine/`, `variant_contact_sheet.png`, and `quality/`
+(photos, prompts, runtime reports, overlays and contact sheets per variant, `preprocess/`, `refine/`,
+`review.html`).
 
 **Remaining defects or unavailable platforms:**
 

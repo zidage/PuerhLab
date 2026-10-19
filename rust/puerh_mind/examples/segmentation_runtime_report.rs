@@ -65,7 +65,7 @@ fn main() -> Result<()> {
         "ping" => run_ping_report(&PingOptions::from_map(&options)?),
         _ => bail!(
             "usage: segmentation_runtime_report runtime --onnx-dir DIR --device DEVICE --photos DIR \
-             --prompts FILE --out FILE [--reference-masks DIR] [--overlay-dir DIR] [--tokenizer FILE] \
+             --prompts FILE --out FILE [--reference-masks DIR] [--overlay-dir DIR] [--overlay-max-edge N] [--tokenizer FILE] \
              [--encoder-runs N] [--decoder-runs N] [--profile-dir DIR] \n             [--session-settings production|coreml-mlprogram] [--profile-graphs NAME,NAME] [--graph-devices NAME=DEVICE,...]\n\
              segmentation_runtime_report ping --endpoint URL --out FILE [--calls N]"
         ),
@@ -179,6 +179,8 @@ struct RuntimeOptions {
     out: PathBuf,
     reference_masks: Option<PathBuf>,
     overlay_dir: Option<PathBuf>,
+    /// Long edge of the overlay images; 0 keeps the photo size.
+    overlay_max_edge: u32,
     tokenizer: Option<PathBuf>,
     profile_dir: Option<PathBuf>,
     profile_graphs: Vec<String>,
@@ -206,6 +208,7 @@ impl RuntimeOptions {
             out: required(options, "out")?.into(),
             reference_masks: options.get("reference-masks").map(PathBuf::from),
             overlay_dir: options.get("overlay-dir").map(PathBuf::from),
+            overlay_max_edge: parse_count(options, "overlay-max-edge", 0)? as u32,
             tokenizer: options.get("tokenizer").map(PathBuf::from),
             profile_dir: options.get("profile-dir").map(PathBuf::from),
             graph_devices: match options.get("graph-devices") {
@@ -478,9 +481,22 @@ fn write_overlay(
     mask: &GrayImage,
     points: &[(f32, f32, i32)],
     boxes: &[[f32; 4]],
+    max_edge: u32,
     path: &Path,
 ) -> Result<()> {
-    let mut overlay: RgbImage = photo.clone();
+    let (photo_width, photo_height) = photo.dimensions();
+    let long_edge = photo_width.max(photo_height);
+    let (mut overlay, mask) = if max_edge > 0 && long_edge > max_edge {
+        let scale = max_edge as f64 / long_edge as f64;
+        let width = ((photo_width as f64 * scale).round() as u32).max(1);
+        let height = ((photo_height as f64 * scale).round() as u32).max(1);
+        (
+            image::imageops::resize(photo, width, height, FilterType::Triangle),
+            image::imageops::resize(mask, width, height, FilterType::Triangle),
+        )
+    } else {
+        (photo.clone(), mask.clone())
+    };
     for (pixel, coverage) in overlay.pixels_mut().zip(mask.pixels()) {
         if coverage[0] > 127 {
             for channel in 0..3 {
@@ -1108,6 +1124,7 @@ fn run_runtime_report(options: &RuntimeOptions) -> Result<()> {
                         mask,
                         &set.points,
                         &set.boxes,
+                        options.overlay_max_edge,
                         &dir.join(format!("{stem}__{}.png", set.name)),
                     )?;
                 }
@@ -1215,6 +1232,7 @@ fn run_runtime_report(options: &RuntimeOptions) -> Result<()> {
                         &union_mask,
                         &[],
                         &[],
+                        options.overlay_max_edge,
                         &dir.join(format!("{stem}__text_{}.png", text.replace(' ', "_"))),
                     )?;
                 }
