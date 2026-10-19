@@ -964,6 +964,17 @@ auto AppTheme::editorListFavoriteActiveOnSelectedColor() const -> QColor {
   return editorListSelectedInkColor();
 }
 
+auto AppTheme::filmstripSelectedFillColor() const -> QColor {
+  // Light gray: clearly lifted from the card surface, but darker than the bone well of the
+  // editing tile, so a selected tile never reads as the open image.
+  return Blend(cardSurfaceColor(), textMutedColor(), 0.5);
+}
+
+auto AppTheme::thumbnailCaptionBarColor() const -> QColor {
+  // Deep base under light caption text, below the filmstrip image.
+  return WithAlpha(bgDeepColor(), 200);
+}
+
 auto AppTheme::scopeGridColor() const -> QColor {
   return Blend(bgDeepColor(), textMutedColor(), 0.32);
 }
@@ -1150,7 +1161,7 @@ auto AppTheme::overlayColor() const -> QColor { return GetTheme(current_theme_in
 auto AppTheme::panelRadius() const -> int { return GetTheme(current_theme_index_).panel_radius; }
 
 // ── Design tokens — structural (theme-invariant) ───────────────────────────
-// Values are the canonical VI contract documented in DESIGN.md. Literal
+// Values are the canonical VI specification documented in DESIGN.md. Literal
 // getters keep a single source of truth shared by QML and (future) QWidget
 // consumers; do not duplicate these numbers in feature QML.
 auto AppTheme::controlRadius() const -> int { return 10; }

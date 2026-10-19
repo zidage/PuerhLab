@@ -559,7 +559,7 @@ class EditorSessionController final : public QObject, public IEditorAdjustmentSu
   qulonglong                      session_generation_        = 0;
   alcedo::EditorSessionState      session_state_             = alcedo::EditorSessionState::NoImage;
   bool                            filmstrip_collapsed_       = false;
-  double                          filmstrip_expanded_height_ = 128.0;
+  double                          filmstrip_expanded_height_ = 168.0;
   double                          filmstrip_scroll_position_ = 0.0;
   // Phase 6C-7: cached adjustment snapshot for QML panel loading.
   mutable QVariantMap             adjustment_snapshot_;

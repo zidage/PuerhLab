@@ -252,6 +252,8 @@ parallel palette to satisfy the policy.
 | **List favorite active** | **`editorListFavoriteActiveColor`** | **Starred glyph on sunken rows** (existing, localized `accentColor` use) |
 | **List favorite idle on selected** | **`editorListFavoriteIdleOnSelectedColor`** | **Unstarred glyph inverted on the light well** |
 | **List favorite active on selected** | **`editorListFavoriteActiveOnSelectedColor`** | **Starred glyph inverted on the light well** (full ink) |
+| Filmstrip selected fill | `filmstripSelectedFillColor` | Light gray well of a filmstrip tile that is in the Library selection but not open in the editor (`cardSurfaceColor` blended 50% to `textMutedColor`) |
+| Thumbnail caption bar | `thumbnailCaptionBarColor` | `bgDeepColor` (alpha 200) caption under the file name and stars, below a filmstrip thumbnail image |
 
 **Monochrome inverted list selection:** dense catalogs (the LUT browser first) keep a
 black-and-white row language — sunken `bgBaseColor` track, light
@@ -288,6 +290,25 @@ current sort order draw a 1 px `graphSelectionOutlineColor` outline
 keyboard focus use the quiet `buttonHoveredFillColor` well. Tiles sit inside a
 sunken `bgBaseColor` well with `spaceXs` gaps. Selecting or starring a tile
 never resets the tile rows or moves the scroll position.
+
+**Editor filmstrip tiles:** the filmstrip shares the Library selection, and a
+tile has two independent states. The **editing** tile (the image that the
+editor shows) uses the `editorListSelectedFillColor` well and a 1 px
+`editorListSelectedInkColor` thumbnail frame. A **selected** tile (in the
+Library selection, not open) uses the `filmstripSelectedFillColor` light gray
+well and the normal `dividerColor` frame. Editing wins when both apply. A click
+in the Library changes only the selected state; opening an image from the
+strip (click, Left/Right) also makes it the only selected image, so keyboard
+navigation leaves one highlighted tile. The thumbnail fills the tile with a
+`spaceXs` inset. The frame holds the image and, below it, a fixed two-line
+`thumbnailCaptionBarColor` caption, so the caption never covers the photo. A
+rated image shows its five stars (`★`/`☆`, `dataFontFamily`) on the upper line,
+right-aligned; the file name (`textColor`, caption size, middle elision) uses
+the full width of the lower line. The caption keeps both lines for an unrated
+image, so every image in the strip has the same size. The tile width fits a 3:2
+image to the image height. The dock minimum and default height is 168 px
+(`EditorFilmstrip.minExpandedHeight`, `kFilmstripExpandedHeightMin`), which
+gives an image of about 80 px. There is no separate rating badge.
 
 **Monochrome segmented controls (family):** four chrome sites share one language:
 

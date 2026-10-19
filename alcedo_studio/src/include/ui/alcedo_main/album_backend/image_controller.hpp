@@ -113,6 +113,9 @@ class ImageController final : public QObject {
 
  signals:
   void ImageRatingsFinished(const QVariantMap& result);
+  // QML Connections maps a handler onFoo to the signal foo, so a signal that starts with an
+  // uppercase letter needs a lowercase twin for QML.
+  void imageRatingsFinished(const QVariantMap& result);
   /// StartDeleteImages accepted the delete of @p elementIds. Emitted on the UI thread before the
   /// worker starts, so a receiver can close what must not be open while the images are deleted.
   void DeleteImagesStarting(const QVariantList& elementIds);

@@ -274,14 +274,16 @@ TEST(EditorWorkspaceNavigationQmlTest, MissingLastImageFallsBackToEmptyEditor) {
   EXPECT_EQ(router->property("lastImageId").toInt(), 0);
 }
 
-TEST(EditorWorkspaceNavigationQmlTest, MissingLastImageOpensFirstLibraryImage) {
+// A Library filter removed the last image: the editor opens with no image,
+// even when the filtered list has other images.
+TEST(EditorWorkspaceNavigationQmlTest, FilteredOutLastImageOpensEmptyEditorNotFirstLibraryImage) {
   EditorWorkspaceNavigationQmlHarness harness;
   ASSERT_NE(harness.window, nullptr)
       << "root=" << (harness.root_object ? harness.root_object->metaObject()->className() : "none")
       << " warnings=" << harness.warnings.join('\n').toStdString();
   ASSERT_TRUE(harness.warnings.isEmpty()) << harness.warnings.join('\n').toStdString();
 
-  auto* editor = harness.button(QStringLiteral("editorNavButton"));
+  auto* editor  = harness.button(QStringLiteral("editorNavButton"));
   auto* session = harness.window->findChild<QObject*>(QStringLiteral("editorSession"));
   auto* first   = harness.window->findChild<QObject*>(QStringLiteral("firstImageProvider"));
   auto* router  = harness.router();
@@ -292,6 +294,33 @@ TEST(EditorWorkspaceNavigationQmlTest, MissingLastImageOpensFirstLibraryImage) {
 
   session->setProperty("lastElementId", 99);
   session->setProperty("lastImageId", 7);
+  first->setProperty("elementId", 11);
+  first->setProperty("imageId", 22);
+  ClickButton(editor);
+  ProcessEvents(20);
+  EXPECT_EQ(router->property("editorOpenCount").toInt(), 1);
+  EXPECT_EQ(router->property("lastElementId").toInt(), 0);
+  EXPECT_EQ(router->property("lastImageId").toInt(), 0);
+}
+
+TEST(EditorWorkspaceNavigationQmlTest, NoLastImageOpensFirstLibraryImage) {
+  EditorWorkspaceNavigationQmlHarness harness;
+  ASSERT_NE(harness.window, nullptr)
+      << "root=" << (harness.root_object ? harness.root_object->metaObject()->className() : "none")
+      << " warnings=" << harness.warnings.join('\n').toStdString();
+  ASSERT_TRUE(harness.warnings.isEmpty()) << harness.warnings.join('\n').toStdString();
+
+  auto* editor  = harness.button(QStringLiteral("editorNavButton"));
+  auto* session = harness.window->findChild<QObject*>(QStringLiteral("editorSession"));
+  auto* first   = harness.window->findChild<QObject*>(QStringLiteral("firstImageProvider"));
+  auto* router  = harness.router();
+  ASSERT_NE(editor, nullptr);
+  ASSERT_NE(session, nullptr);
+  ASSERT_NE(first, nullptr);
+  ASSERT_NE(router, nullptr);
+
+  session->setProperty("lastElementId", 0);
+  session->setProperty("lastImageId", 0);
   first->setProperty("elementId", 11);
   first->setProperty("imageId", 22);
   ClickButton(editor);

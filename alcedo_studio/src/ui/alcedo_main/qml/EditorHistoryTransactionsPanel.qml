@@ -226,7 +226,9 @@ Item {
                     function onModelReset() {
                         historyList.restoreScrollAfterReset()
                     }
-                    function onStateChanged() {
+                    // count NOTIFY StateChanged; a handler for StateChanged itself
+                    // does not run (upper-case name).
+                    function onCountChanged() {
                         if (historyList.restoringContentY)
                             historyList.restoreScrollAfterReset()
                     }

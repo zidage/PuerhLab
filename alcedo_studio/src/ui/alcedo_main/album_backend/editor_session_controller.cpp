@@ -40,9 +40,11 @@ constexpr auto   kFilmstripExpandedHeightKey     = "editor/filmstripExpandedHeig
 constexpr auto   kActiveAdjustmentPanelKey       = "editor/activeAdjustmentPanel";
 // Floor matches the default expanded dock (minimum scale = current proportion).
 // Ceiling is intentionally high: QML clamps live drag to ≤ 50% of the window.
-constexpr double kFilmstripExpandedHeightMin     = 128.0;
+// 168 px leaves an unobstructed thumbnail of about 80 px above the two caption lines (stars and
+// file name). A saved smaller height is raised to this value when it is read.
+constexpr double kFilmstripExpandedHeightMin     = 168.0;
 constexpr double kFilmstripExpandedHeightMax     = 4096.0;
-constexpr double kFilmstripExpandedHeightDefault = 128.0;
+constexpr double kFilmstripExpandedHeightDefault = 168.0;
 
 }  // namespace
 

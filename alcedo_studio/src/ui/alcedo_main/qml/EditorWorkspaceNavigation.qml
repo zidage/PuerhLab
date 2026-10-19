@@ -3,7 +3,7 @@ import QtQuick.Controls
 
 // Shared Library/Editor navigation for the application toolbar. The router,
 // policy, and editor re-entry lookup are explicit inputs so this component
-// owns only workspace navigation and its permission gate.
+// owns only workspace navigation and its permission check.
 //
 // VI (DESIGN.md): monochrome capsule — sunken bgBase track, sliding light
 // selected well (editorListSelectedFill), dark ink on the active segment.
@@ -67,7 +67,10 @@ Item {
     }
 
     // Requests the editor workspace and restores the last valid image when one
-    // is available. A blocked request has no router side effect.
+    // is available. When a Library filter removed the last image, the editor
+    // opens with no image: the session saves and closes that image. The first
+    // library image opens only when there is no last image. A blocked request
+    // has no router side effect.
     function openEditor() {
         if (!switchWorkspaceEnabled || !workspaceRouter
                 || currentWorkspace === "editor") {
@@ -76,9 +79,12 @@ Item {
 
         const lastElementId = editorSession ? Number(editorSession.lastElementId || 0) : 0
         const lastImageId = editorSession ? Number(editorSession.lastImageId || 0) : 0
-        if (lastElementId > 0 && lastImageId > 0
-                && editorImageIsAvailable(lastElementId)) {
-            workspaceRouter.openEditor(lastElementId, lastImageId)
+        if (lastElementId > 0 && lastImageId > 0) {
+            if (editorImageIsAvailable(lastElementId)) {
+                workspaceRouter.openEditor(lastElementId, lastImageId)
+            } else {
+                workspaceRouter.openEditor(0, 0)
+            }
             return
         }
         const first = (typeof firstEditorImage === "function") ? firstEditorImage() : null

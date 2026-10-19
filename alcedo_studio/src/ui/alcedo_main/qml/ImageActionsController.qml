@@ -26,14 +26,19 @@ Item {
     property var focusedImageTarget: ({})
     property var focusedImageInspection: ({ success: false, tiles: [] })
     // Where the shared image menu was last opened from ("library" |
-    // "editor-filmstrip"). The editor filmstrip has no multi-selection surface,
-    // so its menu always targets exactly the clicked image.
+    // "editor-filmstrip"). The editor filmstrip shows the shared Library
+    // selection, but its menu always targets exactly the clicked image.
     property string menuOrigin: "library"
     property bool _pendingEditorLibraryListSync: false
+    property bool _pendingEditorLibraryListReveal: false
+    // The workspace of the previous route, to detect a return to the editor.
+    property string _lastWorkspace: appModules.workspaceRouter
+                                    ? String(appModules.workspaceRouter.workspace || "library")
+                                    : "library"
 
     // Push the focused image element id and the pending delete targets into the
     // interaction-policy controller so its cached Q_PROPERTYs (which the inspector
-    // edit gates and the delete action bind to) re-evaluate on PolicyChanged.
+    // edit checks and the delete action bind to) re-evaluate on PolicyChanged.
     // focusedImageTarget is the reliable elementId source (focusedImageInspection
     // may omit it on the success branch).
     Binding {
@@ -285,12 +290,18 @@ Item {
         }
     }
 
-    function requestEditorLibraryListSync() {
+    // revealOpenImage: scroll the Library grid and the filmstrip to the open
+    // image when it stays. A return from the Library passes false; the strip
+    // keeps its own scroll position then.
+    function requestEditorLibraryListSync(revealOpenImage) {
         if (!appModules || !appModules.workspaceRouter
                 || String(appModules.workspaceRouter.workspace || "") !== "editor") {
             return
         }
         root._pendingEditorLibraryListSync = true
+        if (revealOpenImage !== false) {
+            root._pendingEditorLibraryListReveal = true
+        }
         Qt.callLater(root.flushEditorLibraryListSync)
     }
 
@@ -301,10 +312,14 @@ Item {
         if (!appModules || !appModules.workspaceRouter
                 || String(appModules.workspaceRouter.workspace || "") !== "editor") {
             root._pendingEditorLibraryListSync = false
+            root._pendingEditorLibraryListReveal = false
             return
         }
-        const model = appModules.library ? appModules.library.thumbnailModel : null
-        if (model && model.loading) {
+        // Compare against the accepted result only: wait while a library query
+        // or a page read runs.
+        const library = appModules.library
+        const model = library ? library.thumbnailModel : null
+        if ((library && library.queryUpdating) || (model && model.loading)) {
             return
         }
         const session = appModules.editorSession
@@ -312,62 +327,109 @@ Item {
         if (state === "Saving" || state === "Switching") {
             return
         }
+        if (!root.applyEditorLibraryListSync(root._pendingEditorLibraryListReveal)) {
+            // The close waits for the save check; a change of canSelectImage or
+            // sessionState flushes again.
+            return
+        }
         root._pendingEditorLibraryListSync = false
-        root.applyEditorLibraryListSync()
+        root._pendingEditorLibraryListReveal = false
     }
 
     // After collection or filter changes, the editor must follow the same
     // filtered library list the grid uses. Keep the open image when it is
-    // still in that list and reveal it; otherwise open the first remaining
-    // image (or the empty editor when the list is empty).
-    function applyEditorLibraryListSync() {
+    // still in that list. When the list does not contain it, close it: the
+    // editor shows no image and releases the image's resources. The close is
+    // an image switch to no image, so it waits for the same save check as a
+    // filmstrip switch (actions.canSelectImage), and the session saves the
+    // image before it closes. Returns false when the close must wait.
+    function applyEditorLibraryListSync(revealOpenImage) {
         if (!appModules || !appModules.workspaceRouter
                 || String(appModules.workspaceRouter.workspace || "") !== "editor") {
-            return
+            return true
         }
         const model = appModules.library ? appModules.library.thumbnailModel : null
         if (!model) {
-            return
+            return true
         }
         const session = appModules.editorSession
         const currentElementId = session ? Number(session.elementId || 0) : 0
-        const row = currentElementId > 0 ? root.rowInCurrentLibraryList(currentElementId) : -1
+        if (currentElementId <= 0) {
+            return true
+        }
+        const row = root.rowInCurrentLibraryList(currentElementId)
         if (row >= 0) {
-            const item = model.getItemAt ? model.getItemAt(row) : null
-            root.revealLibraryListImage(currentElementId, row)
-            if (item) {
-                root.setFocusedImage(root.selectionItemFromThumbnailRow(item))
+            if (revealOpenImage) {
+                const item = model.getItemAt ? model.getItemAt(row) : null
+                root.revealLibraryListImage(currentElementId, row)
+                if (item) {
+                    root.setFocusedImage(root.selectionItemFromThumbnailRow(item))
+                }
             }
-            return
+            return true
         }
 
-        const first = root.firstLibraryImage()
-        if (first && Number(first.elementId) > 0 && Number(first.imageId) > 0) {
-            appModules.workspaceRouter.openEditor(Number(first.elementId),
-                                                  Number(first.imageId))
-            root.revealLibraryListImage(Number(first.elementId), 0)
-            root.setFocusedImage(first)
-            return
+        if (session.actions && !Boolean(session.actions.canSelectImage)) {
+            return false
         }
-
-        if (session && session.clearLastEditedImage) {
-            session.clearLastEditedImage()
+        if (!appModules.workspaceRouter.openEditor(0, 0)) {
+            // Agent control refuses user image switches; the image stays open.
+            return true
         }
-        appModules.workspaceRouter.openEditor(0, 0)
         root.setFocusedImage(null)
+        return true
     }
 
+    // QML handlers run only for signals whose names start with a lower-case
+    // letter. The backend signals here (StateChanged, AvailabilityChanged,
+    // QueryStateChanged, RouteChanged) start with an upper-case letter, so these
+    // Connections use the change handlers of the properties that they notify.
     Connections {
         target: appModules.editorSession
         ignoreUnknownSignals: true
-        function onStateChanged() { root.flushEditorLibraryListSync() }
         function onSessionStateChanged() { root.flushEditorLibraryListSync() }
+    }
+
+    Connections {
+        target: appModules.editorSession ? appModules.editorSession.actions : null
+        ignoreUnknownSignals: true
+        function onCanSelectImageChanged() { root.flushEditorLibraryListSync() }
+    }
+
+    // Every accepted library result (filter, search, collection, or sort
+    // change) checks the open image against the new list. The editor keeps
+    // its filmstrip scroll position: no reveal.
+    Connections {
+        target: appModules.library
+        ignoreUnknownSignals: true
+        function onQueryUpdatingChanged() {
+            if (appModules.library && !appModules.library.queryUpdating) {
+                root.requestEditorLibraryListSync(false)
+            }
+            root.flushEditorLibraryListSync()
+        }
     }
 
     Connections {
         target: appModules.library.thumbnailModel
         ignoreUnknownSignals: true
         function onLoadingChanged() { root.flushEditorLibraryListSync() }
+    }
+
+    // A filter change in the Library does not sync the editor (it is hidden).
+    // When the user returns to the editor, check the open image against the
+    // filtered list.
+    Connections {
+        target: appModules.workspaceRouter
+        ignoreUnknownSignals: true
+        function onWorkspaceChanged() {
+            const workspace = String(appModules.workspaceRouter.workspace || "library")
+            const entered = workspace === "editor" && root._lastWorkspace !== "editor"
+            root._lastWorkspace = workspace
+            if (entered) {
+                root.requestEditorLibraryListSync(false)
+            }
+        }
     }
 
     function runDeleteTargets() {
