@@ -44,7 +44,7 @@ decision.
 | D2 | The model family is EfficientSAM3. The product must support text prompts and point or box prompts, subject to the SM1 results. Under re-evaluation since 2026-10-19 (section 8.16, #458). |
 | D3 | The interaction is visually rich. The exact interaction set is decided in the UI phase. |
 | D4 | The installer does not contain model weights. Alcedo Studio supplies a built-in downloader and the inference runtime. The weights come from the user-owned Cloudflare R2 bucket or from a Hugging Face repository. |
-| D5 | The model files are treated as subject to the Meta SAM License. Each published model directory contains a copy of that license. SAM 2.1 is not a replacement candidate. |
+| D5 | The model files are treated as subject to the Meta SAM License. Each published model directory contains a copy of that license. SAM 2.1 is not a replacement candidate. Changed on 2026-10-19 by the user: SAM 2.1 is a candidate of the re-evaluation (section 8.16, #458). |
 | D6 | The AI Segmentation Mask reuses the current R8 Mask logic: one R8 coverage per Mask, Union by per-pixel maximum, and Grade Mix. |
 | D7 | The model always reads the whole source image. It does not read the image after the document crop and rotation. A later crop or rotation change must not make an existing AI Mask incomplete. |
 | D8 | The analysis render disables the document crop in the same way that the Geometry panel does. See the source finding in section 5.3: the current Geometry panel mode keeps the rotation. |
@@ -756,7 +756,8 @@ p95 0.32, maximum 0.60 ms; new channel per call p50 0.52, p95 13.4, maximum 26.6
 
 **Date and status:** 2026-10-19. The user stopped the EfficientSAM3 follow-up work after the quality
 review. Closed as not planned: #449, #450, #452, #453, #454. #451 stays open because it also affects
-the CLIP encoders. The exploration of section 8.16.4 is tracked in #458.
+the CLIP encoders. The exploration of section 8.16.4 is tracked in #458. The user excluded the
+SAM3 teacher image encoder from the exploration; SAM 2.1 and the task mask models are tested.
 
 #### 8.16.1 Cause of the grid holes
 
@@ -842,10 +843,10 @@ license of each model; a license that does not permit commercial use excludes th
 
 | Step | Work | Question that it answers |
 | --- | --- | --- |
-| E1 | Run the grid probe with the SAM3 teacher image encoder (`backbone_type="sam3"`). Export the teacher encoder to ONNX and measure DirectML latency and memory. Needs the `facebook/sam3` license on Hugging Face (user action). | Does the student cause the holes? Is one teacher encoder pass per photo affordable for the click tool? |
-| E2 | Run a dichotomous image segmentation model (BiRefNet lite and BiRefNet 1024, MIT license) on the 14 photos. Measure latency, memory, file size, and the soft matte on hair and fur. Record photos with more than one subject (crowd, ducks). | Can one model supply the one-click Subject mask and the hair edge without a separate matte step? |
+| E1 | Run the point and box prompts of section 8.6 with SAM 2.1 (Hiera tiny, small, base plus, and large; 1024 px input). SAM 2.1 takes its high-resolution decoder features from the Hiera stages at stride 4 and 8, not from transposed convolutions of one low-resolution map. Record the probe metrics of section 8.16.1, the encoder and decoder latency and memory on DirectML, the file size, and the license. | Does an encoder with native multi-scale features remove the grid holes and the close-up failure? Which size is affordable? |
+| E2 | Run dichotomous image segmentation and matting models on the 14 photos: BiRefNet lite, BiRefNet 1024, and the BiRefNet high-resolution and matting variants (MIT license). Measure latency, memory, file size, and the soft matte on hair and fur. Record photos with more than one subject (crowd, ducks). | Can one model supply the one-click Subject mask and the hair edge without a separate matte step? |
 | E3 | Select and measure candidate models for Sky (semantic segmentation) and People body parts (human parsing: skin, hair, clothes, lips, eyes). | Which models give the Sky and People task masks with an acceptable license? |
-| E4 | Compute instance candidates when the tool opens (automatic mask generation with the E1 result, or a class-agnostic instance model). A click selects a candidate; the pointer position highlights it. Measure the candidate time and the single-point cases of section 8.16.2. | Does candidate selection remove the single-point ambiguity at an acceptable time? |
+| E4 | Compute instance candidates when the tool opens (the SAM 2.1 automatic mask generator with the E1 size, or a class-agnostic instance model). A click selects a candidate; the pointer position highlights it. Measure the candidate time and the single-point cases of section 8.16.2. | Does candidate selection remove the single-point ambiguity at an acceptable time? |
 | E5 | Only if E2 is not sufficient: compare guided-filter upsampling of a soft matte (the Apple method) with the SM1 projection matte (section 8.15, method (d)). | Which edge stage is robust on textured backgrounds? |
 | E6 | Write one table per task (Subject, Sky, People parts, object click): model, latency, file size, license, quality, recommendation. | The user decides the revision of D2 and the interaction set. SM2 and later phases are replanned after that decision. |
 
