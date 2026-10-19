@@ -857,6 +857,7 @@ void ImportExportHandler::FinishExport(const std::shared_ptr<std::vector<ExportR
   emit ExportStateChanged();
   emit exportStateChanged();
   emit ExportFinished(ok, fail, skippedCount);
+  emit exportFinished(ok, fail, skippedCount);
 
   status_->SetTaskState(PL_TEXT("Export complete: %1 ok, %2 failed", ok, fail), 100, false);
   status_->ScheduleIdleTaskStateReset(1800);

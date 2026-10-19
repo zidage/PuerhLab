@@ -246,6 +246,9 @@ class ImportExportHandler final : public QObject {
   /// Emitted once when an export run ends (exportInFlight becomes false), after the final
   /// counts and the error summary are published. An export that does not start emits nothing.
   void ExportFinished(int succeeded, int failed, int skipped);
+  // QML Connections maps a handler onFoo to the signal foo, so a signal that starts with an
+  // uppercase letter needs a lowercase twin for QML.
+  void exportFinished(int succeeded, int failed, int skipped);
 
  private:
   enum class ImportPhaseState { Idle, Preparing, Reading, Finalizing };

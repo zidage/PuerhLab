@@ -15,23 +15,24 @@ Item {
     property var deleteConfirmDialog: null
 
     property bool importSessionObserved: false
+    // ImageAnalysisController publishes all of its state through StateChanged, which starts
+    // with an upper-case letter, so a QML handler for it does not run. This property changes
+    // only when an analysis starts or ends.
+    readonly property bool imageAnalysisRunning: !!appModules.imageAnalysis
+                                                 && appModules.imageAnalysis.running
+
+    onImageAnalysisRunningChanged: {
+        if (!root.imageAnalysisRunning
+                && root.imageActionsController
+                && root.imageActionsController.analysisResultTouchesFocusedImage()) {
+            root.imageActionsController.refreshFocusedImageInspection()
+        }
+    }
 
     Connections {
         target: languageManager
         function onEffectiveLanguageCodeChanged() {
             if (root.imageActionsController) {
-                root.imageActionsController.refreshFocusedImageInspection()
-            }
-        }
-    }
-
-    Connections {
-        target: appModules.imageAnalysis
-        ignoreUnknownSignals: true
-        function onStateChanged() {
-            if (!appModules.imageAnalysis.running
-                    && root.imageActionsController
-                    && root.imageActionsController.analysisResultTouchesFocusedImage()) {
                 root.imageActionsController.refreshFocusedImageInspection()
             }
         }
@@ -59,24 +60,18 @@ Item {
                 root.host.showSnackbar(appModules.project.serviceMessage)
             }
         }
-        function onServiceStateChanged() {
-            if (root.host) {
-                root.host.updateWelcomeDialogVisibility()
-            }
-        }
+        // The welcome visibility rule reads projectEntered and the launch state
+        // (ProjectLaunchController), not serviceReady or projectLoading.
         function onProjectEnteredChanged() {
             if (root.host) {
                 root.host.updateWelcomeDialogVisibility()
             }
         }
-        function onAcceleratorPreparationStateChanged() {
+        // acceleratorPreparing NOTIFY AcceleratorPreparationStateChanged. A handler for that
+        // signal itself does not run (upper-case name).
+        function onAcceleratorPreparingChanged() {
             if (root.host && !appModules.project.acceleratorPreparing) {
                 root.host.requestStartupPreview()
-            }
-        }
-        function onProjectLoadStateChanged() {
-            if (root.host) {
-                root.host.updateWelcomeDialogVisibility()
             }
         }
     }

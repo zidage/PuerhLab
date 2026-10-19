@@ -162,6 +162,37 @@ class RecordingEditorSessionBackend final : public IEditorSessionBackend {
       ++blocked_create_count_;
       return Rejected("Version create blocked");
     }
+    if (async_version_ops_) {
+      // EditorSessionService answers with SaveStarted and publishes the terminal result
+      // through the result observer when the save checkpoint ends.
+      pending_create_name_ = std::move(display_name);
+      pending_task_id_     = ++next_task_id_;
+      auto result          = Accepted("Save started");
+      result.kind          = EditorSessionResultKind::SaveStarted;
+      result.task_id       = pending_task_id_;
+      return result;
+    }
+    ApplyCreateRootVersion(std::move(display_name));
+    return Accepted("Root Version created");
+  }
+
+  /// Ends the pending async CreateRootVersion: publishes the terminal result through the result
+  /// observer, as EditorSessionService does. A success then creates the Version and changes the
+  /// history; a failure changes nothing.
+  void CompletePendingCreateRootVersion(bool success, const char* message) {
+    auto result = Accepted(message);
+    result.kind = success ? EditorSessionResultKind::SaveFinished : EditorSessionResultKind::Failed;
+    result.task_id = pending_task_id_;
+    NotifyResult(result);
+    if (success) {
+      ApplyCreateRootVersion(std::move(pending_create_name_));
+    }
+    pending_create_name_.clear();
+  }
+
+  void SetAsyncVersionOps(bool async) { async_version_ops_ = async; }
+
+  void ApplyCreateRootVersion(std::string display_name) {
     const auto id = StableId(next_version_id_++);
     for (auto& version : snapshot_.versions) version.active = false;
     snapshot_.versions.push_back(MakeVersion(id, std::move(display_name), std::nullopt, true));
@@ -173,7 +204,6 @@ class RecordingEditorSessionBackend final : public IEditorSessionBackend {
     last_created_id_            = id;
     ++create_count_;
     NotifyHistoryChange();
-    return Accepted("Root Version created");
   }
 
   auto BranchFromCommit(const commit_hash_t& commit_id, std::string display_name)
@@ -617,6 +647,10 @@ class RecordingEditorSessionBackend final : public IEditorSessionBackend {
   int                                    discard_count_         = 0;
   int                                    cancel_recovery_count_ = 0;
   bool                                   block_version_ops_     = false;
+  bool                                   async_version_ops_     = false;
+  std::string                            pending_create_name_;
+  std::uint64_t                          next_task_id_          = 500;
+  std::uint64_t                          pending_task_id_       = 0;
   bool                                   fail_node_commands_    = false;
   int                                    blocked_create_count_  = 0;
   int                                    blocked_rename_count_  = 0;
@@ -855,6 +889,17 @@ class RailQmlFixture : public ::testing::Test {
     };
     if (window_ != nullptr) visit(window_->contentItem());
     return delegates;
+  }
+
+  /// Processes events until @p condition holds. Returns the last result, so a gtest assertion
+  /// reports a timeout (QTRY_* returns from the test without a gtest failure).
+  template <class Condition>
+  auto WaitFor(Condition&& condition, int timeout_ms = 2000) -> bool {
+    QDeadlineTimer deadline{timeout_ms};
+    while (!condition() && !deadline.hasExpired()) {
+      ProcessEvents();
+    }
+    return condition();
   }
 
   void WaitForName(const QString& object_name, int timeout_ms = 8000) {

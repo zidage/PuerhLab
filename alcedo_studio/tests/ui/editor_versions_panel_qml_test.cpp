@@ -583,6 +583,63 @@ TEST_F(EditorVersionsPanelQmlTest, PendingCreateDraftClosesWhenHistoryModelProje
   EXPECT_FALSE(page->property("draftVisible").toBool());
 }
 
+// EditorSessionController publishes the terminal result of an async Version create through
+// HistoryOperationFinished, a signal that starts with an upper-case letter. The panel reads it
+// through lastHistoryResult.
+TEST_F(EditorVersionsPanelQmlTest, AsyncCreateSuccessClosesDraftAndReleasesSubmitLock) {
+  ASSERT_NE(window_, nullptr) << warnings_.join('\n').toStdString();
+  OpenVersionsPage();
+  auto* page = Find(QStringLiteral("editorVersionsPageBody"));
+  ASSERT_NE(page, nullptr);
+  backend_.SetAsyncVersionOps(true);
+
+  // Offscreen pointer input does not reach the buttons reliably; the panel functions behind
+  // the fork-from-root button, the name field, and the accept button run the same draft.
+  ASSERT_TRUE(QMetaObject::invokeMethod(page, "openCreateVersion",
+                                        Q_ARG(QVariant, QVariant(QStringLiteral("forkRoot")))));
+  ASSERT_TRUE(WaitFor([&] { return page->property("draftVisible").toBool(); }));
+  ASSERT_TRUE(QMetaObject::invokeMethod(page, "setDraftText",
+                                        Q_ARG(QVariant, QVariant(QStringLiteral("asynclook")))));
+  ASSERT_TRUE(QMetaObject::invokeMethod(page, "commitDraft", Q_ARG(QVariant, QVariant(false))));
+
+  // SaveStarted hides the naming row and keeps the submit lock.
+  ASSERT_TRUE(WaitFor([&] { return page->property("draftSubmitPending").toBool(); }));
+  EXPECT_FALSE(page->property("draftVisible").toBool());
+  EXPECT_EQ(backend_.create_count(), 0);
+
+  backend_.CompletePendingCreateRootVersion(true, "Root Version created");
+  EXPECT_TRUE(WaitFor([&] { return !page->property("draftSubmitPending").toBool(); }));
+  EXPECT_EQ(backend_.create_count(), 1);
+  EXPECT_FALSE(page->property("draftVisible").toBool());
+}
+
+TEST_F(EditorVersionsPanelQmlTest, AsyncCreateFailureReopensDraftWithBackendMessage) {
+  ASSERT_NE(window_, nullptr) << warnings_.join('\n').toStdString();
+  OpenVersionsPage();
+  auto* page = Find(QStringLiteral("editorVersionsPageBody"));
+  ASSERT_NE(page, nullptr);
+  backend_.SetAsyncVersionOps(true);
+
+  // Offscreen pointer input does not reach the buttons reliably; the panel functions behind
+  // the fork-from-root button, the name field, and the accept button run the same draft.
+  ASSERT_TRUE(QMetaObject::invokeMethod(page, "openCreateVersion",
+                                        Q_ARG(QVariant, QVariant(QStringLiteral("forkRoot")))));
+  ASSERT_TRUE(WaitFor([&] { return page->property("draftVisible").toBool(); }));
+  ASSERT_TRUE(QMetaObject::invokeMethod(page, "setDraftText",
+                                        Q_ARG(QVariant, QVariant(QStringLiteral("failedlook")))));
+  ASSERT_TRUE(QMetaObject::invokeMethod(page, "commitDraft", Q_ARG(QVariant, QVariant(false))));
+  ASSERT_TRUE(WaitFor([&] { return page->property("draftSubmitPending").toBool(); }));
+
+  // A failed create changes no history, so only the terminal result reaches the panel.
+  backend_.CompletePendingCreateRootVersion(false, "root Version creation failed: disk full");
+  EXPECT_TRUE(WaitFor([&] { return !page->property("draftSubmitPending").toBool(); }));
+  EXPECT_EQ(backend_.create_count(), 0);
+  EXPECT_TRUE(page->property("draftVisible").toBool());
+  EXPECT_EQ(page->property("draftError").toString(),
+            QStringLiteral("root Version creation failed: disk full"));
+  EXPECT_EQ(page->property("draftText").toString(), QStringLiteral("failedlook"));
+}
+
 TEST_F(EditorVersionsPanelQmlTest, CheckoutWorksWhileDraftSubmitPending) {
   ASSERT_NE(window_, nullptr) << warnings_.join('\n').toStdString();
   OpenVersionsPage();

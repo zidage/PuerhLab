@@ -389,26 +389,27 @@ Item {
         })
     }
 
+    // The C++ signals HistoryOperationFinished and StateChanged start with an
+    // upper-case letter, so QML handlers for them do not run. These handlers use
+    // properties that the signals notify.
     Connections {
         target: root.editorSession
         ignoreUnknownSignals: true
-        function onHistoryOperationFinished() {
-            root.tryClosePendingDraft()
-        }
-        // Fallback when a terminal event is missed: re-evaluate lastHistoryResult
-        // and the projected Version list so the naming row cannot stick open.
-        function onHistoryChanged() {
+        // lastHistoryResult NOTIFY HistoryOperationFinished: the correlated result
+        // of a Version operation, including the terminal result of an async save.
+        function onLastHistoryResultChanged() {
             root.tryClosePendingDraft()
         }
     }
 
-    // historyModel.StateChanged fires after the list projection applies, which
-    // can be after editorSession.HistoryChanged listeners run — so model
-    // reflection must also listen here.
+    // activeVersionId NOTIFY StateChanged, so this handler runs on every
+    // EditorHistoryModel StateChanged. The model emits it after the list
+    // projection applies: a missed terminal result still closes the draft when
+    // the model shows the submitted Version.
     Connections {
         target: root.historyModel
         ignoreUnknownSignals: true
-        function onStateChanged() {
+        function onActiveVersionIdChanged() {
             root.tryClosePendingDraft()
         }
     }

@@ -94,6 +94,7 @@ void LibraryMutationOperations::OnDeleteImagesFinished(const QVariantMap& result
     emit ElementsDeleted(deleted);
   }
   emit DeleteTargetsFinished(result);
+  emit deleteTargetsFinished(result);
 }
 
 void LibraryMutationOperations::CloseDeletedEditorImage(const QVariantList& deleted_element_ids) {

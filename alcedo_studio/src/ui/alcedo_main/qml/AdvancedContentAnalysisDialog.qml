@@ -451,6 +451,11 @@ Dialog {
         } else {
             analysisController.StartScoreForTargets(targets, root.ratingReasonSelected)
         }
+        // The controller refuses a start (no provider, no API key, no project) with
+        // lastError and without running, so onRunningChanged does not run.
+        if (!analysisController.running) {
+            Qt.callLater(root.advanceAfterControllerStopped)
+        }
     }
 
     function advanceAfterControllerStopped() {
@@ -530,17 +535,6 @@ Dialog {
     onOpened: {
         if (analysisController) {
             analysisController.RefreshCredentialState()
-        }
-    }
-
-    Connections {
-        target: root.analysisController
-        ignoreUnknownSignals: true
-
-        function onStateChanged() {
-            if (root.startedOnce && !root.running) {
-                Qt.callLater(root.advanceAfterControllerStopped)
-            }
         }
     }
 
