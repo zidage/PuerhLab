@@ -76,6 +76,9 @@ class LibraryMutationOperations final : public QObject {
   /// A delete started by StartDeleteTargets is complete. @p result is the
   /// ImageController::DeleteImagesFinished result.
   void DeleteTargetsFinished(const QVariantMap& result);
+  // QML Connections maps a handler onFoo to the signal foo, so a signal that starts with an
+  // uppercase letter needs a lowercase twin for QML.
+  void deleteTargetsFinished(const QVariantMap& result);
 
  private:
   void                       CloseDeletedEditorImage(const QVariantList& deleted_element_ids);

@@ -537,18 +537,6 @@ Item {
     }
 
     Connections {
-        target: root.workspaceRouter
-        ignoreUnknownSignals: true
-        function onRouteChanged() {
-            if (root.workspaceRouter
-                    && String(root.workspaceRouter.workspace || "") === "editor") {
-                root.rebindThumbnailModel()
-                root.revealCurrentImageInStrip()
-            }
-        }
-    }
-
-    Connections {
         target: root.thumbnailModel
         ignoreUnknownSignals: true
         function onCountChanged() {

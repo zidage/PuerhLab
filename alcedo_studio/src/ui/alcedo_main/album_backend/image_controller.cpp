@@ -1626,6 +1626,7 @@ auto ImageController::StartSetImageRatings(const QVariantList& targetEntries, in
           }
           self->rating_batch_running_ = false;
           emit self->ImageRatingsFinished(result);
+          emit self->imageRatingsFinished(result);
         },
         Qt::QueuedConnection);
   }).detach();
