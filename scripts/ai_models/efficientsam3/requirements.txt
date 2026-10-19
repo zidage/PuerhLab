@@ -1,0 +1,22 @@
+# Python 3.12. Install the CPU build of PyTorch from its own index:
+#   python -m pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.14.1+cpu
+torchvision==0.29.1+cpu
+onnx==1.23.2
+onnxruntime==1.31.0
+onnxscript==0.7.2
+numpy==2.5.2
+pillow==12.3.0
+opencv-python==5.0.0.93
+scipy==1.18.1
+# Packages that the EfficientSAM3 repository imports.
+timm==1.0.30
+ftfy==6.1.1
+regex==2026.9.29
+iopath==0.1.10
+huggingface_hub==2.2.0
+psutil==7.2.2
+einops==0.8.2
+omegaconf==2.4.0
+pycocotools==2.0.11
+typing_extensions==4.16.0
