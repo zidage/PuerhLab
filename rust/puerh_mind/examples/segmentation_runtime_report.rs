@@ -15,6 +15,13 @@
 //! - the checks `SegmentationGraphsLoadWithProductionSessionSettings`,
 //!   `DecoderOutputShapeMatchesExportedSpecification`, and `HostTokenizerMatchesPythonBpeTokens`.
 //!
+//! `matte` mode loads `subject_matte.onnx` of `scripts/ai_models/birefnet/export_onnx.py` (one
+//! graph: pixels to a foreground alpha at the model size) with the same session settings. It
+//! measures load, first inference, and warm latency, runs every photo of the prompts file, resizes
+//! the alpha to the photo size, compares it with the PyTorch reference alpha of
+//! `scripts/ai_models/birefnet/compare_onnx_outputs.py`, and writes soft overlays and the alpha
+//! images (`RustPipelineMatteMatchesPytorchReference`, `MatteOutputShapeMatchesExportedSpecification`).
+//!
 //! `ping` mode measures the `HealthService.Ping` round trip of a running sidecar with one
 //! persistent channel and with a new channel per call (`PingLatencyIsReportedForPersistentAndPerCallChannels`).
 //!
@@ -123,11 +130,14 @@ fn main() -> Result<()> {
     let options = parse_options(args)?;
     match mode.as_str() {
         "runtime" => run_runtime_report(&RuntimeOptions::from_map(&options)?),
+        "matte" => run_matte_report(&MatteOptions::from_map(&options)?),
         "ping" => run_ping_report(&PingOptions::from_map(&options)?),
         _ => bail!(
             "usage: segmentation_runtime_report runtime --onnx-dir DIR --device DEVICE --photos DIR \
              --prompts FILE --out FILE [--reference-masks DIR] [--overlay-dir DIR] [--overlay-max-edge N] [--tokenizer FILE] \
              [--encoder-runs N] [--decoder-runs N] [--profile-dir DIR] \n             [--session-settings production|coreml-mlprogram] [--profile-graphs NAME,NAME] [--graph-devices NAME=DEVICE,...]\n\
+             segmentation_runtime_report matte --onnx-dir DIR --device DEVICE --photos DIR --prompts FILE --out FILE \
+             [--reference-alpha DIR] [--overlay-dir DIR] [--overlay-max-edge N] [--runs N] [--profile-dir DIR]\n\
              segmentation_runtime_report ping --endpoint URL --out FILE [--calls N]"
         ),
     }
@@ -1449,6 +1459,324 @@ fn profile_graphs(
         .unwrap_or_else(|e| json!({ "status": "failed", "error": format!("{e:#}") }));
     }
     Ok(placement)
+}
+
+// ---------------------------------------------------------------------------------------------
+// Matte report (#458, step E2)
+
+const SUBJECT_MATTE: &str = "subject_matte";
+
+struct MatteOptions {
+    onnx_dir: PathBuf,
+    settings: SessionSettings,
+    device_text: String,
+    device: DeviceRequest,
+    photos: PathBuf,
+    prompts: PathBuf,
+    out: PathBuf,
+    reference_alpha: Option<PathBuf>,
+    overlay_dir: Option<PathBuf>,
+    /// Long edge of the overlay and alpha images; 0 keeps the photo size.
+    overlay_max_edge: u32,
+    profile_dir: Option<PathBuf>,
+    runs: usize,
+}
+
+impl MatteOptions {
+    fn from_map(options: &BTreeMap<String, String>) -> Result<Self> {
+        let device_text = required(options, "device")?;
+        Ok(Self {
+            onnx_dir: required(options, "onnx-dir")?.into(),
+            settings: SessionSettings::parse(
+                options
+                    .get("session-settings")
+                    .map_or("production", String::as_str),
+            )?,
+            device: ort_runtime::parse_device_request(&device_text)?,
+            device_text,
+            photos: required(options, "photos")?.into(),
+            prompts: required(options, "prompts")?.into(),
+            out: required(options, "out")?.into(),
+            reference_alpha: options.get("reference-alpha").map(PathBuf::from),
+            overlay_dir: options.get("overlay-dir").map(PathBuf::from),
+            overlay_max_edge: parse_count(options, "overlay-max-edge", 0)? as u32,
+            profile_dir: options.get("profile-dir").map(PathBuf::from),
+            runs: parse_count(options, "runs", 20)?,
+        })
+    }
+}
+
+/// Runs the matte graph; returns the output shape and the alpha values.
+fn run_subject_matte(session: &mut Session, pixels: &[f32]) -> Result<(Vec<i64>, Vec<f32>)> {
+    let side = pixel_side(pixels);
+    let input = Tensor::from_array(([1usize, 3, side, side], pixels.to_vec()))
+        .map_err(|e| anyhow!("failed to build pixel tensor: {e}"))?;
+    let outputs = session
+        .run(ort::inputs!["pixel_values" => input])
+        .map_err(|e| anyhow!("subject_matte failed: {e}"))?;
+    output_f32(&outputs, "alpha")
+}
+
+/// Bilinear resize of a square alpha with `align_corners=False` to the photo size, 8 bit.
+fn upsample_alpha(alpha: &[f32], size: usize, width: u32, height: u32) -> GrayImage {
+    let scale_x = size as f32 / width as f32;
+    let scale_y = size as f32 / height as f32;
+    let source = |x: u32, scale: f32| -> (usize, usize, f32) {
+        let position = ((x as f32 + 0.5) * scale - 0.5).max(0.0);
+        let low = (position.floor() as usize).min(size - 1);
+        let high = (low + 1).min(size - 1);
+        (low, high, position - low as f32)
+    };
+    let columns: Vec<_> = (0..width).map(|x| source(x, scale_x)).collect();
+    let mut matte = GrayImage::new(width, height);
+    for y in 0..height {
+        let (y0, y1, fy) = source(y, scale_y);
+        for (x, &(x0, x1, fx)) in columns.iter().enumerate() {
+            let top = alpha[y0 * size + x0] * (1.0 - fx) + alpha[y0 * size + x1] * fx;
+            let bottom = alpha[y1 * size + x0] * (1.0 - fx) + alpha[y1 * size + x1] * fx;
+            let value = (top * (1.0 - fy) + bottom * fy).clamp(0.0, 1.0);
+            matte.put_pixel(x as u32, y, Luma([(value * 255.0).round() as u8]));
+        }
+    }
+    matte
+}
+
+/// IoU of `alpha > 0.5` and the mean absolute alpha difference against the PyTorch alpha.
+fn compare_alpha_with_reference(
+    reference_dir: Option<&Path>,
+    stem: &str,
+    matte: &GrayImage,
+) -> Value {
+    let Some(directory) = reference_dir else {
+        return json!({ "status": "unavailable", "reason": "no --reference-alpha directory" });
+    };
+    let path = directory.join(format!("{stem}.png"));
+    let reference = match image::open(&path) {
+        Ok(image) => image.to_luma8(),
+        Err(error) => {
+            return json!({ "status": "unavailable", "reason": format!("{}: {error}", path.display()) });
+        }
+    };
+    if reference.dimensions() != matte.dimensions() {
+        return json!({ "status": "failed", "reason": "reference size differs from the photo size" });
+    }
+    let iou = mask_iou(matte, &reference).unwrap_or(0.0);
+    let total: u64 = matte
+        .pixels()
+        .zip(reference.pixels())
+        .map(|(a, b)| a[0].abs_diff(b[0]) as u64)
+        .sum();
+    json!({
+        "iou": iou,
+        "mean_abs_alpha_diff": total as f64 / 255.0 / (matte.width() as f64 * matte.height() as f64),
+        "passed": iou >= REQUIRED_REFERENCE_IOU,
+    })
+}
+
+/// The photo with the soft matte blended in the overlay color, and the alpha image, at the same
+/// size (the long edge limited to `max_edge`).
+fn write_matte_images(
+    photo: &RgbImage,
+    matte: &GrayImage,
+    max_edge: u32,
+    overlay_path: &Path,
+    alpha_path: &Path,
+) -> Result<()> {
+    let (photo_width, photo_height) = photo.dimensions();
+    let long_edge = photo_width.max(photo_height);
+    let (mut overlay, matte) = if max_edge > 0 && long_edge > max_edge {
+        let scale = max_edge as f64 / long_edge as f64;
+        let width = ((photo_width as f64 * scale).round() as u32).max(1);
+        let height = ((photo_height as f64 * scale).round() as u32).max(1);
+        (
+            image::imageops::resize(photo, width, height, FilterType::Triangle),
+            image::imageops::resize(matte, width, height, FilterType::Triangle),
+        )
+    } else {
+        (photo.clone(), matte.clone())
+    };
+    for (pixel, alpha) in overlay.pixels_mut().zip(matte.pixels()) {
+        let weight = 0.55 * alpha[0] as f32 / 255.0;
+        for channel in 0..3 {
+            pixel[channel] =
+                (pixel[channel] as f32 * (1.0 - weight) + OVERLAY_COLOR[channel] * weight) as u8;
+        }
+    }
+    if let Some(parent) = overlay_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    DynamicImage::ImageRgb8(overlay)
+        .save(overlay_path)
+        .with_context(|| format!("failed to write {}", overlay_path.display()))?;
+    DynamicImage::ImageLuma8(matte)
+        .save(alpha_path)
+        .with_context(|| format!("failed to write {}", alpha_path.display()))
+}
+
+fn run_matte_report(options: &MatteOptions) -> Result<()> {
+    ort_runtime::initialize_ort_environment()?;
+    let export_report: Value = serde_json::from_str(
+        &fs::read_to_string(options.onnx_dir.join("export_report.json"))
+            .context("failed to read export_report.json")?,
+    )?;
+    let model_input = ModelInput::from_export_report(&export_report)?;
+    let size = model_input.image_size;
+    let prompts: Value = serde_json::from_str(&fs::read_to_string(&options.prompts)?)?;
+    let mut report = json!({
+        "device_request": options.device_text,
+        "session_settings": options.settings.label(),
+        "model_input": {
+            "image_size": size,
+            "pixel_mean": model_input.mean,
+            "pixel_std": model_input.std,
+        },
+        "variant": export_report["variant"],
+        "device_description": ort_runtime::describe_device_request(options.device),
+        "os": std::env::consts::OS,
+        "arch": std::env::consts::ARCH,
+        "memory_before_load": process_memory::sample(),
+        "checks": {},
+        "graphs": {},
+        "images": [],
+    });
+
+    let path = options.onnx_dir.join(format!("{SUBJECT_MATTE}.onnx"));
+    let load_check_name = if options.settings == SessionSettings::Production {
+        "SegmentationGraphsLoadWithProductionSessionSettings"
+    } else {
+        "SegmentationGraphsLoadWithNonProductionSessionSettings"
+    };
+    let started = Instant::now();
+    let mut session = match options.settings.load(&path, options.device) {
+        Ok(session) => session,
+        Err(error) => {
+            println!("[load] {SUBJECT_MATTE}: FAILED {error}");
+            report["checks"][load_check_name] =
+                json!({ SUBJECT_MATTE: { "status": "failed", "error": format!("{error:#}") } });
+            return write_report(&options.out, &report);
+        }
+    };
+    let load_ms = milliseconds(started.elapsed());
+    println!("[load] {SUBJECT_MATTE}: {load_ms:.0} ms");
+    report["checks"][load_check_name] = json!({ SUBJECT_MATTE: { "status": "passed" } });
+    report["graphs"][SUBJECT_MATTE] = json!({
+        "load_ms": load_ms,
+        "memory_after_load": process_memory::sample(),
+    });
+
+    let mut shape_check: Option<Value> = None;
+    let mut reference_failures = 0usize;
+    let mut reference_comparisons = 0usize;
+    let mut first_image = true;
+    for entry in prompts["images"].as_array().into_iter().flatten() {
+        let file = entry["file"]
+            .as_str()
+            .ok_or_else(|| anyhow!("image entry without file"))?;
+        let stem = Path::new(file)
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or(file)
+            .to_string();
+        let started = Instant::now();
+        let photo = image::open(options.photos.join(file))
+            .with_context(|| format!("failed to open {file}"))?
+            .to_rgb8();
+        let decode_ms = milliseconds(started.elapsed());
+        let started = Instant::now();
+        let pixels = preprocess(&photo, &model_input);
+        let preprocess_ms = milliseconds(started.elapsed());
+        let (width, height) = photo.dimensions();
+
+        let started = Instant::now();
+        let (shape, alpha) = run_subject_matte(&mut session, &pixels)?;
+        let inference_ms = milliseconds(started.elapsed());
+        if first_image {
+            report["graphs"][SUBJECT_MATTE]["first_inference_ms"] = json!(inference_ms);
+            let samples = time_runs(options.runs, || {
+                run_subject_matte(&mut session, &pixels).map(|_| ())
+            })?;
+            report["graphs"][SUBJECT_MATTE]["warm"] = latency_summary(&samples);
+            report["graphs"][SUBJECT_MATTE]["memory_after_inference"] = process_memory::sample();
+            let expected = [1i64, 1, size as i64, size as i64];
+            shape_check = Some(json!({
+                "alpha": shape,
+                "expected": expected,
+                "passed": shape == expected,
+            }));
+        }
+        let started = Instant::now();
+        let matte = upsample_alpha(&alpha, size, width, height);
+        let upsample_ms = milliseconds(started.elapsed());
+        let comparison =
+            compare_alpha_with_reference(options.reference_alpha.as_deref(), &stem, &matte);
+        if let Some(passed) = comparison["passed"].as_bool() {
+            reference_comparisons += 1;
+            reference_failures += (!passed) as usize;
+        }
+        let soft = alpha.iter().filter(|&&a| a > 0.05 && a < 0.95).count();
+        let foreground = alpha.iter().filter(|&&a| a > 0.5).count();
+        println!(
+            "[matte] {file} {width}x{height}: decode {decode_ms:.0} ms, preprocess {preprocess_ms:.0} ms, \
+             inference {inference_ms:.1} ms, upsample {upsample_ms:.0} ms, reference {comparison}"
+        );
+        if let Some(dir) = &options.overlay_dir {
+            write_matte_images(
+                &photo,
+                &matte,
+                options.overlay_max_edge,
+                &dir.join(format!("{stem}__subject.png")),
+                &dir.join(format!("{stem}__alpha.png")),
+            )?;
+        }
+        report["images"].as_array_mut().unwrap().push(json!({
+            "file": file, "width": width, "height": height,
+            "decode_ms": decode_ms, "preprocess_ms": preprocess_ms,
+            "inference_ms": inference_ms, "upsample_ms": upsample_ms,
+            "foreground_fraction": foreground as f64 / alpha.len() as f64,
+            "soft_fraction": soft as f64 / alpha.len() as f64,
+            "reference": comparison,
+        }));
+        first_image = false;
+    }
+    let per_photo: Vec<f64> = report["images"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .skip(1)
+        .filter_map(|i| i["inference_ms"].as_f64())
+        .collect();
+    report["graphs"][SUBJECT_MATTE]["per_photo_after_first"] = latency_summary(&per_photo);
+    report["checks"]["MatteOutputShapeMatchesExportedSpecification"] =
+        shape_check.unwrap_or_else(|| json!({ "status": "unavailable", "reason": "no photo" }));
+    report["checks"]["RustPipelineMatteMatchesPytorchReference"] = json!({
+        "required_iou": REQUIRED_REFERENCE_IOU,
+        "comparisons": reference_comparisons,
+        "below_required_iou": reference_failures,
+        "note": "Rust resize (image::imageops Triangle) and PIL bilinear resize are different implementations",
+    });
+    report["memory_after_inference"] = process_memory::sample();
+    drop(session);
+
+    report["operator_placement"] = json!({ "status": "unavailable", "reason": "not profiled yet" });
+    write_report(&options.out, &report)?;
+    if let Some(profile_dir) = &options.profile_dir {
+        let pixels = vec![0.0f32; 3 * size * size];
+        let prefix = profile_dir.join(format!(
+            "{SUBJECT_MATTE}_{}",
+            options.device_text.replace(':', "_")
+        ));
+        report["operator_placement"] = json!({
+            SUBJECT_MATTE: operator_placement(&path, options.device, options.settings, &prefix, |s| {
+                run_subject_matte(s, &pixels)?;
+                run_subject_matte(s, &pixels).map(|_| ())
+            })
+            .unwrap_or_else(|e| json!({ "status": "failed", "error": format!("{e:#}") })),
+        });
+    } else {
+        report["operator_placement"] =
+            json!({ "status": "unavailable", "reason": "no --profile-dir" });
+    }
+    write_report(&options.out, &report)
 }
 
 // ---------------------------------------------------------------------------------------------

@@ -858,6 +858,14 @@ Reports of the steps are in [`ai_mask_candidate/`](ai_mask_candidate/README.md).
   DirectML encoder warm p50: tiny 76 ms, small 87 ms, base plus 161 ms, large 322 ms; decoder
   about 10.5 ms. Peak dedicated GPU memory 1.36 to 3.10 GB. Apache-2.0. Recommendation: tiny,
   with base plus as the quality alternative. The user review is open.
+- E2 (2026-10-19, [report](ai_mask_candidate/e2_birefnet_subject_matting.md)): BiRefNet lite
+  finds the expected subject on 12 of 13 photos without a prompt (not the ducks; all salient
+  subjects in one mask) with a clean but hard hair edge. The matting variants give soft strands
+  but miss rigid objects (car, tram, balloon). The tutorial ONNX export runs out of memory on
+  DirectML; a GridSample form of `deform_conv2d` runs. DirectML warm p50: lite 218 ms (float16
+  175 ms, 3.2 GB), Swin-L 3 to 15 s (float16 351 ms), HR fails on 8 GB. MIT. User assessment: the
+  speed is not usable. User decision: only BiRefNet lite stays a candidate; the other five
+  variants are dropped. E5 and the Subject task of E6 stay open.
 
 ---
 
