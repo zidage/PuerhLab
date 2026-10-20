@@ -2,7 +2,10 @@
 
 **Issue:** #458, step E4. **Plan:** [AI Segmentation Mask master plan, section 8.16](../ai_segmentation_mask_master_plan.md#816-grid-holes-and-model-re-evaluation).
 **Date:** 2026-10-19. **Branch:** `feature/ai-segmentation-sm1-quality-review`.
-**Status:** measurements done. The user review of the sheets and the decision are open.
+**Status:** measurements done. User assessment (2026-10-20): a selection that follows the pointer
+movement (the hover highlight of sections 3 and 9) is probably not a good interaction. Step E3 now
+measures stroke selection: the user drags a short stroke inside the region, and points sampled
+along the stroke are the prompt. The user review of the sheets is open.
 
 > **Images are local only.** The images under `images/` show photos that must not be shared
 > again. They are in `.gitignore` and are not distributed with the GitHub repository. On a

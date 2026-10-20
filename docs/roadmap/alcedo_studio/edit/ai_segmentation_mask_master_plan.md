@@ -845,10 +845,10 @@ license of each model; a license that does not permit commercial use excludes th
 | --- | --- | --- |
 | E1 | Run the point and box prompts of section 8.6 with SAM 2.1 (Hiera tiny, small, base plus, and large; 1024 px input). SAM 2.1 takes its high-resolution decoder features from the Hiera stages at stride 4 and 8, not from transposed convolutions of one low-resolution map. Record the probe metrics of section 8.16.1, the encoder and decoder latency and memory on DirectML, the file size, and the license. | Does an encoder with native multi-scale features remove the grid holes and the close-up failure? Which size is affordable? |
 | E2 | Run dichotomous image segmentation and matting models on the 14 photos: BiRefNet lite, BiRefNet 1024, and the BiRefNet high-resolution and matting variants (MIT license). Measure latency, memory, file size, and the soft matte on hair and fur. Record photos with more than one subject (crowd, ducks). | Can one model supply the one-click Subject mask and the hair edge without a separate matte step? |
-| E3 | Select and measure candidate models for Sky (semantic segmentation) and People body parts (human parsing: skin, hair, clothes, lips, eyes). | Which models give the Sky and People task masks with an acceptable license? |
+| E3 | Stroke selection, like the Quick Selection tool of Photoshop: the user drags a short stroke inside the region to select. The host places 4 to 5 sample points along the stroke as positive points of the SAM 2.1 point decoder; a stroke with a modifier key gives negative points. Measure the selection quality against the E1 reference masks compared with one click (E4), the point count and spacing, add and subtract strokes, and the decoder time per stroke. Replaces the Sky and People body-part step: the Sky and People task masks are not done for now (user decision, 2026-10-20). | Does a short stroke inside the region select the intended mask without a level change? |
 | E4 | Compute instance candidates when the tool opens (the SAM 2.1 automatic mask generator with the E1 size, or a class-agnostic instance model). A click selects a candidate; the pointer position highlights it. Measure the candidate time and the single-point cases of section 8.16.2. | Does candidate selection remove the single-point ambiguity at an acceptable time? |
 | E5 | Only if E2 is not sufficient: compare guided-filter upsampling of a soft matte (the Apple method) with the SM1 projection matte (section 8.15, method (d)). | Which edge stage is robust on textured backgrounds? |
-| E6 | Write one table per task (Subject, Sky, People parts, object click): model, latency, file size, license, quality, recommendation. | The user decides the revision of D2 and the interaction set. SM2 and later phases are replanned after that decision. |
+| E6 | Write one table per task (Subject, object click, stroke selection): model, latency, file size, license, quality, recommendation. | The user decides the revision of D2 and the interaction set. SM2 and later phases are replanned after that decision. |
 
 Reports of the steps are in [`ai_mask_candidate/`](ai_mask_candidate/README.md).
 
@@ -879,7 +879,9 @@ Reports of the steps are in [`ai_mask_candidate/`](ai_mask_candidate/README.md).
   live point decoder with that hover rule, a level change by key or mouse wheel, base plus (tiny
   as the lower-memory alternative). User decision (2026-10-19): float16 is acceptable (lower
   model precision for a shorter processing time); the float16 forms of the encoder and the point
-  decoder are not measured yet. The user review is open.
+  decoder are not measured yet. User assessment (2026-10-20): a selection that follows the
+  pointer movement is probably not a good interaction; step E3 measures stroke selection
+  instead.
 
 ---
 
