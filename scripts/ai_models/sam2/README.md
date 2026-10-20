@@ -1,4 +1,4 @@
-# SAM 2.1 export and measurement tools (AI Segmentation Mask, #458 steps E1, E3, and E4)
+# SAM 2.1 export and measurement tools (AI Segmentation Mask, #458 steps E1, E3, E4, and E5)
 
 These scripts export the SAM 2.1 point and box path to ONNX, check the export against PyTorch, and
 make the evidence of the model re-evaluation. The Rust program
@@ -6,6 +6,7 @@ make the evidence of the model re-evaluation. The Rust program
 settings of the `alcedo_mind` sidecar. The reports are
 [E1: SAM 2.1 point and box prompts](../../../docs/roadmap/alcedo_studio/edit/ai_mask_candidate/e1_sam2_1_point_box_evaluation.md),
 [E3: stroke selection](../../../docs/roadmap/alcedo_studio/edit/ai_mask_candidate/e3_stroke_selection.md),
+[E5: edge stage of the stroke selection](../../../docs/roadmap/alcedo_studio/edit/ai_mask_candidate/e5_edge_stage.md),
 and
 [E4: click selection with precomputed candidates](../../../docs/roadmap/alcedo_studio/edit/ai_mask_candidate/e4_click_candidates.md);
 the plan is [AI Segmentation Mask master plan, section 8.16](../../../docs/roadmap/alcedo_studio/edit/ai_segmentation_mask_master_plan.md).
@@ -37,6 +38,9 @@ Weights, ONNX files, photos, and reports are not committed. Keep them under `bui
 | `compare_stroke_outputs.py` | E3: `StrokePromptLogitsMatchPytorchWithinTolerance`, every corrective sequence of a `strokes` report replayed with `SAM2ImagePredictor.predict` and ONNX Runtime CPU (several points, negative points, `mask_input`); with `--pad-points`, the padded prompts on both sides. |
 | `probe_strokes.py` | E3: tables of the stroke reports (first interaction, length and point count, spacing, direction, corrective sequences, decoder time, agreement with a second report). |
 | `make_stroke_sheets.py` | E3: one click, strokes, and the corrective sequences per prompt, with the strokes and points drawn. |
+| `edge_targets.json` | E5: the six people of the quality set, the start point of the first stroke, the E1 reference that bounds the simulated strokes, and the edge inspection regions (hair or hard edge). |
+| `refine_stroke_edges.py` | E5: the E3 stroke selection (SAM 2.1, ONNX Runtime CPU), a rectangle pass and a tile pass along the edge, and the edge stages bilinear, guided-filter upsampling, and the SM1 projection matte (imported from `../efficientsam3/refine_edges_prototype.py`); alpha, metrics, and sheets. |
+| `probe_edges.py` | E5: tables of `edges.json`; with `--e3-report`, `StrokePlacementMatchesE3`. |
 
 ## Graphs
 
@@ -234,4 +238,18 @@ $PY scripts/ai_models/sam2/make_stroke_sheets.py \
   --model "SAM 2.1 base plus=$E/e3/runtime/base_plus_directml.json|$E/e3/masks/base_plus" \
   --photos $E/e4/input_4096/photos --reference-masks $E/e4/input_4096/reference_masks \
   --out-dir docs/roadmap/alcedo_studio/edit/ai_mask_candidate/images/e3_strokes
+```
+
+### E5: edge stage of the stroke selection
+
+The E5 run uses the E4 input set and the E4 tiny graphs on ONNX Runtime CPU (the E3 check showed
+the same masks as DirectML). The edge stages are host computations; their CPU time is from this
+Python prototype (OpenCV and NumPy, 4 threads), not from a GPU implementation.
+
+```bash
+E=build/tmp/explore; PY="$E/venv/Scripts/python -I"
+# Selection, rectangle pass, alpha, metrics, and sheets. The sheets are in .gitignore (photos that
+# must not be shared).
+$PY scripts/ai_models/sam2/refine_stroke_edges.py --onnx-dir $E/e4/onnx_float32_batch16/tiny   --photos $E/e4/input_4096/photos --reference-masks $E/e4/input_4096/reference_masks   --targets scripts/ai_models/sam2/edge_targets.json --out-dir $E/e5/edges   --sheet-dir docs/roadmap/alcedo_studio/edit/ai_mask_candidate/images/e5_edges
+$PY scripts/ai_models/sam2/probe_edges.py --edges $E/e5/edges/edges.json   --e3-report $E/e3/runtime/tiny_directml.json --targets scripts/ai_models/sam2/edge_targets.json   --out $E/e5/probe/final.json
 ```

@@ -896,6 +896,20 @@ Reports of the steps are in [`ai_mask_candidate/`](ai_mask_candidate/README.md).
   90 MB each. `StrokePromptLogitsMatchPytorchWithinTolerance` passed (tiny 390, base plus 324
   decoder calls). Recommendation: the click stays the main entry; a stroke tool decodes once per
   stroke with 3 to 4 points and the previous mask, base plus. The user review is open.
+- E5 (2026-10-20, [report](ai_mask_candidate/e5_edge_stage.md)): E2 is not sufficient (hard hair
+  edge, speed not usable), so E5 ran on the six people of the quality set with SAM 2.1 tiny (user
+  decision: tiny, no model matrix) and the E3 stroke selection. The resolution of the coarse
+  logits limits the edge: at the 16 px logit cell of the photo pass (256 x 256 logits at the
+  4096 px input), guided-filter upsampling makes a glow of 30 to 45 px and the SM1 projection
+  matte speckles on asphalt, rock, and bricks (561 specks in 23 regions). A second encoder pass
+  at 4 px per cell fixes both: a rectangle pass helps only subjects below half of the photo; a
+  new tile pass (1024 px tiles along the edge, the photo logits as `mask_input`, tile logits only
+  within 2 photo cells of the edge) works for every size. On the tile pass, guided-filter
+  upsampling of the smoothed mask is the robust stage (6 specks, 9 to 10 px edge); the projection
+  matte is sharper (4.4 px) with 116 specks. Raw `sigmoid(logits)` is not a matte. Fine fly-away
+  strands are not captured by any variant. Tile cost: 2 to 19 encoder runs, about 0.15 to 1.5 s
+  on DirectML (estimate). Recommendation: tile pass and guided filter at commit. The user review
+  is open.
 
 ---
 

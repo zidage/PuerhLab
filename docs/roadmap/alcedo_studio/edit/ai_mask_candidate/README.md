@@ -15,5 +15,5 @@ command that makes them from the local evidence.
 | E2 | [BiRefNet one-click Subject and matting](e2_birefnet_subject_matting.md) | Measured 2026-10-19; stopped by the user; only lite kept |
 | E3 | [Stroke selection](e3_stroke_selection.md) (sample points along a stroke; replaces the Sky and People models, which are not done for now) | Measured 2026-10-20; user review open |
 | E4 | [Click selection with candidates and hover highlight](e4_click_candidates.md) | Measured 2026-10-19; user review open |
-| E5 | Edge stage | Only if E2 is not sufficient |
+| E5 | [Edge stage of the stroke selection (people)](e5_edge_stage.md) (SAM 2.1 tiny; guided-filter upsampling against the SM1 projection matte, on the photo, rectangle, and tile passes) | Measured 2026-10-20; user review open |
 | E6 | Report per tool and recommendation | Not started |

@@ -1,0 +1,70 @@
+{
+  "description": "Person selections and edge inspection regions of #458 step E5. Each target is one whole person of the SM1 quality set (build/tmp/sm1/quality/prompts.json) on the E4 input set (4096 px long edge). start: the point (normalized photo coordinates) that the first stroke goes through; reference: the E1 PyTorch box mask of base plus at the E4 input size (the region that the simulated strokes stay inside, not an edge ground truth). regions: the edge crops of the report, chosen by eye on the photos; center in normalized photo coordinates, size in pixels of the 4096 px input. kind hair: fine strands or curls, a soft edge is expected. kind hard: skin or clothing against a textured or busy background, a sharp edge is expected and every soft or isolated pixel there is an error.",
+  "targets": [
+    {
+      "file": "DSC_1535.jpg", "name": "person", "start": [0.52, 0.36],
+      "reference": "DSC_1535__person__single0.png",
+      "case": "1 portrait, curly hair, busy street; SM1 projection matte added speckle at the shoes on the asphalt",
+      "regions": [
+        {"name": "curly hair", "kind": "hair", "center": [0.50, 0.055], "size": 448},
+        {"name": "shoulder and street", "kind": "hard", "center": [0.32, 0.23], "size": 448},
+        {"name": "left shoe on asphalt", "kind": "hard", "center": [0.49, 0.87], "size": 448},
+        {"name": "right shoe on asphalt", "kind": "hard", "center": [0.66, 0.90], "size": 448}
+      ]
+    },
+    {
+      "file": "DSC00326.jpg", "name": "person", "start": [0.52, 0.72],
+      "reference": "DSC00326__person__single0.png",
+      "case": "2 portrait from behind, long wavy hair, waterfall and dark water",
+      "regions": [
+        {"name": "wavy hair", "kind": "hair", "center": [0.515, 0.655], "size": 384},
+        {"name": "left hand", "kind": "hard", "center": [0.385, 0.715], "size": 320},
+        {"name": "right hand", "kind": "hard", "center": [0.655, 0.72], "size": 320},
+        {"name": "feet on the rock", "kind": "hard", "center": [0.51, 0.865], "size": 320}
+      ]
+    },
+    {
+      "file": "DSC00674.jpg", "name": "person", "start": [0.66, 0.47],
+      "reference": "DSC00674__person__single0.png",
+      "case": "7 dim close-up portrait, ISO 1250, fine fly-away hair against a sunset",
+      "regions": [
+        {"name": "fly-away hair, top", "kind": "hair", "center": [0.40, 0.085], "size": 512},
+        {"name": "hair, left side", "kind": "hair", "center": [0.07, 0.36], "size": 512},
+        {"name": "hair, right side", "kind": "hair", "center": [0.93, 0.27], "size": 512},
+        {"name": "shoulder against the sunset", "kind": "hard", "center": [0.86, 0.73], "size": 512}
+      ]
+    },
+    {
+      "file": "DSC00936.jpg", "name": "person", "start": [0.57, 0.74],
+      "reference": "DSC00936__person__single0.png",
+      "case": "10 person against bright mist (low contrast)",
+      "regions": [
+        {"name": "head and hair", "kind": "hair", "center": [0.60, 0.675], "size": 320},
+        {"name": "left arm", "kind": "hard", "center": [0.525, 0.755], "size": 320},
+        {"name": "right hand", "kind": "hard", "center": [0.62, 0.815], "size": 320},
+        {"name": "legs in the water", "kind": "hard", "center": [0.565, 0.885], "size": 320}
+      ]
+    },
+    {
+      "file": "P1024439.jpg", "name": "bassist", "start": [0.70, 0.50],
+      "reference": "P1024439__bassist__single0.png",
+      "case": "extra hard portrait: backlit blond hair, microphone stand and cable in front of the subject, busy background",
+      "regions": [
+        {"name": "backlit ponytail", "kind": "hair", "center": [0.69, 0.30], "size": 448},
+        {"name": "arm against the leaves", "kind": "hard", "center": [0.655, 0.53], "size": 384},
+        {"name": "hand on the neck", "kind": "hard", "center": [0.845, 0.55], "size": 384},
+        {"name": "legs and cases", "kind": "hard", "center": [0.73, 0.80], "size": 384}
+      ]
+    },
+    {
+      "file": "DSC00527.jpg", "name": "kneeling woman", "start": [0.51, 0.83],
+      "reference": "DSC00527__kneeling_woman_box__single0.png",
+      "case": "4 small person (about 1 percent of the photo) on a brick path",
+      "regions": [
+        {"name": "head and scarf", "kind": "hair", "center": [0.505, 0.75], "size": 256},
+        {"name": "back and bag", "kind": "hard", "center": [0.48, 0.835], "size": 256},
+        {"name": "feet on the bricks", "kind": "hard", "center": [0.505, 0.925], "size": 256}
+      ]
+    }
+  ]
+}
