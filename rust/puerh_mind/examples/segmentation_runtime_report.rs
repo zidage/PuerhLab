@@ -22,6 +22,16 @@
 //! `scripts/ai_models/birefnet/compare_onnx_outputs.py`, and writes soft overlays and the alpha
 //! images (`RustPipelineMatteMatchesPytorchReference`, `MatteOutputShapeMatchesExportedSpecification`).
 //!
+//! `candidates` mode (#458, step E4) loads `point_encoder.onnx`, `point_decoder.onnx`, and
+//! `candidate_decoder.onnx` of `scripts/ai_models/sam2/export_onnx.py`. It computes the click
+//! candidates of each photo (the point grid of `SAM2AutomaticMaskGenerator` in batches, the
+//! predicted IoU and stability filters, and box non-maximum suppression), measures the time to the
+//! candidates, and evaluates each single-point prompt two ways: the live point decoder (one
+//! decoder run per pointer position) and the candidate levels under the pointer (the candidates
+//! that contain the point, from small to large). It compares each selection with the E1 reference
+//! mask of the intended target, and it measures whether the highlight stays the same when the
+//! pointer moves a short distance (`CandidateDecoderOutputShapeMatchesExportedSpecification`).
+//!
 //! `ping` mode measures the `HealthService.Ping` round trip of a running sidecar with one
 //! persistent channel and with a new channel per call (`PingLatencyIsReportedForPersistentAndPerCallChannels`).
 //!
@@ -131,6 +141,7 @@ fn main() -> Result<()> {
     match mode.as_str() {
         "runtime" => run_runtime_report(&RuntimeOptions::from_map(&options)?),
         "matte" => run_matte_report(&MatteOptions::from_map(&options)?),
+        "candidates" => run_candidate_report(&CandidateOptions::from_map(&options)?),
         "ping" => run_ping_report(&PingOptions::from_map(&options)?),
         _ => bail!(
             "usage: segmentation_runtime_report runtime --onnx-dir DIR --device DEVICE --photos DIR \
@@ -138,6 +149,10 @@ fn main() -> Result<()> {
              [--encoder-runs N] [--decoder-runs N] [--profile-dir DIR] \n             [--session-settings production|coreml-mlprogram] [--profile-graphs NAME,NAME] [--graph-devices NAME=DEVICE,...]\n\
              segmentation_runtime_report matte --onnx-dir DIR --device DEVICE --photos DIR --prompts FILE --out FILE \
              [--reference-alpha DIR] [--overlay-dir DIR] [--overlay-max-edge N] [--runs N] [--profile-dir DIR]\n\
+             segmentation_runtime_report candidates --onnx-dir DIR --device DEVICE --photos DIR --prompts FILE --out FILE \
+             [--targets FILE] [--reference-masks DIR] [--reference-scores FILE] [--overlay-dir DIR] [--overlay-points-per-side N] \
+             [--mask-dir DIR] [--points-per-side N,N] [--batch N] [--batch-sizes N,N] [--runs N] [--profile-dir DIR] \
+             [--score-threshold V] [--stability-threshold V] [--nms-threshold V] [--dedupe box|mask]\n\
              segmentation_runtime_report ping --endpoint URL --out FILE [--calls N]"
         ),
     }
@@ -1822,4 +1837,1119 @@ fn run_ping_report(options: &PingOptions) -> Result<()> {
     }
     fs::write(&options.out, serde_json::to_string_pretty(&report)?)?;
     Ok(())
+}
+
+// ---------------------------------------------------------------------------------------------
+// Candidate report (#458, step E4)
+
+const CANDIDATE_DECODER: &str = "candidate_decoder";
+/// The multimask tokens 1-3 of the mask decoder; `candidate_decoder.onnx` returns only these.
+const CANDIDATE_TOKENS: usize = 3;
+/// IoU against the reference above which a selection counts as the intended mask.
+const TARGET_IOU: f64 = 0.85;
+/// IoU against the highlight at the pointer centre above which a nearby highlight is the same.
+const SAME_HIGHLIGHT_IOU: f64 = 0.9;
+
+struct CandidateOptions {
+    onnx_dir: PathBuf,
+    device_text: String,
+    device: DeviceRequest,
+    photos: PathBuf,
+    prompts: PathBuf,
+    targets: Option<PathBuf>,
+    reference_masks: Option<PathBuf>,
+    reference_scores: Option<PathBuf>,
+    out: PathBuf,
+    overlay_dir: Option<PathBuf>,
+    /// The grid whose candidates the overlays show.
+    overlay_points_per_side: usize,
+    mask_dir: Option<PathBuf>,
+    /// Long edge of the evaluation masks and the overlays.
+    evaluation_max_edge: u32,
+    points_per_side: Vec<usize>,
+    batch: usize,
+    /// Batch sizes of the timing comparison on the first photo.
+    batch_sizes: Vec<usize>,
+    runs: usize,
+    score_threshold: f32,
+    stability_threshold: f32,
+    nms_threshold: f32,
+    /// Overlap measure of the duplicate removal: `box` is the box non-maximum suppression of the
+    /// upstream generator; `mask` compares the masks, so nested masks with similar boxes (a person
+    /// and the jacket) both stay.
+    dedupe_by_mask: bool,
+    level_merge_iou: f64,
+    hover_radius: f32,
+    hover_points: usize,
+    profile_dir: Option<PathBuf>,
+}
+
+fn parse_list<T: std::str::FromStr>(
+    options: &BTreeMap<String, String>,
+    key: &str,
+    default: &str,
+) -> Result<Vec<T>> {
+    options
+        .get(key)
+        .map_or(default, String::as_str)
+        .split(',')
+        .filter(|v| !v.trim().is_empty())
+        .map(|v| {
+            v.trim()
+                .parse()
+                .map_err(|_| anyhow!("failed to parse --{key} value {v:?}"))
+        })
+        .collect()
+}
+
+fn parse_value<T: std::str::FromStr>(
+    options: &BTreeMap<String, String>,
+    key: &str,
+    default: T,
+) -> Result<T> {
+    match options.get(key) {
+        Some(value) => value
+            .parse()
+            .map_err(|_| anyhow!("failed to parse --{key} {value:?}")),
+        None => Ok(default),
+    }
+}
+
+impl CandidateOptions {
+    fn from_map(options: &BTreeMap<String, String>) -> Result<Self> {
+        let device_text = required(options, "device")?;
+        let points_per_side: Vec<usize> = parse_list(options, "points-per-side", "16,24,32")?;
+        Ok(Self {
+            onnx_dir: required(options, "onnx-dir")?.into(),
+            device: ort_runtime::parse_device_request(&device_text)?,
+            device_text,
+            photos: required(options, "photos")?.into(),
+            prompts: required(options, "prompts")?.into(),
+            targets: options.get("targets").map(PathBuf::from),
+            reference_masks: options.get("reference-masks").map(PathBuf::from),
+            reference_scores: options.get("reference-scores").map(PathBuf::from),
+            out: required(options, "out")?.into(),
+            overlay_dir: options.get("overlay-dir").map(PathBuf::from),
+            overlay_points_per_side: parse_value(
+                options,
+                "overlay-points-per-side",
+                *points_per_side.last().unwrap_or(&32),
+            )?,
+            mask_dir: options.get("mask-dir").map(PathBuf::from),
+            evaluation_max_edge: parse_value(options, "evaluation-max-edge", 1024)?,
+            points_per_side,
+            batch: parse_value(options, "batch", 64)?,
+            batch_sizes: parse_list(options, "batch-sizes", "32,64,128")?,
+            runs: parse_count(options, "runs", 5)?,
+            // The defaults of `SAM2AutomaticMaskGenerator`.
+            score_threshold: parse_value(options, "score-threshold", 0.8)?,
+            stability_threshold: parse_value(options, "stability-threshold", 0.95)?,
+            nms_threshold: parse_value(options, "nms-threshold", 0.7)?,
+            dedupe_by_mask: match options.get("dedupe").map_or("box", String::as_str) {
+                "box" => false,
+                "mask" => true,
+                other => bail!("unsupported --dedupe {other:?}; use box or mask"),
+            },
+            level_merge_iou: parse_value(options, "level-merge-iou", 0.85)?,
+            hover_radius: parse_value(options, "hover-radius", 0.015)?,
+            hover_points: parse_value(options, "hover-points", 8)?,
+            profile_dir: options.get("profile-dir").map(PathBuf::from),
+        })
+    }
+}
+
+/// A thresholded (logit > 0) mask on the square low-resolution model grid, as a bit set.
+#[derive(Clone)]
+struct GridMask {
+    side: usize,
+    bits: Vec<u64>,
+    area: u32,
+}
+
+impl GridMask {
+    fn from_logits(logits: &[f32], side: usize) -> Self {
+        let mut bits = vec![0u64; (side * side).div_ceil(64)];
+        let mut area = 0;
+        for (index, &value) in logits.iter().enumerate() {
+            if value > 0.0 {
+                bits[index / 64] |= 1 << (index % 64);
+                area += 1;
+            }
+        }
+        Self { side, bits, area }
+    }
+
+    /// `x` and `y` are normalized image coordinates.
+    fn contains(&self, x: f32, y: f32) -> bool {
+        let cell = |v: f32| ((v * self.side as f32).max(0.0) as usize).min(self.side - 1);
+        let index = cell(y) * self.side + cell(x);
+        (self.bits[index / 64] >> (index % 64)) & 1 == 1
+    }
+
+    fn fraction(&self) -> f64 {
+        self.area as f64 / (self.side * self.side) as f64
+    }
+
+    fn iou(&self, other: &Self) -> f64 {
+        let (mut intersection, mut union) = (0u32, 0u32);
+        for (a, b) in self.bits.iter().zip(&other.bits) {
+            intersection += (a & b).count_ones();
+            union += (a | b).count_ones();
+        }
+        if union == 0 {
+            1.0
+        } else {
+            intersection as f64 / union as f64
+        }
+    }
+
+    /// `batched_mask_to_box`: [x0, y0, x1, y1] with inclusive maximum cells.
+    fn bounding_box(&self) -> [f32; 4] {
+        let (mut x0, mut y0, mut x1, mut y1) = (self.side, self.side, 0, 0);
+        for (word_index, &word) in self.bits.iter().enumerate() {
+            let mut word = word;
+            while word != 0 {
+                let index = word_index * 64 + word.trailing_zeros() as usize;
+                let (x, y) = (index % self.side, index / self.side);
+                x0 = x0.min(x);
+                y0 = y0.min(y);
+                x1 = x1.max(x);
+                y1 = y1.max(y);
+                word &= word - 1;
+            }
+        }
+        [x0 as f32, y0 as f32, x1 as f32, y1 as f32]
+    }
+}
+
+/// `torchvision.ops.box_iou` on [x0, y0, x1, y1] boxes. The value does not change when the
+/// photo is stretched to the square model grid.
+fn box_iou(a: &[f32; 4], b: &[f32; 4]) -> f32 {
+    let area = |r: &[f32; 4]| (r[2] - r[0]).max(0.0) * (r[3] - r[1]).max(0.0);
+    let width = (a[2].min(b[2]) - a[0].max(b[0])).max(0.0);
+    let height = (a[3].min(b[3]) - a[1].max(b[1])).max(0.0);
+    let intersection = width * height;
+    let union = area(a) + area(b) - intersection;
+    if union > 0.0 {
+        intersection / union
+    } else {
+        0.0
+    }
+}
+
+struct Candidate {
+    mask: GridMask,
+    logits: Vec<f32>,
+    score: f32,
+    stability: f32,
+    /// Normalized image coordinates of the grid point that made the candidate.
+    point: [f32; 2],
+    token: usize,
+    bounding_box: [f32; 4],
+}
+
+struct CandidateDecoderOutput {
+    mask_logits: Vec<f32>,
+    iou_scores: Vec<f32>,
+    stability_scores: Vec<f32>,
+    shapes: BTreeMap<String, Vec<i64>>,
+}
+
+/// `coords` are model-input pixels, one positive point per prompt.
+fn run_candidate_decoder(
+    session: &mut Session,
+    features: &PointFeatures,
+    coords: &[[f32; 2]],
+) -> Result<CandidateDecoderOutput> {
+    let tensor = |shape: &[i64], data: &[f32]| {
+        Tensor::from_array((shape_usize(shape), data.to_vec()))
+            .map_err(|e| anyhow!("failed to build candidate decoder input: {e}"))
+    };
+    let outputs = session
+        .run(ort::inputs! {
+            "image_embed" => tensor(&features.shapes[0], &features.image_embed)?,
+            "high_res_feats_0" => tensor(&features.shapes[1], &features.high_res_feats_0)?,
+            "high_res_feats_1" => tensor(&features.shapes[2], &features.high_res_feats_1)?,
+            "point_coords" => Tensor::from_array(([coords.len(), 1usize, 2], coords.concat()))?,
+        })
+        .map_err(|e| anyhow!("candidate decoder run failed: {e}"))?;
+    let mut shapes = BTreeMap::new();
+    let (mask_shape, mask_logits) = output_f32(&outputs, "mask_logits")?;
+    let (iou_shape, iou_scores) = output_f32(&outputs, "iou_scores")?;
+    let (stability_shape, stability_scores) = output_f32(&outputs, "stability_scores")?;
+    shapes.insert("mask_logits".to_string(), mask_shape);
+    shapes.insert("iou_scores".to_string(), iou_shape);
+    shapes.insert("stability_scores".to_string(), stability_shape);
+    Ok(CandidateDecoderOutput {
+        mask_logits,
+        iou_scores,
+        stability_scores,
+        shapes,
+    })
+}
+
+/// `build_point_grid`: normalized cell centres, row by row.
+fn point_grid(points_per_side: usize) -> Vec<[f32; 2]> {
+    let step = 1.0 / points_per_side as f32;
+    (0..points_per_side * points_per_side)
+        .map(|i| {
+            [
+                ((i % points_per_side) as f32 + 0.5) * step,
+                ((i / points_per_side) as f32 + 0.5) * step,
+            ]
+        })
+        .collect()
+}
+
+struct CandidateSet {
+    candidates: Vec<Candidate>,
+    masks_decoded: usize,
+    masks_after_filter: usize,
+    decoder_ms: f64,
+    filter_ms: f64,
+    nms_ms: f64,
+    shapes: BTreeMap<String, Vec<i64>>,
+}
+
+/// `SAM2AutomaticMaskGenerator._process_crop` without crops: the point grid in batches, the
+/// predicted IoU and stability filters, and box non-maximum suppression. The filters use the
+/// 256 x 256 logits, not the masks at the photo size.
+fn generate_candidates(
+    session: &mut Session,
+    features: &PointFeatures,
+    model_input: &ModelInput,
+    points_per_side: usize,
+    batch: usize,
+    options: &CandidateOptions,
+) -> Result<CandidateSet> {
+    let side = model_input.low_res_mask_size;
+    let plane = side * side;
+    let size = model_input.image_size as f32;
+    let grid = point_grid(points_per_side);
+    let (mut decoder_ms, mut filter_ms) = (0.0, 0.0);
+    let mut kept = Vec::new();
+    let mut shapes = BTreeMap::new();
+    for chunk in grid.chunks(batch) {
+        let coords: Vec<[f32; 2]> = chunk.iter().map(|p| [p[0] * size, p[1] * size]).collect();
+        let started = Instant::now();
+        let output = run_candidate_decoder(session, features, &coords)?;
+        decoder_ms += milliseconds(started.elapsed());
+        let started = Instant::now();
+        for (prompt, point) in chunk.iter().enumerate() {
+            for token in 0..CANDIDATE_TOKENS {
+                let index = prompt * CANDIDATE_TOKENS + token;
+                let (score, stability) = (output.iou_scores[index], output.stability_scores[index]);
+                if score <= options.score_threshold || stability < options.stability_threshold {
+                    continue;
+                }
+                let logits = output.mask_logits[index * plane..(index + 1) * plane].to_vec();
+                let mask = GridMask::from_logits(&logits, side);
+                if mask.area == 0 {
+                    continue;
+                }
+                kept.push(Candidate {
+                    bounding_box: mask.bounding_box(),
+                    mask,
+                    logits,
+                    score,
+                    stability,
+                    point: *point,
+                    token: token + 1,
+                });
+            }
+        }
+        filter_ms += milliseconds(started.elapsed());
+        shapes = output.shapes;
+    }
+    let masks_after_filter = kept.len();
+    let started = Instant::now();
+    kept.sort_by(|a, b| b.score.total_cmp(&a.score));
+    let mut candidates: Vec<Candidate> = Vec::new();
+    for candidate in kept {
+        let distinct = |c: &Candidate| {
+            if options.dedupe_by_mask {
+                c.mask.iou(&candidate.mask) <= options.nms_threshold as f64
+            } else {
+                box_iou(&c.bounding_box, &candidate.bounding_box) <= options.nms_threshold
+            }
+        };
+        if candidates.iter().all(distinct) {
+            candidates.push(candidate);
+        }
+    }
+    let nms_ms = milliseconds(started.elapsed());
+    Ok(CandidateSet {
+        candidates,
+        masks_decoded: grid.len() * CANDIDATE_TOKENS,
+        masks_after_filter,
+        decoder_ms,
+        filter_ms,
+        nms_ms,
+        shapes,
+    })
+}
+
+/// The selection levels under the pointer: the candidates that contain the point, from the
+/// smallest to the largest. A candidate with IoU >= `merge_iou` against the previous level is
+/// the same level; the level keeps the candidate with the higher predicted IoU.
+fn levels_at(candidates: &[Candidate], x: f32, y: f32, merge_iou: f64) -> Vec<usize> {
+    let mut containing: Vec<usize> = (0..candidates.len())
+        .filter(|&i| candidates[i].mask.contains(x, y))
+        .collect();
+    containing.sort_by_key(|&i| candidates[i].mask.area);
+    let mut levels: Vec<usize> = Vec::new();
+    for index in containing {
+        if let Some(last) = levels.last_mut()
+            && candidates[index].mask.iou(&candidates[*last].mask) >= merge_iou
+        {
+            if candidates[index].score > candidates[*last].score {
+                *last = index;
+            }
+            continue;
+        }
+        levels.push(index);
+    }
+    levels
+}
+
+/// The default level under the pointer, before the user changes the level.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum DefaultLevel {
+    /// The largest level.
+    Largest,
+    /// The level with the highest predicted IoU.
+    BestScore,
+}
+
+impl DefaultLevel {
+    const ALL: [Self; 2] = [Self::Largest, Self::BestScore];
+
+    fn name(self) -> &'static str {
+        match self {
+            Self::Largest => "largest",
+            Self::BestScore => "best_score",
+        }
+    }
+
+    /// Index into `levels`; `levels` is sorted by area.
+    fn pick(self, levels: &[usize], scores: impl Fn(usize) -> f32) -> Option<usize> {
+        if levels.is_empty() {
+            return None;
+        }
+        Some(match self {
+            Self::Largest => levels.len() - 1,
+            Self::BestScore => (0..levels.len())
+                .max_by(|&a, &b| scores(levels[a]).total_cmp(&scores(levels[b])))
+                .unwrap_or(0),
+        })
+    }
+}
+
+struct EvaluationFrame {
+    width: u32,
+    height: u32,
+    photo: RgbImage,
+}
+
+impl EvaluationFrame {
+    fn new(photo: &RgbImage, max_edge: u32) -> Self {
+        let (w, h) = photo.dimensions();
+        let scale = (max_edge as f64 / w.max(h) as f64).min(1.0);
+        let width = ((w as f64 * scale).round() as u32).max(1);
+        let height = ((h as f64 * scale).round() as u32).max(1);
+        Self {
+            width,
+            height,
+            photo: image::imageops::resize(photo, width, height, FilterType::Triangle),
+        }
+    }
+
+    fn mask(&self, logits: &[f32], side: usize) -> GrayImage {
+        upsample_to_mask(logits, side, self.width, self.height)
+    }
+
+    fn load_reference(&self, path: &Path) -> Result<GrayImage> {
+        let reference = image::open(path)
+            .with_context(|| format!("failed to open reference {}", path.display()))?
+            .to_luma8();
+        let mut resized =
+            image::imageops::resize(&reference, self.width, self.height, FilterType::Triangle);
+        for pixel in resized.pixels_mut() {
+            pixel[0] = if pixel[0] > 127 { 255 } else { 0 };
+        }
+        Ok(resized)
+    }
+}
+
+/// The E1 reference mask of a target: the box mask, or the best multimask candidate of a point.
+fn target_reference_name(
+    stem: &str,
+    reference: &Value,
+    scores: &[Value],
+    file: &str,
+) -> Result<Option<String>> {
+    if reference.is_null() {
+        return Ok(None);
+    }
+    if let Some(box_name) = reference["box"].as_str() {
+        return Ok(Some(format!("{stem}__{box_name}__single0.png")));
+    }
+    let point = reference["point"]
+        .as_str()
+        .ok_or_else(|| anyhow!("target reference needs box or point: {reference}"))?;
+    let best = scores
+        .iter()
+        .filter(|r| {
+            r["image"].as_str() == Some(file)
+                && r["prompt"].as_str() == Some(point)
+                && r["multimask"].as_bool() == Some(true)
+        })
+        .max_by(|a, b| {
+            let score = |r: &Value| r["score_torch"].as_f64().unwrap_or(f64::MIN);
+            score(a).total_cmp(&score(b))
+        })
+        .ok_or_else(|| anyhow!("no multimask reference scores for {file} {point}"))?;
+    Ok(Some(format!(
+        "{stem}__{point}__multi{}.png",
+        best["mask_index"].as_u64().unwrap_or(0)
+    )))
+}
+
+/// Points on a circle around (x, y) with `radius` as a fraction of the short photo side.
+fn hover_points(
+    x: f32,
+    y: f32,
+    radius: f32,
+    count: usize,
+    width: u32,
+    height: u32,
+) -> Vec<(f32, f32)> {
+    let short = width.min(height) as f32;
+    (0..count)
+        .map(|k| {
+            let angle = std::f32::consts::TAU * k as f32 / count as f32;
+            (
+                (x + radius * angle.cos() * short / width as f32).clamp(0.0, 1.0),
+                (y + radius * angle.sin() * short / height as f32).clamp(0.0, 1.0),
+            )
+        })
+        .collect()
+}
+
+fn mask_contains(mask: &GrayImage, x: f32, y: f32) -> bool {
+    let px = ((x * mask.width() as f32) as u32).min(mask.width() - 1);
+    let py = ((y * mask.height() as f32) as u32).min(mask.height() - 1);
+    mask.get_pixel(px, py)[0] > 127
+}
+
+/// Same-highlight share and mean IoU of the highlights on the hover circle against the
+/// highlight at the centre. `select` returns the highlighted grid mask at a point.
+fn hover_consistency(
+    centre: Option<&GridMask>,
+    circle: &[(f32, f32)],
+    mut select: impl FnMut(f32, f32) -> Result<Option<GridMask>>,
+) -> Result<Value> {
+    let Some(centre) = centre else {
+        return Ok(json!({ "status": "unavailable", "reason": "no highlight at the centre" }));
+    };
+    if circle.is_empty() {
+        return Ok(
+            json!({ "status": "unavailable", "reason": "no hover point inside the target" }),
+        );
+    }
+    let mut ious = Vec::new();
+    for &(x, y) in circle {
+        ious.push(select(x, y)?.map_or(0.0, |m| m.iou(centre)));
+    }
+    let same = ious.iter().filter(|&&v| v >= SAME_HIGHLIGHT_IOU).count();
+    Ok(json!({
+        "points": ious.len(),
+        "same_highlight": same,
+        "same_highlight_share": same as f64 / ious.len() as f64,
+        "mean_iou": ious.iter().sum::<f64>() / ious.len() as f64,
+        "minimum_iou": ious.iter().copied().fold(f64::INFINITY, f64::min),
+    }))
+}
+
+/// Distinct colour per candidate (hue steps of 137.5 degrees).
+fn candidate_color(index: usize) -> [f32; 3] {
+    let hue = (index as f32 * 137.508) % 360.0;
+    let (s, v) = (0.75f32, 0.95f32);
+    let c = v * s;
+    let x = c * (1.0 - ((hue / 60.0) % 2.0 - 1.0).abs());
+    let (r, g, b) = match (hue / 60.0) as u32 {
+        0 => (c, x, 0.0),
+        1 => (x, c, 0.0),
+        2 => (0.0, c, x),
+        3 => (0.0, x, c),
+        4 => (x, 0.0, c),
+        _ => (c, 0.0, x),
+    };
+    let m = v - c;
+    [(r + m) * 255.0, (g + m) * 255.0, (b + m) * 255.0]
+}
+
+/// All candidates on the photo: the largest first, smaller candidates painted over it, white
+/// outlines between labels. Pixels outside every candidate are grey.
+fn write_candidate_map(
+    frame: &EvaluationFrame,
+    candidates: &[Candidate],
+    side: usize,
+    path: &Path,
+) -> Result<()> {
+    let (width, height) = (frame.width, frame.height);
+    let mut labels = vec![u32::MAX; (width * height) as usize];
+    let mut order: Vec<usize> = (0..candidates.len()).collect();
+    order.sort_by_key(|&i| std::cmp::Reverse(candidates[i].mask.area));
+    for &index in &order {
+        let mask = frame.mask(&candidates[index].logits, side);
+        for (label, pixel) in labels.iter_mut().zip(mask.pixels()) {
+            if pixel[0] > 127 {
+                *label = index as u32;
+            }
+        }
+    }
+    let mut map = frame.photo.clone();
+    for (i, pixel) in map.pixels_mut().enumerate() {
+        let label = labels[i];
+        if label == u32::MAX {
+            let grey =
+                (pixel[0] as f32 * 0.3 + pixel[1] as f32 * 0.59 + pixel[2] as f32 * 0.11) * 0.5;
+            *pixel = Rgb([grey as u8; 3]);
+            continue;
+        }
+        let color = candidate_color(label as usize);
+        for channel in 0..3 {
+            pixel[channel] = (pixel[channel] as f32 * 0.45 + color[channel] * 0.55) as u8;
+        }
+        let (x, y) = (i as u32 % width, i as u32 / width);
+        let right = x + 1 < width && labels[i + 1] != label;
+        let below = y + 1 < height && labels[i + width as usize] != label;
+        if right || below {
+            *pixel = Rgb([255, 255, 255]);
+        }
+    }
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    DynamicImage::ImageRgb8(map)
+        .save(path)
+        .with_context(|| format!("failed to write {}", path.display()))
+}
+
+/// Raw candidate masks for `probe_candidates.py`: N x side x side bytes (1 inside) and a JSON
+/// list with the score, stability, token, and grid point of each candidate.
+fn write_candidate_masks(directory: &Path, stem: &str, set: &CandidateSet) -> Result<()> {
+    fs::create_dir_all(directory)?;
+    let mut bytes = Vec::new();
+    let mut entries = Vec::new();
+    for candidate in &set.candidates {
+        let side = candidate.mask.side;
+        for index in 0..side * side {
+            bytes.push(((candidate.mask.bits[index / 64] >> (index % 64)) & 1) as u8);
+        }
+        entries.push(json!({
+            "score": candidate.score, "stability": candidate.stability,
+            "token": candidate.token, "point": candidate.point,
+            "area_fraction": candidate.mask.fraction(),
+        }));
+    }
+    fs::write(directory.join(format!("{stem}.u8")), bytes)?;
+    write_report(
+        &directory.join(format!("{stem}.json")),
+        &json!({ "side": set.candidates.first().map_or(0, |c| c.mask.side), "candidates": entries }),
+    )
+}
+
+/// Share of the model grid inside at least one candidate.
+fn candidate_coverage(candidates: &[Candidate], side: usize) -> f64 {
+    let mut union = vec![0u64; (side * side).div_ceil(64)];
+    for candidate in candidates {
+        for (u, b) in union.iter_mut().zip(&candidate.mask.bits) {
+            *u |= b;
+        }
+    }
+    let covered: u32 = union.iter().map(|w| w.count_ones()).sum();
+    covered as f64 / (side * side) as f64
+}
+
+fn best_score_token(output: &DecoderOutput) -> usize {
+    (1..4)
+        .max_by(|&a, &b| output.iou_scores[a].total_cmp(&output.iou_scores[b]))
+        .unwrap_or(1)
+}
+
+fn run_candidate_report(options: &CandidateOptions) -> Result<()> {
+    ort_runtime::initialize_ort_environment()?;
+    let export_report: Value = serde_json::from_str(
+        &fs::read_to_string(options.onnx_dir.join("export_report.json"))
+            .context("failed to read export_report.json")?,
+    )?;
+    let model_input = ModelInput::from_export_report(&export_report)?;
+    let side = model_input.low_res_mask_size;
+    let model_size = model_input.image_size as f32;
+    let prompts: Value = serde_json::from_str(&fs::read_to_string(&options.prompts)?)?;
+    let targets: Value = match &options.targets {
+        Some(path) => serde_json::from_str(&fs::read_to_string(path)?)?,
+        None => json!({ "targets": {} }),
+    };
+    let reference_scores: Vec<Value> = match &options.reference_scores {
+        Some(path) => {
+            let compare: Value = serde_json::from_str(&fs::read_to_string(path)?)?;
+            compare["results"].as_array().cloned().unwrap_or_default()
+        }
+        None => Vec::new(),
+    };
+    let mut report = json!({
+        "device_request": options.device_text,
+        "session_settings": SessionSettings::Production.label(),
+        "variant": export_report["variant"],
+        "device_description": ort_runtime::describe_device_request(options.device),
+        "os": std::env::consts::OS,
+        "arch": std::env::consts::ARCH,
+        "generator": {
+            "points_per_side": options.points_per_side,
+            "batch": options.batch,
+            "score_threshold": options.score_threshold,
+            "stability_threshold": options.stability_threshold,
+            "stability_offset": export_report["candidate_decoder"]["stability_offset"],
+            "nms_threshold": options.nms_threshold,
+            "dedupe": if options.dedupe_by_mask { "mask IoU" } else { "box IoU (upstream)" },
+            "filters": "on the 256 x 256 logits (the upstream generator uses the masks at the photo size)",
+        },
+        "selection": {
+            "level_merge_iou": options.level_merge_iou,
+            "target_iou": TARGET_IOU,
+            "same_highlight_iou": SAME_HIGHLIGHT_IOU,
+            "hover_radius_of_short_side": options.hover_radius,
+            "hover_points": options.hover_points,
+            "evaluation_max_edge": options.evaluation_max_edge,
+        },
+        "memory_before_load": process_memory::sample(),
+        "checks": {},
+        "graphs": {},
+        "images": [],
+    });
+
+    let mut sessions: BTreeMap<&str, Session> = BTreeMap::new();
+    let mut load_check = json!({});
+    for name in [POINT_ENCODER, POINT_DECODER, CANDIDATE_DECODER] {
+        let path = options.onnx_dir.join(format!("{name}.onnx"));
+        let started = Instant::now();
+        match ort_runtime::load_session(&path, options.device) {
+            Ok(session) => {
+                let load_ms = milliseconds(started.elapsed());
+                println!("[load] {name}: {load_ms:.0} ms");
+                load_check[name] = json!({ "status": "passed" });
+                report["graphs"][name] = json!({ "load_ms": load_ms });
+                sessions.insert(name, session);
+            }
+            Err(error) => {
+                println!("[load] {name}: FAILED {error}");
+                load_check[name] = json!({ "status": "failed", "error": format!("{error:#}") });
+            }
+        }
+    }
+    report["checks"]["SegmentationGraphsLoadWithProductionSessionSettings"] = load_check;
+    report["memory_after_all_loads"] = process_memory::sample();
+    let (Some(mut encoder), Some(mut point_decoder), Some(mut candidate_decoder)) = (
+        sessions.remove(POINT_ENCODER),
+        sessions.remove(POINT_DECODER),
+        sessions.remove(CANDIDATE_DECODER),
+    ) else {
+        return write_report(&options.out, &report);
+    };
+
+    let mut shape_check: Option<Value> = None;
+    let mut first_image = true;
+    for entry in prompts["images"].as_array().into_iter().flatten() {
+        let file = entry["file"]
+            .as_str()
+            .ok_or_else(|| anyhow!("image entry without file"))?;
+        let stem = Path::new(file)
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or(file)
+            .to_string();
+        let photo = image::open(options.photos.join(file))
+            .with_context(|| format!("failed to open {file}"))?
+            .to_rgb8();
+        let (width, height) = photo.dimensions();
+        let started = Instant::now();
+        let pixels = preprocess(&photo, &model_input);
+        let preprocess_ms = milliseconds(started.elapsed());
+        let frame = EvaluationFrame::new(&photo, options.evaluation_max_edge);
+        drop(photo);
+
+        let started = Instant::now();
+        let features = run_point_encoder(&mut encoder, &pixels)?;
+        let encoder_ms = milliseconds(started.elapsed());
+        if first_image {
+            let samples = time_runs(options.runs.max(10), || {
+                run_point_encoder(&mut encoder, &pixels).map(|_| ())
+            })?;
+            report["graphs"][POINT_ENCODER]["first_inference_ms"] = json!(encoder_ms);
+            report["graphs"][POINT_ENCODER]["warm"] = latency_summary(&samples);
+        }
+        let mut image_report = json!({
+            "file": file, "width": width, "height": height,
+            "preprocess_ms": preprocess_ms, "encoder_ms": encoder_ms,
+            "grids": {}, "prompts": [],
+        });
+
+        let mut sets: BTreeMap<usize, CandidateSet> = BTreeMap::new();
+        for &points_per_side in &options.points_per_side {
+            let set = generate_candidates(
+                &mut candidate_decoder,
+                &features,
+                &model_input,
+                points_per_side,
+                options.batch,
+                options,
+            )?;
+            if shape_check.is_none() {
+                let observed = &set.shapes;
+                let rows = (point_grid(points_per_side).len() as i64).min(options.batch as i64);
+                let side = side as i64;
+                let matches = observed["mask_logits"] == [rows, 3, side, side]
+                    && observed["iou_scores"] == [rows, 3]
+                    && observed["stability_scores"] == [rows, 3];
+                shape_check = Some(json!({
+                    "status": if matches { "passed" } else { "failed" },
+                    "observed_last_batch": observed,
+                    "exported_specification": export_report["graphs"][CANDIDATE_DECODER]["outputs"],
+                }));
+            }
+            let mut grid_report = json!({
+                "masks_decoded": set.masks_decoded,
+                "masks_after_filter": set.masks_after_filter,
+                "candidates": set.candidates.len(),
+                "decoder_ms": set.decoder_ms,
+                "filter_ms": set.filter_ms,
+                "nms_ms": set.nms_ms,
+                "time_to_candidates_ms": encoder_ms + set.decoder_ms + set.filter_ms + set.nms_ms,
+                "coverage": candidate_coverage(&set.candidates, side),
+            });
+            if first_image {
+                let samples = time_runs(options.runs, || {
+                    generate_candidates(
+                        &mut candidate_decoder,
+                        &features,
+                        &model_input,
+                        points_per_side,
+                        options.batch,
+                        options,
+                    )
+                    .map(|_| ())
+                })?;
+                grid_report["warm_candidate_pass"] = latency_summary(&samples);
+            }
+            if let Some(directory) = &options.mask_dir {
+                write_candidate_masks(&directory.join(points_per_side.to_string()), &stem, &set)?;
+            }
+            if let Some(directory) = &options.overlay_dir
+                && points_per_side == options.overlay_points_per_side
+            {
+                write_candidate_map(
+                    &frame,
+                    &set.candidates,
+                    side,
+                    &directory.join(format!("{stem}__candidates.jpg")),
+                )?;
+            }
+            println!(
+                "[candidates] {stem} {points_per_side}x{points_per_side}: {} candidates ({} after filter), encoder {encoder_ms:.0} ms + decoder {:.0} ms + host {:.0} ms, coverage {:.3}",
+                set.candidates.len(),
+                set.masks_after_filter,
+                set.decoder_ms,
+                set.filter_ms + set.nms_ms,
+                grid_report["coverage"].as_f64().unwrap_or(0.0)
+            );
+            image_report["grids"][points_per_side.to_string()] = grid_report;
+            sets.insert(points_per_side, set);
+        }
+
+        if first_image {
+            // Batch size comparison of the candidate pass on the overlay grid.
+            let mut batch_report = json!({});
+            for &batch in &options.batch_sizes {
+                generate_candidates(
+                    &mut candidate_decoder,
+                    &features,
+                    &model_input,
+                    options.overlay_points_per_side,
+                    batch,
+                    options,
+                )?;
+                let mut decoder_samples = Vec::new();
+                let samples = time_runs(options.runs, || {
+                    let set = generate_candidates(
+                        &mut candidate_decoder,
+                        &features,
+                        &model_input,
+                        options.overlay_points_per_side,
+                        batch,
+                        options,
+                    )?;
+                    decoder_samples.push(set.decoder_ms);
+                    Ok(())
+                })?;
+                batch_report[batch.to_string()] = json!({
+                    "candidate_pass": latency_summary(&samples),
+                    "decoder": latency_summary(&decoder_samples),
+                });
+                println!("[batch] {batch}: {}", batch_report[batch.to_string()]);
+            }
+            report["batch_sizes"] = json!({
+                "points_per_side": options.overlay_points_per_side,
+                "photo": file,
+                "results": batch_report,
+            });
+            report["memory_after_inference"] = process_memory::sample();
+            if let Some(profile_dir) = &options.profile_dir {
+                let grid = point_grid(options.overlay_points_per_side);
+                let coords: Vec<[f32; 2]> = grid[..options.batch.min(grid.len())]
+                    .iter()
+                    .map(|p| [p[0] * model_size, p[1] * model_size])
+                    .collect();
+                let prefix = profile_dir.join(format!(
+                    "{CANDIDATE_DECODER}_{}",
+                    options.device_text.replace(':', "_")
+                ));
+                report["operator_placement"] = json!({
+                    CANDIDATE_DECODER: operator_placement(
+                        &options.onnx_dir.join(format!("{CANDIDATE_DECODER}.onnx")),
+                        options.device,
+                        SessionSettings::Production,
+                        &prefix,
+                        |session| {
+                            run_candidate_decoder(session, &features, &coords)?;
+                            run_candidate_decoder(session, &features, &coords).map(|_| ())
+                        },
+                    )
+                    .unwrap_or_else(|e| json!({ "status": "failed", "error": format!("{e:#}") })),
+                    "prompts_per_run": coords.len(),
+                });
+            }
+        }
+
+        // Single-point prompts: the live point decoder and the candidate levels.
+        let image_targets = &targets["targets"][file];
+        for set_entry in prompt_sets(entry)? {
+            if set_entry.points.len() != 1 || !set_entry.boxes.is_empty() {
+                continue;
+            }
+            let (x, y, _) = set_entry.points[0];
+            let target = &image_targets[set_entry.name.as_str()];
+            let reference_name =
+                target_reference_name(&stem, &target["reference"], &reference_scores, file)?;
+            let reference = match (&reference_name, &options.reference_masks) {
+                (Some(name), Some(directory)) => Some(frame.load_reference(&directory.join(name))?),
+                _ => None,
+            };
+            let iou_with_reference = |logits: &[f32]| -> Result<Option<f64>> {
+                match &reference {
+                    Some(reference) => Ok(Some(mask_iou(&frame.mask(logits, side), reference)?)),
+                    None => Ok(None),
+                }
+            };
+
+            // Live point decoder: one decoder run per pointer position, tokens 1-3.
+            let started = Instant::now();
+            let output = run_point_decoder(
+                &mut point_decoder,
+                &features,
+                &[[x * model_size, y * model_size]],
+                &[1.0],
+            )?;
+            let live_ms = milliseconds(started.elapsed());
+            let live_best = best_score_token(&output);
+            let live_best_mask = GridMask::from_logits(&token_logits(&output, live_best), side);
+            let mut live_tokens: Vec<usize> = (1..4).collect();
+            let token_area = |t: usize| GridMask::from_logits(&token_logits(&output, t), side).area;
+            live_tokens.sort_by_key(|&t| token_area(t));
+            let mut live_levels = Vec::new();
+            for (level, &token) in live_tokens.iter().enumerate() {
+                let logits = token_logits(&output, token);
+                if let Some(directory) = &options.overlay_dir {
+                    write_overlay(
+                        &frame.photo,
+                        &frame.mask(&logits, side),
+                        &set_entry.points,
+                        &[],
+                        0,
+                        &directory
+                            .join(format!("{stem}__{}__live_level{level}.jpg", set_entry.name)),
+                    )?;
+                }
+                live_levels.push(json!({
+                    "token": token, "score": output.iou_scores[token],
+                    "area_fraction": GridMask::from_logits(&logits, side).fraction(),
+                    "reference_iou": iou_with_reference(&logits)?,
+                }));
+            }
+            let live_default_level = live_tokens
+                .iter()
+                .position(|&t| t == live_best)
+                .unwrap_or(0);
+            let circle: Vec<(f32, f32)> = hover_points(
+                x,
+                y,
+                options.hover_radius,
+                options.hover_points,
+                width,
+                height,
+            )
+            .into_iter()
+            .filter(|&(px, py)| match &reference {
+                Some(reference) => mask_contains(reference, px, py),
+                None => live_best_mask.contains(px, py),
+            })
+            .collect();
+            let live_hover = hover_consistency(Some(&live_best_mask), &circle, |px, py| {
+                let out = run_point_decoder(
+                    &mut point_decoder,
+                    &features,
+                    &[[px * model_size, py * model_size]],
+                    &[1.0],
+                )?;
+                Ok(Some(GridMask::from_logits(
+                    &token_logits(&out, best_score_token(&out)),
+                    side,
+                )))
+            })?;
+            // The highlight stays while the pointer is inside it; the decoder runs again only
+            // when the pointer leaves the highlighted mask.
+            let mut decoder_runs_outside = 0usize;
+            let live_hover_kept_inside =
+                hover_consistency(Some(&live_best_mask), &circle, |px, py| {
+                    if live_best_mask.contains(px, py) {
+                        return Ok(Some(live_best_mask.clone()));
+                    }
+                    decoder_runs_outside += 1;
+                    let out = run_point_decoder(
+                        &mut point_decoder,
+                        &features,
+                        &[[px * model_size, py * model_size]],
+                        &[1.0],
+                    )?;
+                    Ok(Some(GridMask::from_logits(
+                        &token_logits(&out, best_score_token(&out)),
+                        side,
+                    )))
+                })?;
+            if let Some(directory) = &options.overlay_dir {
+                write_overlay(
+                    &frame.photo,
+                    &frame.mask(&token_logits(&output, live_best), side),
+                    &set_entry.points,
+                    &[],
+                    0,
+                    &directory.join(format!("{stem}__{}__live.jpg", set_entry.name)),
+                )?;
+            }
+            let live_best_reachable = live_levels
+                .iter()
+                .filter_map(|l| l["reference_iou"].as_f64())
+                .fold(None, |best: Option<f64>, v| {
+                    Some(best.map_or(v, |b| b.max(v)))
+                });
+
+            let mut grids = json!({});
+            for (&points_per_side, set) in &sets {
+                let candidates = &set.candidates;
+                let started = Instant::now();
+                let levels = levels_at(candidates, x, y, options.level_merge_iou);
+                let lookup_us = started.elapsed().as_secs_f64() * 1e6;
+                let mut level_reports = Vec::new();
+                let mut reference_ious = Vec::new();
+                for (level, &index) in levels.iter().enumerate() {
+                    let candidate = &candidates[index];
+                    let reference_iou = iou_with_reference(&candidate.logits)?;
+                    reference_ious.push(reference_iou);
+                    level_reports.push(json!({
+                        "level": level, "candidate": index, "score": candidate.score,
+                        "stability": candidate.stability, "token": candidate.token,
+                        "grid_point": candidate.point, "area_fraction": candidate.mask.fraction(),
+                        "reference_iou": reference_iou,
+                    }));
+                    if let Some(directory) = &options.overlay_dir
+                        && points_per_side == options.overlay_points_per_side
+                    {
+                        write_overlay(
+                            &frame.photo,
+                            &frame.mask(&candidate.logits, side),
+                            &set_entry.points,
+                            &[],
+                            0,
+                            &directory
+                                .join(format!("{stem}__{}__level{level}.jpg", set_entry.name)),
+                        )?;
+                    }
+                }
+                let best_reachable = reference_ious
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(level, iou)| iou.map(|v| (level, v)))
+                    .max_by(|a, b| a.1.total_cmp(&b.1));
+                let mut defaults = json!({});
+                for rule in DefaultLevel::ALL {
+                    let pick = rule.pick(&levels, |i| candidates[i].score);
+                    let centre = pick.map(|level| candidates[levels[level]].mask.clone());
+                    let hover = hover_consistency(centre.as_ref(), &circle, |px, py| {
+                        let at = levels_at(candidates, px, py, options.level_merge_iou);
+                        Ok(rule
+                            .pick(&at, |i| candidates[i].score)
+                            .map(|level| candidates[at[level]].mask.clone()))
+                    })?;
+                    defaults[rule.name()] = json!({
+                        "level": pick,
+                        "reference_iou": pick.and_then(|level| reference_ious[level]),
+                        "steps_to_best_reachable": match (pick, best_reachable) {
+                            (Some(level), Some((best, _))) => json!(level.abs_diff(best)),
+                            _ => Value::Null,
+                        },
+                        "hover": hover,
+                    });
+                }
+                grids[points_per_side.to_string()] = json!({
+                    "levels": level_reports,
+                    "lookup_us": lookup_us,
+                    "best_reachable": best_reachable
+                        .map(|(level, iou)| json!({ "level": level, "reference_iou": iou })),
+                    "defaults": defaults,
+                });
+            }
+            image_report["prompts"].as_array_mut().unwrap().push(json!({
+                "name": set_entry.name,
+                "point": [x, y],
+                "intent": target["intent"],
+                "reference": reference_name,
+                "live_point_decoder": {
+                    "decode_ms": live_ms,
+                    "levels": live_levels,
+                    "default_best_score": {
+                        "level": live_default_level,
+                        "reference_iou": live_levels[live_default_level]["reference_iou"],
+                        "steps_to_best_reachable": Value::Null,
+                        "hover": live_hover,
+                        "hover_kept_inside_highlight": live_hover_kept_inside,
+                        "hover_decoder_runs_outside_highlight": decoder_runs_outside,
+                    },
+                    "best_reachable_iou": live_best_reachable,
+                },
+                "candidates": grids,
+            }));
+        }
+
+        report["images"].as_array_mut().unwrap().push(image_report);
+        write_report(&options.out, &report)?;
+        first_image = false;
+    }
+    report["checks"]["CandidateDecoderOutputShapeMatchesExportedSpecification"] = shape_check
+        .unwrap_or_else(
+            || json!({ "status": "unavailable", "reason": "no candidate decoder run" }),
+        );
+    report["memory_at_end"] = process_memory::sample();
+    write_report(&options.out, &report)
 }

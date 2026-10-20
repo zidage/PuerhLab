@@ -14,6 +14,6 @@ command that makes them from the local evidence.
 | E1 | [SAM 2.1 point and box prompts](e1_sam2_1_point_box_evaluation.md) | Measured 2026-10-19; user review open |
 | E2 | [BiRefNet one-click Subject and matting](e2_birefnet_subject_matting.md) | Measured 2026-10-19; stopped by the user; only lite kept |
 | E3 | Sky and People body-part models | Not started |
-| E4 | Click selection with precomputed candidates | Not started |
+| E4 | [Click selection with candidates and hover highlight](e4_click_candidates.md) | Measured 2026-10-19; user review open |
 | E5 | Edge stage | Only if E2 is not sufficient |
 | E6 | Report per tool and recommendation | Not started |

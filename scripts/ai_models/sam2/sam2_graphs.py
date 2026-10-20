@@ -10,6 +10,8 @@ without a code path per model:
   PointDecoder : the three encoder outputs + point_coords [1, N, 2] + point_labels [1, N]
                  + mask_input [1, 1, 256, 256] + has_mask_input [1]
                  -> mask_logits [1, 4, 256, 256], iou_scores [1, 4], object_score_logits [1, 1]
+  CandidateDecoder (#458, step E4): the three encoder outputs + point_coords [B, 1, 2]
+                 -> mask_logits [B, 3, 256, 256], iou_scores [B, 3], stability_scores [B, 3]
 
 The encoder is `SAM2ImagePredictor.set_image`: the Hiera trunk, the FPN neck, the `conv_s0` and
 `conv_s1` projections of the mask decoder, and `no_mem_embed` on the stride-16 map. The decoder
@@ -122,6 +124,58 @@ class PointDecoder(nn.Module):
             high_res_features=[high_res_feats_0, high_res_feats_1],
         )
         return mask_logits, iou_scores, object_score_logits
+
+
+class CandidateDecoder(nn.Module):
+    """The point grid of `SAM2AutomaticMaskGenerator`: one positive point per prompt, B prompts.
+
+    The graph is `SAM2ImagePredictor._predict` for B single-point prompts with
+    `multimask_output=True` and `repeat_image=True` (the batched path of the generator):
+
+      image_embed [1, 256, 64, 64], high_res_feats_0 [1, 32, 256, 256],
+      high_res_feats_1 [1, 64, 128, 128], point_coords [B, 1, 2]
+      -> mask_logits [B, 3, 256, 256] (tokens 1-3, clamped to +-32 as the predictor does),
+         iou_scores [B, 3], stability_scores [B, 3]
+
+    `stability_scores` is `calculate_stability_score` (threshold 0, offset 1.0) on the 256 x 256
+    logits. The generator computes it on the masks at the photo size; the host can then filter
+    the candidates without reading every logit plane first.
+    """
+
+    def __init__(self, model, stability_offset: float = 1.0) -> None:
+        super().__init__()
+        self.point_decoder = PointDecoder(model)
+        self.stability_offset = stability_offset
+
+    def forward(self, image_embed, high_res_feats_0, high_res_feats_1, point_coords):
+        decoder = self.point_decoder
+        labels = torch.ones_like(point_coords[..., 0])
+        sparse = decoder._embed_points(point_coords, labels)
+        # [1, C, 1, 1]: the no-mask embedding broadcasts over the B repeated image embeddings.
+        dense = decoder.prompt_encoder.no_mask_embed.weight.reshape(1, -1, 1, 1)
+        mask_logits, iou_scores, _, _ = decoder.mask_decoder.predict_masks(
+            image_embeddings=image_embed,
+            image_pe=decoder.image_pe,
+            sparse_prompt_embeddings=sparse,
+            dense_prompt_embeddings=dense,
+            repeat_image=True,
+            high_res_features=[high_res_feats_0, high_res_feats_1],
+        )
+        mask_logits = torch.clamp(mask_logits[:, 1:], -32.0, 32.0)
+        iou_scores = iou_scores[:, 1:]
+        inner = (mask_logits > self.stability_offset).flatten(-2).sum(-1).float()
+        outer = (mask_logits > -self.stability_offset).flatten(-2).sum(-1).float()
+        stability_scores = torch.where(outer > 0, inner / outer.clamp(min=1.0),
+                                       torch.ones_like(outer))
+        return mask_logits, iou_scores, stability_scores
+
+
+def grid_points(points_per_side: int) -> torch.Tensor:
+    """`build_point_grid`: points_per_side**2 normalized points, row by row, cell centres."""
+    offset = 1.0 / (2 * points_per_side)
+    side = torch.linspace(offset, 1.0 - offset, points_per_side)
+    ys, xs = torch.meshgrid(side, side, indexing="ij")
+    return torch.stack([xs.reshape(-1), ys.reshape(-1)], dim=-1)
 
 
 def preprocess_image(image) -> torch.Tensor:

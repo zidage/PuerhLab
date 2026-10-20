@@ -866,6 +866,20 @@ Reports of the steps are in [`ai_mask_candidate/`](ai_mask_candidate/README.md).
   175 ms, 3.2 GB), Swin-L 3 to 15 s (float16 351 ms), HR fails on 8 GB. MIT. User assessment: the
   speed is not usable. User decision: only BiRefNet lite stays a candidate; the other five
   variants are dropped. E5 and the Subject task of E6 stay open.
+- E4 (2026-10-19, [report](ai_mask_candidate/e4_click_candidates.md)): measured on the photos
+  scaled to the 4096 px application input. The live point decoder at the pointer (three size
+  levels, default: best predicted IoU) reaches the intended mask more often than candidates
+  precomputed with the `SAM2AutomaticMaskGenerator` point grid of the same model. Base plus live:
+  default is the target on 20 of 25 single-point prompts, the rest one or two level steps away,
+  0 not reachable (tiny: 16, 6, 3 not reachable). The candidates need 0.8 to 3.2 s after the
+  encoder and 1.3 GB more GPU memory (a batch of 64 prompts: 5.2 GB, and the encoder becomes
+  17 times slower), and reach 18 (base plus) or 17 (tiny) targets by default with 2 or 4 not
+  reachable. Point decoder at the pointer: 12 ms; keeping the highlight while the pointer is
+  inside it gives a same-highlight share of 0.96 to 0.98 for nearby positions. Recommendation:
+  live point decoder with that hover rule, a level change by key or mouse wheel, base plus (tiny
+  as the lower-memory alternative). User decision (2026-10-19): float16 is acceptable (lower
+  model precision for a shorter processing time); the float16 forms of the encoder and the point
+  decoder are not measured yet. The user review is open.
 
 ---
 

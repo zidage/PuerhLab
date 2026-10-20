@@ -1,10 +1,12 @@
-# SAM 2.1 export and measurement tools (AI Segmentation Mask, #458 step E1)
+# SAM 2.1 export and measurement tools (AI Segmentation Mask, #458 steps E1 and E4)
 
 These scripts export the SAM 2.1 point and box path to ONNX, check the export against PyTorch, and
 make the evidence of the model re-evaluation. The Rust program
 `rust/puerh_mind/examples/segmentation_runtime_report.rs` measures the graphs with the session
-settings of the `alcedo_mind` sidecar. The report is
-[E1: SAM 2.1 point and box prompts](../../../docs/roadmap/alcedo_studio/edit/ai_mask_candidate/e1_sam2_1_point_box_evaluation.md);
+settings of the `alcedo_mind` sidecar. The reports are
+[E1: SAM 2.1 point and box prompts](../../../docs/roadmap/alcedo_studio/edit/ai_mask_candidate/e1_sam2_1_point_box_evaluation.md)
+and
+[E4: click selection with precomputed candidates](../../../docs/roadmap/alcedo_studio/edit/ai_mask_candidate/e4_click_candidates.md);
 the plan is [AI Segmentation Mask master plan, section 8.16](../../../docs/roadmap/alcedo_studio/edit/ai_segmentation_mask_master_plan.md).
 
 Weights, ONNX files, photos, and reports are not committed. Keep them under `build/tmp/explore/`.
@@ -27,6 +29,10 @@ Weights, ONNX files, photos, and reports are not committed. Keep them under `bui
 | `probe_masks.py` | Uncertainty, grid energy, hole, and island metrics of plan section 8.16.1 for any point and box graph pair (SAM 2.1 or EfficientSAM3). |
 | `run_with_gpu_memory.ps1` | Run a program and record its peak dedicated and shared GPU memory from the Windows `GPU Process Memory` counters. |
 | `make_comparison_sheets.py` | Overlay, logit, and detail-crop comparison sheets for the report. |
+| `compare_candidate_outputs.py` | E4: `CandidateDecoderLogitsMatchPytorchWithinTolerance`, the candidate graph compared with `SAM2ImagePredictor._predict` on the generator point grid; optionally the masks of the upstream `SAM2AutomaticMaskGenerator`. |
+| `click_targets.json` | E4: the intended selection (whole object or named part) and the E1 reference mask of each single-point prompt of the quality set. |
+| `probe_candidates.py` | E4: tables of the candidate reports (time to candidates, coverage, selection per prompt, hover result) and the comparison with the upstream generator. |
+| `make_candidate_sheets.py` | E4: candidate maps and the levels under the pointer per prompt. |
 
 ## Graphs
 
@@ -34,6 +40,7 @@ Weights, ONNX files, photos, and reports are not committed. Keep them under `bui
 | --- | --- | --- |
 | `point_encoder.onnx` | `pixel_values` [1, 3, 1024, 1024] | `image_embed` [1, 256, 64, 64], `high_res_feats_0` [1, 32, 256, 256], `high_res_feats_1` [1, 64, 128, 128] |
 | `point_decoder.onnx` | the three encoder outputs, `point_coords` [1, N, 2], `point_labels` [1, N], `mask_input` [1, 1, 256, 256], `has_mask_input` [1] | `mask_logits` [1, 4, 256, 256], `iou_scores` [1, 4], `object_score_logits` [1, 1] |
+| `candidate_decoder.onnx` (E4) | the three encoder outputs, `point_coords` [B, 1, 2] (one positive point per prompt) | `mask_logits` [B, 3, 256, 256] (tokens 1-3, clamped to +-32), `iou_scores` [B, 3], `stability_scores` [B, 3] |
 
 Data rules:
 
@@ -47,6 +54,12 @@ Data rules:
   tokens 1 to 3 for multimask output; token 0, or the best multimask token when the stability
   score of token 0 is below 0.98, for single-mask output.
 - `point_decoder.onnx` is different for each variant (each checkpoint trains its own decoder).
+- `candidate_decoder.onnx` is the batched point grid of `SAM2AutomaticMaskGenerator`
+  (`multimask_output=True`, `repeat_image=True`). `stability_scores` is
+  `calculate_stability_score` (threshold 0, offset 1.0) on the 256 x 256 logits; the upstream
+  generator computes it on the masks at the photo size. `--candidate-batch 64` fixes B to 64 (the
+  whole graph is then one DirectML node); `--candidate-float16` converts the graph to float16
+  inside, with float32 inputs and outputs. The E4 measurements use both options.
 
 ## Commands
 
@@ -118,4 +131,59 @@ $PY scripts/ai_models/sam2/make_comparison_sheets.py \
   --crop "DSC00936.jpg:person:0.47,0.63,0.68,0.93" --crop "DSC_1188.jpg:squirrel:0.3,0.1,0.72,0.64" \
   --crop "2088064441.jpg:boarder:0.4,0.45,0.62,0.66" --crop "DSC00562.jpg:ducks_3pt:0.33,0.35,0.56,0.52" \
   --crop "DSC00602.jpg:tram_box:0.35,0.6,0.92,0.92"
+```
+
+### E4: click candidates and the live point decoder
+
+Run one command at a time. The PyTorch checks use 4 threads (about 2 to 5 GB of memory); the
+DirectML runs use the GPU. The input set has the 4096 px long edge of the application input.
+
+```bash
+E=build/tmp/explore; PY="$E/venv/Scripts/python -I"; Q=build/tmp/sm1/quality
+# Photos and E1 reference masks at the application input size.
+$PY scripts/ai_models/sam2/make_input_set.py --photos $Q/photos \
+  --reference-masks $E/e1/compare/base_plus/reference_masks --max-edge 4096 --out $E/e4/input_4096
+# Graphs: the point graphs of E1 and a candidate graph with a fixed batch of 16 prompts (float32).
+# --candidate-float16 makes the float16 option of the report.
+for v in tiny base_plus; do
+  $PY scripts/ai_models/sam2/export_onnx.py --repository $E/src/sam2 --weights $E/weights \
+    --variants $v --candidate-batch 16 --out-root $E/e4/onnx_float32_batch16
+done
+# CandidateDecoderLogitsMatchPytorchWithinTolerance. --upstream-out also runs the upstream
+# generator on 1024 px copies (tiny only in the report).
+for v in tiny base_plus; do
+  $PY scripts/ai_models/sam2/compare_candidate_outputs.py --repository $E/src/sam2 \
+    --weights $E/weights --variant $v --onnx-dir $E/e4/onnx_float32_batch16/$v \
+    --photos $E/e4/input_4096/photos --batches-per-photo 2 --threads 4 \
+    --out $E/e4/compare/${v}_float32.json
+done
+```
+
+```powershell
+# DirectML run per variant (nested setting of the report). The upstream setting is
+# --score-threshold 0.8 --stability-threshold 0.95 --dedupe box --nms-threshold 0.7.
+Set-Location D:\Projects\pu-erh_lab
+$e = "build\tmp\explore"; $i = "$e\e4\input_4096"
+.\scripts\ai_models\sam2\run_with_gpu_memory.ps1 `
+  -Exe rust\puerh_mind\target\release\examples\segmentation_runtime_report.exe `
+  -Arguments @('candidates', '--onnx-dir', "$e\e4\onnx_float32_batch16\tiny", '--device', 'directml',
+               '--photos', "$i\photos", '--prompts', 'build\tmp\sm1\quality\prompts.json',
+               '--targets', 'scripts\ai_models\sam2\click_targets.json',
+               '--reference-masks', "$i\reference_masks",
+               '--reference-scores', "$e\e1\compare\base_plus\compare.json",
+               '--points-per-side', '16,32', '--batch', '16', '--batch-sizes', '16', '--runs', '5',
+               '--score-threshold', '0.5', '--stability-threshold', '0.85', '--dedupe', 'mask',
+               '--nms-threshold', '0.85', '--overlay-dir', "$e\e4\overlays\tiny",
+               '--overlay-points-per-side', '32', '--out', "$e\e4\runtime\tiny_directml.json") `
+  -Out "$e\e4\runtime\tiny_directml_gpu_memory.json" -Log "$e\e4\runtime\tiny_directml.log"
+```
+
+```bash
+# Tables and sheets of the report. The sheets are in .gitignore (photos that must not be shared).
+$PY scripts/ai_models/sam2/probe_candidates.py --report "tiny=$E/e4/runtime/tiny_directml.json" \
+  --report "base plus=$E/e4/runtime/base_plus_directml.json" --out $E/e4/probe/final.json
+$PY scripts/ai_models/sam2/make_candidate_sheets.py \
+  --model "SAM 2.1 tiny=$E/e4/runtime/tiny_directml.json|$E/e4/overlays/tiny" \
+  --model "SAM 2.1 base plus=$E/e4/runtime/base_plus_directml.json|$E/e4/overlays/base_plus" \
+  --grid 32 --out-dir docs/roadmap/alcedo_studio/edit/ai_mask_candidate/images/e4_click
 ```

@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Export the SAM 2.1 point and box graphs to ONNX (#458, step E1).
+"""Export the SAM 2.1 point and box graphs to ONNX (#458, steps E1 and E4).
 
-For each variant in --variants, the script writes <out-root>/<variant>/point_encoder.onnx,
-point_decoder.onnx, and export_report.json. The report records the opset, the input and output
+For each variant in --variants, the script writes the graphs of --graphs to <out-root>/<variant>/
+(point_encoder.onnx, point_decoder.onnx, and the batched point-grid graph
+candidate_decoder.onnx of step E4) and export_report.json. The report records the opset, the input and output
 shapes, the file sizes and SHA-256 values, the parameter counts, and the exporter error of each
 graph that fails. Its `model_input` entry tells `segmentation_runtime_report` the input size,
 the low-resolution mask size, and the pixel normalization (see sam2_graphs.py).
@@ -120,22 +121,56 @@ def export_variant(variant: str, args) -> dict:
         "high_res_feats_0": list(feats_0.shape),
         "high_res_feats_1": list(feats_1.shape),
     }
-    export_graph("point_encoder", encoder, (pixels,), ["pixel_values"],
-                 ["image_embed", "high_res_feats_0", "high_res_feats_1"], {}, out_dir,
-                 args.opset, report)
+    if "point_encoder" in args.graphs:
+        export_graph("point_encoder", encoder, (pixels,), ["pixel_values"],
+                     ["image_embed", "high_res_feats_0", "high_res_feats_1"], {}, out_dir,
+                     args.opset, report)
 
-    coords = torch.tensor([[[400.0, 300.0], [600.0, 500.0]]])
-    labels = torch.tensor([[1.0, 0.0]])
-    mask_input = torch.zeros(1, 1, graphs.LOW_RES_MASK_SIZE, graphs.LOW_RES_MASK_SIZE)
-    has_mask_input = torch.zeros(1)
-    export_graph(
-        "point_decoder", decoder,
-        (image_embed, feats_0, feats_1, coords, labels, mask_input, has_mask_input),
-        ["image_embed", "high_res_feats_0", "high_res_feats_1", "point_coords", "point_labels",
-         "mask_input", "has_mask_input"],
-        ["mask_logits", "iou_scores", "object_score_logits"],
-        {"point_coords": {1: "point_count"}, "point_labels": {1: "point_count"}},
-        out_dir, args.opset, report)
+    if "point_decoder" in args.graphs:
+        coords = torch.tensor([[[400.0, 300.0], [600.0, 500.0]]])
+        labels = torch.tensor([[1.0, 0.0]])
+        mask_input = torch.zeros(1, 1, graphs.LOW_RES_MASK_SIZE, graphs.LOW_RES_MASK_SIZE)
+        has_mask_input = torch.zeros(1)
+        export_graph(
+            "point_decoder", decoder,
+            (image_embed, feats_0, feats_1, coords, labels, mask_input, has_mask_input),
+            ["image_embed", "high_res_feats_0", "high_res_feats_1", "point_coords",
+             "point_labels", "mask_input", "has_mask_input"],
+            ["mask_logits", "iou_scores", "object_score_logits"],
+            {"point_coords": {1: "point_count"}, "point_labels": {1: "point_count"}},
+            out_dir, args.opset, report)
+
+    if "candidate_decoder" in args.graphs:
+        candidates = graphs.CandidateDecoder(model).eval()
+        # --candidate-batch 0: five prompts at export time and a dynamic prompt axis. Otherwise
+        # the prompt count is fixed to that value.
+        count = args.candidate_batch or 5
+        grid = graphs.grid_points(16)[:count] * graphs.IMAGE_SIZE
+        dynamic = {} if args.candidate_batch else {
+            "point_coords": {0: "prompt_count"}, "mask_logits": {0: "prompt_count"},
+            "iou_scores": {0: "prompt_count"}, "stability_scores": {0: "prompt_count"}}
+        export_graph(
+            "candidate_decoder", candidates, (image_embed, feats_0, feats_1, grid[:, None, :]),
+            ["image_embed", "high_res_feats_0", "high_res_feats_1", "point_coords"],
+            ["mask_logits", "iou_scores", "stability_scores"],
+            dynamic, out_dir, args.opset, report)
+        report["candidate_decoder"] = {
+            "stability_offset": candidates.stability_offset,
+            "tokens": "multimask tokens 1-3 of the mask decoder",
+            "prompt_count": args.candidate_batch or "dynamic",
+            "float16": args.candidate_float16,
+        }
+        entry = report["graphs"]["candidate_decoder"]
+        if args.candidate_float16 and entry["status"] == "exported":
+            import onnx
+            from onnxruntime.transformers.float16 import convert_float_to_float16
+
+            # Float16 inside the graph, float32 inputs and outputs, so the host code stays the
+            # same. The point graphs stay float32.
+            path = out_dir / "candidate_decoder.onnx"
+            onnx.save(convert_float_to_float16(onnx.load(str(path)), keep_io_types=True),
+                      str(path))
+            entry.update(describe_onnx(path))
 
     (out_dir / "export_report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
     return report
@@ -147,6 +182,12 @@ def main() -> int:
     parser.add_argument("--repository", required=True, help="SAM 2 repository checkout")
     parser.add_argument("--weights", required=True, help="directory with the .pt checkpoints")
     parser.add_argument("--variants", default="tiny,small,base_plus,large")
+    parser.add_argument("--graphs", default="point_encoder,point_decoder,candidate_decoder",
+                        type=lambda text: {g.strip() for g in text.split(",") if g.strip()})
+    parser.add_argument("--candidate-batch", type=int, default=0,
+                        help="fixed prompt count of candidate_decoder.onnx; 0 is dynamic")
+    parser.add_argument("--candidate-float16", action="store_true",
+                        help="convert candidate_decoder.onnx to float16 inside the graph")
     parser.add_argument("--opset", type=int, default=17)
     parser.add_argument("--out-root", required=True)
     args = parser.parse_args()

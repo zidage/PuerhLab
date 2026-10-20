@@ -1,0 +1,60 @@
+{
+  "description": "Intended selection of each single-point prompt of the SM1 quality set (build/tmp/sm1/quality/prompts.json) for #458 step E4. intent object: the click should select the whole object; the reference is the PyTorch box mask of that object from step E1 (<stem>__<box>__single0.png). intent part: the click should select the part that the prompt names; the reference is the best PyTorch multimask candidate of that point from step E1 (<stem>__<point>__multi<k>.png, k from the scores in compare.json), which the E1 review found correct. reference null: no reference mask; the result is checked on the images only.",
+  "reference_variant": "base_plus",
+  "targets": {
+    "DSC_1535.jpg": {
+      "torso": {"intent": "object", "reference": {"box": "person"}},
+      "hair": {"intent": "part", "reference": {"point": "hair"}}
+    },
+    "DSC00326.jpg": {
+      "jacket": {"intent": "part", "reference": {"point": "jacket"}},
+      "hair": {"intent": "part", "reference": {"point": "hair"}}
+    },
+    "DSC00674.jpg": {
+      "face": {"intent": "part", "reference": {"point": "face"}},
+      "hair": {"intent": "part", "reference": {"point": "hair"}}
+    },
+    "DSC00936.jpg": {
+      "torso": {"intent": "object", "reference": {"box": "person"}}
+    },
+    "P1024439.jpg": {
+      "dress": {"intent": "object", "reference": {"box": "bassist"}},
+      "hair": {"intent": "part", "reference": {"point": "hair"}}
+    },
+    "DSC_1188.jpg": {
+      "body": {"intent": "object", "reference": {"box": "squirrel"}},
+      "tail": {"intent": "part", "reference": {"point": "tail"}}
+    },
+    "DSC00527.jpg": {
+      "sky": {"intent": "part", "reference": {"point": "sky"}},
+      "tree": {"intent": "part", "reference": {"point": "tree"}},
+      "kneeling_woman": {"intent": "object", "reference": {"box": "kneeling_woman_box"}}
+    },
+    "2088064441.jpg": {
+      "person": {"intent": "object", "reference": null},
+      "board": {"intent": "part", "reference": {"point": "board"}}
+    },
+    "DSC00728.jpg": {
+      "balloon": {"intent": "object", "reference": {"box": "balloon_box"}},
+      "sky": {"intent": "part", "reference": {"point": "sky"}}
+    },
+    "5761824892.jpg": {
+      "car": {"intent": "object", "reference": {"box": "car_box"}},
+      "kayak": {"intent": "part", "reference": {"point": "kayak"}}
+    },
+    "DSC00562.jpg": {
+      "duck": {"intent": "object", "reference": {"box": "duck_on_wall"}}
+    },
+    "DSC00602.jpg": {
+      "tram": {"intent": "object", "reference": {"box": "tram_box"}}
+    },
+    "DSC_1456.jpg": {
+      "car": {"intent": "object", "reference": {"box": "car_box"}}
+    },
+    "Nikon-D800e-raw-00007.jpg": {
+      "sky": {"intent": "part", "reference": {"point": "sky"}},
+      "rock": {"intent": "object", "reference": {"box": "rock_box"}},
+      "flowers": {"intent": "part", "reference": {"point": "flowers"}}
+    }
+  }
+}
