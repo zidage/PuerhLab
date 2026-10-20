@@ -1,10 +1,11 @@
-# SAM 2.1 export and measurement tools (AI Segmentation Mask, #458 steps E1 and E4)
+# SAM 2.1 export and measurement tools (AI Segmentation Mask, #458 steps E1, E3, and E4)
 
 These scripts export the SAM 2.1 point and box path to ONNX, check the export against PyTorch, and
 make the evidence of the model re-evaluation. The Rust program
 `rust/puerh_mind/examples/segmentation_runtime_report.rs` measures the graphs with the session
 settings of the `alcedo_mind` sidecar. The reports are
-[E1: SAM 2.1 point and box prompts](../../../docs/roadmap/alcedo_studio/edit/ai_mask_candidate/e1_sam2_1_point_box_evaluation.md)
+[E1: SAM 2.1 point and box prompts](../../../docs/roadmap/alcedo_studio/edit/ai_mask_candidate/e1_sam2_1_point_box_evaluation.md),
+[E3: stroke selection](../../../docs/roadmap/alcedo_studio/edit/ai_mask_candidate/e3_stroke_selection.md),
 and
 [E4: click selection with precomputed candidates](../../../docs/roadmap/alcedo_studio/edit/ai_mask_candidate/e4_click_candidates.md);
 the plan is [AI Segmentation Mask master plan, section 8.16](../../../docs/roadmap/alcedo_studio/edit/ai_segmentation_mask_master_plan.md).
@@ -33,6 +34,9 @@ Weights, ONNX files, photos, and reports are not committed. Keep them under `bui
 | `click_targets.json` | E4: the intended selection (whole object or named part) and the E1 reference mask of each single-point prompt of the quality set. |
 | `probe_candidates.py` | E4: tables of the candidate reports (time to candidates, coverage, selection per prompt, hover result) and the comparison with the upstream generator. |
 | `make_candidate_sheets.py` | E4: candidate maps and the levels under the pointer per prompt. |
+| `compare_stroke_outputs.py` | E3: `StrokePromptLogitsMatchPytorchWithinTolerance`, every corrective sequence of a `strokes` report replayed with `SAM2ImagePredictor.predict` and ONNX Runtime CPU (several points, negative points, `mask_input`); with `--pad-points`, the padded prompts on both sides. |
+| `probe_strokes.py` | E3: tables of the stroke reports (first interaction, length and point count, spacing, direction, corrective sequences, decoder time, agreement with a second report). |
+| `make_stroke_sheets.py` | E3: one click, strokes, and the corrective sequences per prompt, with the strokes and points drawn. |
 
 ## Graphs
 
@@ -186,4 +190,48 @@ $PY scripts/ai_models/sam2/make_candidate_sheets.py \
   --model "SAM 2.1 tiny=$E/e4/runtime/tiny_directml.json|$E/e4/overlays/tiny" \
   --model "SAM 2.1 base plus=$E/e4/runtime/base_plus_directml.json|$E/e4/overlays/base_plus" \
   --grid 32 --out-dir docs/roadmap/alcedo_studio/edit/ai_mask_candidate/images/e4_click
+```
+
+### E3: stroke selection
+
+The E3 runs use the E4 input set and the E4 graphs (`point_encoder.onnx` and `point_decoder.onnx`
+are byte-identical to E1). Run one command at a time.
+
+```powershell
+# DirectML run per variant: stroke sweeps, corrective sequences, decoder time per point count.
+# Add '--decoder-sessions', 'per-point-count' for one decoder session per point count, or
+# '--pad-points', '32', '--pad-mode', 'label' (or 'repeat') for a fixed point count;
+# '--profile-dir', "$e\e3\profiles\tiny" writes operator profiles for --profile-counts (1,5).
+Set-Location D:\Projects\pu-erh_lab
+$e = "build\tmp\explore"; $i = "$e\e4\input_4096"
+.\scripts\ai_models\sam2\run_with_gpu_memory.ps1 `
+  -Exe rust\puerh_mind\target\release\examples\segmentation_runtime_report.exe `
+  -Arguments @('strokes', '--onnx-dir', "$e\e4\onnx_float32_batch16\tiny", '--device', 'directml',
+               '--photos', "$i\photos", '--prompts', 'build\tmp\sm1\quality\prompts.json',
+               '--targets', 'scripts\ai_models\sam2\click_targets.json',
+               '--reference-masks', "$i\reference_masks",
+               '--reference-scores', "$e\e1\compare\base_plus\compare.json",
+               '--mask-dir', "$e\e3\masks\tiny", '--out', "$e\e3\runtime\tiny_directml.json") `
+  -Out "$e\e3\runtime\tiny_directml_gpu_memory.json" -Log "$e\e3\runtime\tiny_directml.log"
+```
+
+```bash
+E=build/tmp/explore; PY="$E/venv/Scripts/python -I"
+# StrokePromptLogitsMatchPytorchWithinTolerance. --pad-points 32 --pad-mode label|repeat also
+# decodes the padded prompts on both sides (the report runs it on one photo).
+for v in tiny base_plus; do
+  $PY scripts/ai_models/sam2/compare_stroke_outputs.py --repository $E/src/sam2 --weights $E/weights \
+    --variant $v --onnx-dir $E/e4/onnx_float32_batch16/$v --photos $E/e4/input_4096/photos \
+    --report $E/e3/runtime/${v}_directml.json --threads 4 --out $E/e3/compare/${v}_strokes.json
+done
+# Tables and sheets of the report. The sheets are in .gitignore (photos that must not be shared).
+$PY scripts/ai_models/sam2/probe_strokes.py \
+  --report "tiny=$E/e3/runtime/tiny_directml.json|$E/e3/runtime/tiny_sessions_directml.json|$E/e3/runtime/tiny_directml_gpu_memory.json" \
+  --report "base plus=$E/e3/runtime/base_plus_directml.json|$E/e3/runtime/base_plus_sessions_directml.json|$E/e3/runtime/base_plus_directml_gpu_memory.json" \
+  --out $E/e3/probe/final.json
+$PY scripts/ai_models/sam2/make_stroke_sheets.py \
+  --model "SAM 2.1 tiny=$E/e3/runtime/tiny_directml.json|$E/e3/masks/tiny" \
+  --model "SAM 2.1 base plus=$E/e3/runtime/base_plus_directml.json|$E/e3/masks/base_plus" \
+  --photos $E/e4/input_4096/photos --reference-masks $E/e4/input_4096/reference_masks \
+  --out-dir docs/roadmap/alcedo_studio/edit/ai_mask_candidate/images/e3_strokes
 ```

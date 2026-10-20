@@ -882,6 +882,20 @@ Reports of the steps are in [`ai_mask_candidate/`](ai_mask_candidate/README.md).
   decoder are not measured yet. User assessment (2026-10-20): a selection that follows the
   pointer movement is probably not a good interaction; step E3 measures stroke selection
   instead.
+- E3 (2026-10-20, [report](ai_mask_candidate/e3_stroke_selection.md)): synthetic straight
+  strokes inside the E1 reference masks, SAM 2.1 tiny and base plus. A short stroke selects the
+  region that it covers, like a click: half of the region gives 18 of 25 targets with base plus
+  (one click: 20) and 17 with tiny (16). A stroke across the whole region along its long axis
+  gives 23 of 25 without a level change (base plus 25 of 25 with 2 or 4 points). 3 or 4 points
+  per stroke are best; 8 points and dense points on small parts are worse. Add and subtract
+  strokes work with all points in one decoder run and the previous mask as `mask_input`: 0 of 58
+  corrections lowered the IoU (base plus); from the largest mask of a click, one subtract stroke
+  reaches the part on 7 of 14 part prompts. On DirectML, a decoder session runs only the point
+  count of its first run at 10.5 ms; other counts take 22 to 34 ms. Padding to a fixed point
+  count breaks the masks (also in PyTorch); one session per point count gives 12 ms at about
+  90 MB each. `StrokePromptLogitsMatchPytorchWithinTolerance` passed (tiny 390, base plus 324
+  decoder calls). Recommendation: the click stays the main entry; a stroke tool decodes once per
+  stroke with 3 to 4 points and the previous mask, base plus. The user review is open.
 
 ---
 

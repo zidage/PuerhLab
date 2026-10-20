@@ -32,6 +32,15 @@
 //! mask of the intended target, and it measures whether the highlight stays the same when the
 //! pointer moves a short distance (`CandidateDecoderOutputShapeMatchesExportedSpecification`).
 //!
+//! `strokes` mode (#458, step E3) loads `point_encoder.onnx` and `point_decoder.onnx`. It places
+//! straight strokes inside the E1 reference mask of each single-point prompt (through the prompt
+//! point, at a margin from the mask edge), samples points along each stroke as positive points of
+//! the point decoder, and compares the selected mask with the reference and with one click. It
+//! sweeps the point count, the point spacing, the stroke length, and the stroke direction. It then
+//! simulates corrective add and subtract strokes (and corrective clicks for comparison) in the
+//! largest error region, with three ways to combine the strokes, and it measures the decoder time
+//! per stroke for 1 to 32 points with and without the previous mask as `mask_input`.
+//!
 //! `ping` mode measures the `HealthService.Ping` round trip of a running sidecar with one
 //! persistent channel and with a new channel per call (`PingLatencyIsReportedForPersistentAndPerCallChannels`).
 //!
@@ -142,6 +151,7 @@ fn main() -> Result<()> {
         "runtime" => run_runtime_report(&RuntimeOptions::from_map(&options)?),
         "matte" => run_matte_report(&MatteOptions::from_map(&options)?),
         "candidates" => run_candidate_report(&CandidateOptions::from_map(&options)?),
+        "strokes" => run_stroke_report(&StrokeOptions::from_map(&options)?),
         "ping" => run_ping_report(&PingOptions::from_map(&options)?),
         _ => bail!(
             "usage: segmentation_runtime_report runtime --onnx-dir DIR --device DEVICE --photos DIR \
@@ -153,6 +163,12 @@ fn main() -> Result<()> {
              [--targets FILE] [--reference-masks DIR] [--reference-scores FILE] [--overlay-dir DIR] [--overlay-points-per-side N] \
              [--mask-dir DIR] [--points-per-side N,N] [--batch N] [--batch-sizes N,N] [--runs N] [--profile-dir DIR] \
              [--score-threshold V] [--stability-threshold V] [--nms-threshold V] [--dedupe box|mask]\n\
+             segmentation_runtime_report strokes --onnx-dir DIR --device DEVICE --photos DIR --prompts FILE --out FILE \
+             --targets FILE --reference-masks DIR --reference-scores FILE [--mask-dir DIR] [--margin V] \
+             [--lengths V,V] [--counts N,N] [--spacings V,V] [--primary-length V] [--primary-count N] \
+             [--corrective-steps N] [--stop-iou V] [--timing-counts N,N] [--runs N] [--profile-dir DIR] \
+             [--profile-counts N,N] [--pad-points N] [--pad-mode label|repeat] \
+             [--decoder-sessions one|per-point-count]\n\
              segmentation_runtime_report ping --endpoint URL --out FILE [--calls N]"
         ),
     }
@@ -689,9 +705,29 @@ fn run_point_decoder(
     coords: &[[f32; 2]],
     labels: &[f32],
 ) -> Result<DecoderOutput> {
+    run_point_decoder_with_mask(session, features, coords, labels, None)
+}
+
+/// `mask_input` is the low-resolution logits of a previous selection (the `mask_input` of
+/// `SAM2ImagePredictor.predict`); `None` sets `has_mask_input` to 0.
+fn run_point_decoder_with_mask(
+    session: &mut Session,
+    features: &PointFeatures,
+    coords: &[[f32; 2]],
+    labels: &[f32],
+    mask_input: Option<&[f32]>,
+) -> Result<DecoderOutput> {
     let count = coords.len();
     // The low-resolution mask has the size of the stride-4 features (`high_res_feats_0`).
     let mask_size = features.shapes[1].last().copied().unwrap_or(0) as usize;
+    let (mask_values, has_mask) = match mask_input {
+        Some(logits) if logits.len() == mask_size * mask_size => (logits.to_vec(), 1.0f32),
+        Some(logits) => bail!(
+            "mask input has {} values; the decoder needs {mask_size} x {mask_size}",
+            logits.len()
+        ),
+        None => (vec![0.0f32; mask_size * mask_size], 0.0f32),
+    };
     let tensor = |shape: &[i64], data: &[f32]| {
         Tensor::from_array((shape_usize(shape), data.to_vec()))
             .map_err(|e| anyhow!("failed to build decoder input: {e}"))
@@ -703,11 +739,8 @@ fn run_point_decoder(
             "high_res_feats_1" => tensor(&features.shapes[2], &features.high_res_feats_1)?,
             "point_coords" => Tensor::from_array(([1usize, count, 2], coords.concat()))?,
             "point_labels" => Tensor::from_array(([1usize, count], labels.to_vec()))?,
-            "mask_input" => Tensor::from_array((
-                [1usize, 1, mask_size, mask_size],
-                vec![0.0f32; mask_size * mask_size],
-            ))?,
-            "has_mask_input" => Tensor::from_array(([1usize], vec![0.0f32]))?,
+            "mask_input" => Tensor::from_array(([1usize, 1, mask_size, mask_size], mask_values))?,
+            "has_mask_input" => Tensor::from_array(([1usize], vec![has_mask]))?,
         })
         .map_err(|e| anyhow!("point decoder run failed: {e}"))?;
     let mut shapes = BTreeMap::new();
@@ -2950,6 +2983,1294 @@ fn run_candidate_report(options: &CandidateOptions) -> Result<()> {
         .unwrap_or_else(
             || json!({ "status": "unavailable", "reason": "no candidate decoder run" }),
         );
+    report["memory_at_end"] = process_memory::sample();
+    write_report(&options.out, &report)
+}
+
+// ---------------------------------------------------------------------------------------------
+// Stroke selection (#458, step E3)
+
+struct StrokeOptions {
+    onnx_dir: PathBuf,
+    device_text: String,
+    device: DeviceRequest,
+    photos: PathBuf,
+    prompts: PathBuf,
+    targets: PathBuf,
+    reference_masks: PathBuf,
+    reference_scores: PathBuf,
+    out: PathBuf,
+    mask_dir: Option<PathBuf>,
+    /// Long edge of the evaluation masks.
+    evaluation_max_edge: u32,
+    /// Minimum distance of each stroke point from the edge of the region, as a fraction of the
+    /// short photo side.
+    margin: f32,
+    /// Stroke lengths as fractions of the inner chord through the prompt point.
+    lengths: Vec<f32>,
+    /// Point counts along a stroke (2 or more; one point is the click).
+    counts: Vec<usize>,
+    /// Point spacings as fractions of the short photo side.
+    spacings: Vec<f32>,
+    max_spacing_points: usize,
+    /// Length fraction and point count of the first stroke and of the corrective strokes.
+    primary_length: f32,
+    primary_count: usize,
+    /// Corrective interactions after the first one.
+    corrective_steps: usize,
+    /// Reference IoU at which a corrective sequence stops.
+    stop_iou: f64,
+    timing_counts: Vec<usize>,
+    runs: usize,
+    /// Operator profiles of the point decoder with these point counts.
+    profile_dir: Option<PathBuf>,
+    profile_counts: Vec<usize>,
+    /// Pads every prompt to a fixed point count, so that the decoder always runs with one input
+    /// shape.
+    pad_points: Option<PointPadding>,
+    /// One decoder session per point count, loaded on first use, so that each session runs only
+    /// one input shape.
+    session_per_point_count: bool,
+}
+
+impl StrokeOptions {
+    fn from_map(options: &BTreeMap<String, String>) -> Result<Self> {
+        let device_text = required(options, "device")?;
+        let primary_count = parse_value(options, "primary-count", 5usize)?;
+        if primary_count < 2 {
+            bail!("--primary-count must be at least 2; one point is a click");
+        }
+        Ok(Self {
+            onnx_dir: required(options, "onnx-dir")?.into(),
+            device: ort_runtime::parse_device_request(&device_text)?,
+            device_text,
+            photos: required(options, "photos")?.into(),
+            prompts: required(options, "prompts")?.into(),
+            targets: required(options, "targets")?.into(),
+            reference_masks: required(options, "reference-masks")?.into(),
+            reference_scores: required(options, "reference-scores")?.into(),
+            out: required(options, "out")?.into(),
+            mask_dir: options.get("mask-dir").map(PathBuf::from),
+            evaluation_max_edge: parse_value(options, "evaluation-max-edge", 1024)?,
+            margin: parse_value(options, "margin", 0.01)?,
+            lengths: parse_list(options, "lengths", "0.25,0.5,0.75,1")?,
+            counts: parse_list(options, "counts", "2,3,4,5,8")?,
+            spacings: parse_list(options, "spacings", "0.02,0.04,0.08")?,
+            max_spacing_points: parse_value(options, "max-spacing-points", 16)?,
+            primary_length: parse_value(options, "primary-length", 0.5)?,
+            primary_count,
+            corrective_steps: parse_value(options, "corrective-steps", 4)?,
+            stop_iou: parse_value(options, "stop-iou", 0.9)?,
+            timing_counts: parse_list(options, "timing-counts", "1,2,3,5,8,16,32")?,
+            runs: parse_count(options, "runs", 20)?,
+            profile_dir: options.get("profile-dir").map(PathBuf::from),
+            profile_counts: parse_list(options, "profile-counts", "1,5")?,
+            pad_points: match options.get("pad-points") {
+                None => None,
+                Some(value) => Some(PointPadding {
+                    total: value
+                        .parse()
+                        .map_err(|_| anyhow!("failed to parse --pad-points {value:?}"))?,
+                    repeat_last_point: match options.get("pad-mode").map_or("label", String::as_str)
+                    {
+                        "label" => false,
+                        "repeat" => true,
+                        other => bail!("unsupported --pad-mode {other:?}; use label or repeat"),
+                    },
+                }),
+            },
+            session_per_point_count: match options
+                .get("decoder-sessions")
+                .map_or("one", String::as_str)
+            {
+                "one" => false,
+                "per-point-count" => true,
+                other => {
+                    bail!("unsupported --decoder-sessions {other:?}; use one or per-point-count")
+                }
+            },
+        })
+    }
+}
+
+/// Label of a padding point: the prompt encoder uses `not_a_point_embed` and ignores its
+/// coordinates.
+const PADDING_LABEL: f32 = -1.0;
+
+/// A fixed point count of the decoder prompt.
+#[derive(Clone, Copy)]
+struct PointPadding {
+    total: usize,
+    /// `false`: padding points with label -1 (`--pad-mode label`); `true`: copies of the last
+    /// point with its label (`--pad-mode repeat`).
+    repeat_last_point: bool,
+}
+
+impl PointPadding {
+    fn name(self) -> &'static str {
+        if self.repeat_last_point {
+            "repeat the last point"
+        } else {
+            "padding points with label -1"
+        }
+    }
+}
+
+/// Pads `coords` and `labels` to the point count of `padding`.
+fn pad_prompt(
+    coords: &mut Vec<[f32; 2]>,
+    labels: &mut Vec<f32>,
+    padding: Option<PointPadding>,
+) -> Result<()> {
+    let Some(padding) = padding else {
+        return Ok(());
+    };
+    let total = padding.total;
+    if coords.len() > total {
+        bail!(
+            "{} prompt points do not fit into --pad-points {total}",
+            coords.len()
+        );
+    }
+    let (point, label) = if padding.repeat_last_point {
+        match (coords.last(), labels.last()) {
+            (Some(&point), Some(&label)) => (point, label),
+            _ => bail!("--pad-mode repeat needs at least one prompt point"),
+        }
+    } else {
+        ([0.0, 0.0], PADDING_LABEL)
+    };
+    coords.resize(total, point);
+    labels.resize(total, label);
+    Ok(())
+}
+
+/// Initial value of the inside pixels for the squared distance transform.
+const DISTANCE_INSIDE: f64 = 1e12;
+
+/// One line of the squared Euclidean distance transform of Felzenszwalb and Huttenlocher.
+/// `v` needs `f.len()` entries and `z` needs `f.len() + 1`.
+fn squared_distance_1d(f: &[f64], d: &mut [f64], v: &mut [usize], z: &mut [f64]) {
+    let n = f.len();
+    let mut k = 0usize;
+    v[0] = 0;
+    z[0] = f64::NEG_INFINITY;
+    z[1] = f64::INFINITY;
+    for q in 1..n {
+        let qf = q as f64;
+        let mut s;
+        loop {
+            let p = v[k] as f64;
+            s = ((f[q] + qf * qf) - (f[v[k]] + p * p)) / (2.0 * (qf - p));
+            if s <= z[k] {
+                k -= 1;
+            } else {
+                break;
+            }
+        }
+        k += 1;
+        v[k] = q;
+        z[k] = s;
+        z[k + 1] = f64::INFINITY;
+    }
+    k = 0;
+    for (q, distance) in d.iter_mut().enumerate().take(n) {
+        while z[k + 1] < q as f64 {
+            k += 1;
+        }
+        let offset = q as f64 - v[k] as f64;
+        *distance = offset * offset + f[v[k]];
+    }
+}
+
+/// Euclidean distance of each inside pixel to the centre of the nearest outside pixel. Pixels
+/// outside the photo count as outside; outside pixels have distance 0.
+fn distance_to_outside(inside: &[bool], width: usize, height: usize) -> Vec<f32> {
+    let (padded_width, padded_height) = (width + 2, height + 2);
+    let mut grid = vec![0.0f64; padded_width * padded_height];
+    for y in 0..height {
+        for x in 0..width {
+            if inside[y * width + x] {
+                grid[(y + 1) * padded_width + x + 1] = DISTANCE_INSIDE;
+            }
+        }
+    }
+    let longest = padded_width.max(padded_height);
+    let mut f = vec![0.0f64; longest];
+    let mut d = vec![0.0f64; longest];
+    let mut v = vec![0usize; longest];
+    let mut z = vec![0.0f64; longest + 1];
+    let n = padded_height;
+    for x in 0..padded_width {
+        for y in 0..n {
+            f[y] = grid[y * padded_width + x];
+        }
+        squared_distance_1d(&f[..n], &mut d[..n], &mut v[..n], &mut z[..n + 1]);
+        for y in 0..n {
+            grid[y * padded_width + x] = d[y];
+        }
+    }
+    let n = padded_width;
+    for y in 0..padded_height {
+        let row = y * padded_width;
+        f[..n].copy_from_slice(&grid[row..row + n]);
+        squared_distance_1d(&f[..n], &mut d[..n], &mut v[..n], &mut z[..n + 1]);
+        grid[row..row + n].copy_from_slice(&d[..n]);
+    }
+    let mut distance = vec![0.0f32; width * height];
+    for y in 0..height {
+        for x in 0..width {
+            distance[y * width + x] = grid[(y + 1) * padded_width + x + 1].sqrt() as f32;
+        }
+    }
+    distance
+}
+
+/// A binary region on the evaluation frame and the distance of its pixels to its edge.
+/// Coordinates are evaluation-frame pixels; pixel (i, j) covers [i, i + 1) x [j, j + 1).
+struct Region {
+    width: usize,
+    height: usize,
+    inside: Vec<bool>,
+    distance: Vec<f32>,
+}
+
+impl Region {
+    fn new(inside: Vec<bool>, width: usize, height: usize) -> Self {
+        let distance = distance_to_outside(&inside, width, height);
+        Self {
+            width,
+            height,
+            inside,
+            distance,
+        }
+    }
+
+    fn from_mask(mask: &GrayImage) -> Self {
+        let inside = mask.pixels().map(|p| p[0] > 127).collect();
+        Self::new(inside, mask.width() as usize, mask.height() as usize)
+    }
+
+    fn index(&self, point: [f32; 2]) -> Option<usize> {
+        let (x, y) = (point[0].floor(), point[1].floor());
+        if x < 0.0 || y < 0.0 || x >= self.width as f32 || y >= self.height as f32 {
+            return None;
+        }
+        Some(y as usize * self.width + x as usize)
+    }
+
+    fn distance_at(&self, point: [f32; 2]) -> f32 {
+        self.index(point).map_or(0.0, |i| self.distance[i])
+    }
+
+    fn centre(&self, index: usize) -> [f32; 2] {
+        [
+            (index % self.width) as f32 + 0.5,
+            (index / self.width) as f32 + 0.5,
+        ]
+    }
+
+    fn area_fraction(&self) -> f64 {
+        self.inside.iter().filter(|&&v| v).count() as f64 / self.inside.len() as f64
+    }
+
+    /// The pixel farthest from the edge and its distance.
+    fn deepest(&self) -> Option<(usize, f32)> {
+        self.distance
+            .iter()
+            .copied()
+            .enumerate()
+            .filter(|&(_, d)| d > 0.0)
+            .max_by(|a, b| a.1.total_cmp(&b.1))
+    }
+
+    /// Principal axis (unit vector) of the 4-connected component that contains `start`.
+    fn principal_direction(&self, start: usize) -> [f32; 2] {
+        if !self.inside[start] {
+            return [1.0, 0.0];
+        }
+        let mut visited = vec![false; self.inside.len()];
+        let mut queue = std::collections::VecDeque::from([start]);
+        visited[start] = true;
+        let (mut n, mut sx, mut sy) = (0.0f64, 0.0f64, 0.0f64);
+        let (mut sxx, mut syy, mut sxy) = (0.0f64, 0.0f64, 0.0f64);
+        while let Some(index) = queue.pop_front() {
+            let (x, y) = (index % self.width, index / self.width);
+            let (fx, fy) = (x as f64, y as f64);
+            n += 1.0;
+            sx += fx;
+            sy += fy;
+            sxx += fx * fx;
+            syy += fy * fy;
+            sxy += fx * fy;
+            let mut neighbours = [None; 4];
+            if x > 0 {
+                neighbours[0] = Some(index - 1);
+            }
+            if x + 1 < self.width {
+                neighbours[1] = Some(index + 1);
+            }
+            if y > 0 {
+                neighbours[2] = Some(index - self.width);
+            }
+            if y + 1 < self.height {
+                neighbours[3] = Some(index + self.width);
+            }
+            for neighbour in neighbours.into_iter().flatten() {
+                if self.inside[neighbour] && !visited[neighbour] {
+                    visited[neighbour] = true;
+                    queue.push_back(neighbour);
+                }
+            }
+        }
+        let (mx, my) = (sx / n, sy / n);
+        let cxx = sxx / n - mx * mx;
+        let cyy = syy / n - my * my;
+        let cxy = sxy / n - mx * my;
+        let angle = 0.5 * (2.0 * cxy).atan2(cxx - cyy);
+        [angle.cos() as f32, angle.sin() as f32]
+    }
+
+    /// Distances back and forward from `point` along `direction` to the last positions whose
+    /// distance to the edge is at least `margin` (0.5 px steps). (0, 0) if `point` itself is
+    /// closer to the edge.
+    fn inner_chord(&self, point: [f32; 2], direction: [f32; 2], margin: f32) -> (f32, f32) {
+        const STEP: f32 = 0.5;
+        if self.distance_at(point) < margin {
+            return (0.0, 0.0);
+        }
+        let reach = |sign: f32| {
+            let mut t = 0.0f32;
+            loop {
+                let next = t + STEP;
+                let position = [
+                    point[0] + sign * next * direction[0],
+                    point[1] + sign * next * direction[1],
+                ];
+                if self.distance_at(position) < margin {
+                    return t;
+                }
+                t = next;
+            }
+        };
+        (reach(-1.0), reach(1.0))
+    }
+}
+
+/// A straight stroke in evaluation-frame pixels.
+#[derive(Clone, Copy)]
+struct Stroke {
+    start: [f32; 2],
+    end: [f32; 2],
+}
+
+impl Stroke {
+    /// `fraction` of the inner chord `(back, forward)` through `point`, centred on `point` as far
+    /// as the chord allows.
+    fn along_chord(
+        point: [f32; 2],
+        direction: [f32; 2],
+        (back, forward): (f32, f32),
+        fraction: f32,
+    ) -> Option<Self> {
+        let chord = back + forward;
+        if chord <= 0.0 {
+            return None;
+        }
+        let length = fraction.clamp(0.0, 1.0) * chord;
+        let offset = (-length / 2.0).clamp(-back, forward - length);
+        let at = |t: f32| [point[0] + t * direction[0], point[1] + t * direction[1]];
+        Some(Self {
+            start: at(offset),
+            end: at(offset + length),
+        })
+    }
+
+    fn length(&self) -> f32 {
+        (self.end[0] - self.start[0]).hypot(self.end[1] - self.start[1])
+    }
+
+    /// `count` points at equal spacing from the start to the end; one point is the midpoint.
+    fn sample(&self, count: usize) -> Vec<[f32; 2]> {
+        if count <= 1 {
+            return vec![[
+                (self.start[0] + self.end[0]) / 2.0,
+                (self.start[1] + self.end[1]) / 2.0,
+            ]];
+        }
+        (0..count)
+            .map(|k| {
+                let t = k as f32 / (count - 1) as f32;
+                [
+                    self.start[0] + t * (self.end[0] - self.start[0]),
+                    self.start[1] + t * (self.end[1] - self.start[1]),
+                ]
+            })
+            .collect()
+    }
+}
+
+/// How the interactions of one selection become one mask.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum StrokeCombination {
+    /// All points of all interactions in one decoder run, with the previous selection as
+    /// `mask_input` (the interactive refinement of SAM).
+    PointsAndPreviousMask,
+    /// All points of all interactions in one decoder run, without `mask_input`.
+    Points,
+    /// Each stroke decoded alone with positive points; an add stroke takes the union, a subtract
+    /// stroke removes its mask (maximum and minimum of the logits).
+    UnionOfStrokes,
+}
+
+impl StrokeCombination {
+    fn name(self) -> &'static str {
+        match self {
+            Self::PointsAndPreviousMask => "points_and_previous_mask",
+            Self::Points => "points",
+            Self::UnionOfStrokes => "union_of_strokes",
+        }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Interaction {
+    /// One click; the multimask output with the best predicted IoU (the E4 default).
+    Click,
+    /// One click; the largest multimask output (usually the whole object), so that a part
+    /// target needs subtract corrections.
+    ClickLargestMask,
+    /// A stroke of `--primary-length` of the inner chord with `--primary-count` points.
+    Stroke,
+    /// A stroke along the whole inner chord with `--primary-count` points (first interaction
+    /// only).
+    FullStroke,
+}
+
+impl Interaction {
+    fn name(self) -> &'static str {
+        match self {
+            Self::Click => "click",
+            Self::ClickLargestMask => "click_largest_mask",
+            Self::Stroke => "stroke",
+            Self::FullStroke => "full_stroke",
+        }
+    }
+}
+
+/// A corrective interaction in the largest error region.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Correction {
+    Click,
+    Stroke,
+}
+
+impl Correction {
+    fn name(self) -> &'static str {
+        match self {
+            Self::Click => "click",
+            Self::Stroke => "stroke",
+        }
+    }
+}
+
+/// One corrective sequence: the first interaction, then corrections in the largest error region.
+struct CorrectionSequence {
+    name: &'static str,
+    first: Interaction,
+    corrective: Correction,
+    combination: StrokeCombination,
+}
+
+const CORRECTION_SEQUENCES: [CorrectionSequence; 9] = [
+    CorrectionSequence {
+        name: "click_then_clicks",
+        first: Interaction::Click,
+        corrective: Correction::Click,
+        combination: StrokeCombination::PointsAndPreviousMask,
+    },
+    CorrectionSequence {
+        name: "click_then_clicks_without_mask_input",
+        first: Interaction::Click,
+        corrective: Correction::Click,
+        combination: StrokeCombination::Points,
+    },
+    CorrectionSequence {
+        name: "click_then_strokes",
+        first: Interaction::Click,
+        corrective: Correction::Stroke,
+        combination: StrokeCombination::PointsAndPreviousMask,
+    },
+    CorrectionSequence {
+        name: "stroke_then_strokes",
+        first: Interaction::Stroke,
+        corrective: Correction::Stroke,
+        combination: StrokeCombination::PointsAndPreviousMask,
+    },
+    CorrectionSequence {
+        name: "stroke_then_strokes_without_mask_input",
+        first: Interaction::Stroke,
+        corrective: Correction::Stroke,
+        combination: StrokeCombination::Points,
+    },
+    CorrectionSequence {
+        name: "stroke_then_strokes_union",
+        first: Interaction::Stroke,
+        corrective: Correction::Stroke,
+        combination: StrokeCombination::UnionOfStrokes,
+    },
+    CorrectionSequence {
+        name: "full_stroke_then_strokes",
+        first: Interaction::FullStroke,
+        corrective: Correction::Stroke,
+        combination: StrokeCombination::PointsAndPreviousMask,
+    },
+    CorrectionSequence {
+        name: "largest_mask_click_then_clicks",
+        first: Interaction::ClickLargestMask,
+        corrective: Correction::Click,
+        combination: StrokeCombination::PointsAndPreviousMask,
+    },
+    CorrectionSequence {
+        name: "largest_mask_click_then_strokes",
+        first: Interaction::ClickLargestMask,
+        corrective: Correction::Stroke,
+        combination: StrokeCombination::PointsAndPreviousMask,
+    },
+];
+
+/// Fixed stroke directions of the direction sweep, in degrees (0 = right, 90 = down).
+const STROKE_DIRECTIONS_DEGREES: [f32; 4] = [0.0, 45.0, 90.0, 135.0];
+
+/// The multimask token (1 to 3) with the largest mask on the model grid.
+fn largest_area_token(output: &DecoderOutput, side: usize) -> usize {
+    (1..4)
+        .max_by_key(|&token| GridMask::from_logits(&token_logits(output, token), side).area)
+        .unwrap_or(1)
+}
+
+/// Per-token result of one decoder run and the token of each selection rule.
+fn decode_summary(
+    output: &DecoderOutput,
+    frame: &EvaluationFrame,
+    side: usize,
+    reference: &GrayImage,
+) -> Result<Value> {
+    let single = select_masks(output, false)[0].0;
+    let best = best_score_token(output);
+    let largest = largest_area_token(output, side);
+    let mut tokens = Vec::new();
+    for token in 0..4 {
+        let logits = token_logits(output, token);
+        let grid = GridMask::from_logits(&logits, side);
+        tokens.push(json!({
+            "token": token,
+            "score": output.iou_scores[token],
+            "area_fraction": grid.fraction(),
+            "reference_iou": mask_iou(&frame.mask(&logits, side), reference)?,
+        }));
+    }
+    Ok(json!({
+        "single_mask_token": single,
+        "best_score_token": best,
+        "largest_token": largest,
+        "single_mask_iou": tokens[single]["reference_iou"],
+        "best_score_iou": tokens[best]["reference_iou"],
+        "tokens": tokens,
+    }))
+}
+
+/// Normalized image coordinates of evaluation-frame pixels.
+fn normalized_points(frame: &EvaluationFrame, points: &[[f32; 2]]) -> Vec<[f32; 2]> {
+    points
+        .iter()
+        .map(|p| [p[0] / frame.width as f32, p[1] / frame.height as f32])
+        .collect()
+}
+
+fn stroke_json(frame: &EvaluationFrame, stroke: &Stroke) -> Value {
+    let ends = normalized_points(frame, &[stroke.start, stroke.end]);
+    json!({ "start": ends[0], "end": ends[1], "length_px": stroke.length() })
+}
+
+/// The point decoder sessions of the stroke report: `report` for every run, or one session per
+/// point count when `--decoder-sessions per-point-count` is set.
+struct StrokeDecoders {
+    report: Session,
+    per_point_count: Option<BTreeMap<usize, Session>>,
+    graph_path: PathBuf,
+    device: DeviceRequest,
+    load_ms: BTreeMap<usize, f64>,
+}
+
+impl StrokeDecoders {
+    fn session(&mut self, point_count: usize) -> Result<&mut Session> {
+        let Some(sessions) = &mut self.per_point_count else {
+            return Ok(&mut self.report);
+        };
+        Ok(match sessions.entry(point_count) {
+            std::collections::btree_map::Entry::Occupied(entry) => entry.into_mut(),
+            std::collections::btree_map::Entry::Vacant(entry) => {
+                let started = Instant::now();
+                let session = ort_runtime::load_session(&self.graph_path, self.device)?;
+                self.load_ms
+                    .insert(point_count, milliseconds(started.elapsed()));
+                entry.insert(session)
+            }
+        })
+    }
+}
+
+/// The photo, its encoder output, and the reference of one prompt.
+struct StrokeContext<'a> {
+    frame: &'a EvaluationFrame,
+    features: &'a PointFeatures,
+    side: usize,
+    model_size: f32,
+    reference: &'a GrayImage,
+    options: &'a StrokeOptions,
+}
+
+/// Point decoder run with timing; `points` are evaluation-frame pixels, `labels` 1 positive and
+/// 0 negative. The time goes to `decode_ms_by_count` under the point count.
+fn timed_decode(
+    decoders: &mut StrokeDecoders,
+    context: &StrokeContext<'_>,
+    points: &[[f32; 2]],
+    labels: &[f32],
+    mask_input: Option<&[f32]>,
+    decode_ms_by_count: &mut BTreeMap<usize, Vec<f64>>,
+) -> Result<(DecoderOutput, f64)> {
+    let mut coords: Vec<[f32; 2]> = normalized_points(context.frame, points)
+        .into_iter()
+        .map(|p| [p[0] * context.model_size, p[1] * context.model_size])
+        .collect();
+    let mut labels = labels.to_vec();
+    pad_prompt(&mut coords, &mut labels, context.options.pad_points)?;
+    let decoder = decoders.session(coords.len())?;
+    let started = Instant::now();
+    let output =
+        run_point_decoder_with_mask(decoder, context.features, &coords, &labels, mask_input)?;
+    let decode_ms = milliseconds(started.elapsed());
+    decode_ms_by_count
+        .entry(points.len())
+        .or_default()
+        .push(decode_ms);
+    Ok((output, decode_ms))
+}
+
+/// The first interactions of one prompt, in evaluation-frame pixels.
+struct FirstInteractions {
+    click: [f32; 2],
+    /// `--primary-length` of the inner chord along the principal axis.
+    stroke: Option<Stroke>,
+    /// The whole inner chord along the principal axis.
+    full_stroke: Option<Stroke>,
+}
+
+/// The first interaction, then up to `corrective_steps` corrections. Each correction goes to the
+/// error region (missed reference pixels or extra pixels) whose deepest pixel is farthest from
+/// its edge, as in the click simulation of the SAM papers: a click at that pixel, or a stroke
+/// through it along the principal axis of its component. Missed pixels give an add (positive)
+/// correction, extra pixels a subtract (negative) correction.
+fn simulate_corrections(
+    decoders: &mut StrokeDecoders,
+    context: &StrokeContext<'_>,
+    sequence: &CorrectionSequence,
+    first: &FirstInteractions,
+    mask_prefix: Option<&Path>,
+    decode_ms_by_count: &mut BTreeMap<usize, Vec<f64>>,
+) -> Result<Value> {
+    let options = context.options;
+    let (frame, side) = (context.frame, context.side);
+    let (width, height) = (frame.width as usize, frame.height as usize);
+    let first_stroke = match sequence.first {
+        Interaction::Stroke => first.stroke.as_ref(),
+        Interaction::FullStroke => first.full_stroke.as_ref(),
+        Interaction::Click | Interaction::ClickLargestMask => None,
+    };
+    let (mut points, first_stroke_json) = match (sequence.first, first_stroke) {
+        (Interaction::Click | Interaction::ClickLargestMask, _) => (vec![first.click], Value::Null),
+        (_, Some(stroke)) => (
+            stroke.sample(options.primary_count),
+            stroke_json(frame, stroke),
+        ),
+        (_, None) => {
+            return Ok(json!({
+                "status": "unavailable",
+                "reason": "no first stroke inside the reference at the margin",
+            }));
+        }
+    };
+    let mut labels = vec![1.0f32; points.len()];
+    let (output, decode_ms) = timed_decode(
+        decoders,
+        context,
+        &points,
+        &labels,
+        None,
+        decode_ms_by_count,
+    )?;
+    // One click uses the multimask output with the best predicted IoU (the E4 default) or the
+    // largest multimask output; several points use the single-mask output.
+    let token = match sequence.first {
+        Interaction::Click => best_score_token(&output),
+        Interaction::ClickLargestMask => largest_area_token(&output, side),
+        Interaction::Stroke | Interaction::FullStroke => select_masks(&output, false)[0].0,
+    };
+    let mut current = token_logits(&output, token);
+    let reference_inside: Vec<bool> = context.reference.pixels().map(|p| p[0] > 127).collect();
+    let mut steps = vec![json!({
+        "step": 0, "interaction": sequence.first.name(), "label": 1,
+        "points": normalized_points(frame, &points), "stroke": first_stroke_json,
+        "token": token, "decode_ms": decode_ms, "prompt_points": points.len(),
+    })];
+    let mut stop_reason = "corrective step limit";
+    for step in 0..=options.corrective_steps {
+        let mask = frame.mask(&current, side);
+        let iou = mask_iou(&mask, context.reference)?;
+        if let Some(prefix) = mask_prefix {
+            let path = PathBuf::from(format!(
+                "{}__{}__step{step}.png",
+                prefix.display(),
+                sequence.name
+            ));
+            if let Some(parent) = path.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            mask.save(&path)
+                .with_context(|| format!("failed to write {}", path.display()))?;
+        }
+        steps[step]["reference_iou"] = json!(iou);
+        steps[step]["area_fraction"] = json!(mask_fraction(&mask));
+        if iou >= options.stop_iou {
+            stop_reason = "reached the stop IoU";
+            break;
+        }
+        if step == options.corrective_steps {
+            break;
+        }
+
+        let mask_inside: Vec<bool> = mask.pixels().map(|p| p[0] > 127).collect();
+        let error_region = |missed: bool| {
+            let inside = reference_inside
+                .iter()
+                .zip(&mask_inside)
+                .map(|(&r, &m)| if missed { r && !m } else { m && !r })
+                .collect();
+            Region::new(inside, width, height)
+        };
+        let (missed, extra) = (error_region(true), error_region(false));
+        let deepest_missed = missed.deepest();
+        let deepest_extra = extra.deepest();
+        let (region, label, (index, depth)) = match (deepest_missed, deepest_extra) {
+            (Some(m), Some(e)) if e.1 > m.1 => (&extra, 0.0f32, e),
+            (Some(m), _) => (&missed, 1.0f32, m),
+            (None, Some(e)) => (&extra, 0.0f32, e),
+            (None, None) => {
+                stop_reason = "no error region";
+                break;
+            }
+        };
+        if depth < 1.5 {
+            stop_reason = "no error region deeper than 1.5 px";
+            break;
+        }
+        let deepest = region.centre(index);
+        let (new_points, stroke) = match sequence.corrective {
+            Correction::Click => (vec![deepest], None),
+            Correction::Stroke => {
+                let direction = region.principal_direction(index);
+                let chord = region.inner_chord(deepest, direction, depth * 0.5);
+                match Stroke::along_chord(deepest, direction, chord, options.primary_length) {
+                    Some(stroke) if stroke.length() >= 1.0 => {
+                        (stroke.sample(options.primary_count), Some(stroke))
+                    }
+                    _ => (vec![deepest], None),
+                }
+            }
+        };
+        let (output, decode_ms) = match sequence.combination {
+            StrokeCombination::PointsAndPreviousMask | StrokeCombination::Points => {
+                points.extend_from_slice(&new_points);
+                labels.extend(std::iter::repeat_n(label, new_points.len()));
+                let mask_input = (sequence.combination == StrokeCombination::PointsAndPreviousMask)
+                    .then_some(current.as_slice());
+                timed_decode(
+                    decoders,
+                    context,
+                    &points,
+                    &labels,
+                    mask_input,
+                    decode_ms_by_count,
+                )?
+            }
+            StrokeCombination::UnionOfStrokes => {
+                let positive = vec![1.0f32; new_points.len()];
+                timed_decode(
+                    decoders,
+                    context,
+                    &new_points,
+                    &positive,
+                    None,
+                    decode_ms_by_count,
+                )?
+            }
+        };
+        let token = select_masks(&output, false)[0].0;
+        let decoded = token_logits(&output, token);
+        current = match sequence.combination {
+            StrokeCombination::UnionOfStrokes if label > 0.5 => current
+                .iter()
+                .zip(&decoded)
+                .map(|(&a, &b)| a.max(b))
+                .collect(),
+            StrokeCombination::UnionOfStrokes => current
+                .iter()
+                .zip(&decoded)
+                .map(|(&a, &b)| a.min(-b))
+                .collect(),
+            _ => decoded,
+        };
+        let prompt_points = if sequence.combination == StrokeCombination::UnionOfStrokes {
+            new_points.len()
+        } else {
+            points.len()
+        };
+        steps.push(json!({
+            "step": step + 1,
+            "interaction": if stroke.is_some() { "stroke" } else { "click" },
+            "label": label as i32,
+            "error_region": if label > 0.5 { "missed" } else { "extra" },
+            "error_region_area_fraction": region.area_fraction(),
+            "error_region_depth_px": depth,
+            "points": normalized_points(frame, &new_points),
+            "stroke": stroke.as_ref().map_or(Value::Null, |s| stroke_json(frame, s)),
+            "token": token,
+            "decode_ms": decode_ms,
+            "prompt_points": prompt_points,
+        }));
+    }
+    let ious: Vec<f64> = steps
+        .iter()
+        .filter_map(|s| s["reference_iou"].as_f64())
+        .collect();
+    let interactions_to = |threshold: f64| {
+        ious.iter()
+            .position(|&v| v >= threshold)
+            .map_or(Value::Null, |i| json!(i + 1))
+    };
+    Ok(json!({
+        "first": sequence.first.name(),
+        "corrective": sequence.corrective.name(),
+        "combination": sequence.combination.name(),
+        "interactions_to_iou_0_85": interactions_to(TARGET_IOU),
+        "interactions_to_iou_0_90": interactions_to(0.9),
+        "final_reference_iou": ious.last(),
+        "stop_reason": stop_reason,
+        "steps": steps,
+    }))
+}
+
+/// `count` model-input points on a horizontal line through the photo centre.
+fn timing_points(count: usize, model_size: f32) -> Vec<[f32; 2]> {
+    (0..count)
+        .map(|k| {
+            let t = if count > 1 {
+                k as f32 / (count - 1) as f32
+            } else {
+                0.5
+            };
+            [(0.3 + 0.4 * t) * model_size, 0.5 * model_size]
+        })
+        .collect()
+}
+
+/// Decoder time for `count` points on a horizontal line, with and without the previous mask as
+/// `mask_input`, in a new decoder session (whose first input shape is this point count) and in
+/// `decoder`, the session of the report, which runs the counts in the order of
+/// `--timing-counts`.
+fn stroke_decoder_timing(
+    decoder: &mut Session,
+    options: &StrokeOptions,
+    features: &PointFeatures,
+    model_size: f32,
+    count: usize,
+) -> Result<Value> {
+    let mut coords = timing_points(count, model_size);
+    let mut labels = vec![1.0f32; count];
+    pad_prompt(&mut coords, &mut labels, options.pad_points)?;
+    let previous = token_logits(&run_point_decoder(decoder, features, &coords, &labels)?, 0);
+    let started = Instant::now();
+    let mut new_session = ort_runtime::load_session(
+        &options.onnx_dir.join(format!("{POINT_DECODER}.onnx")),
+        options.device,
+    )?;
+    let mut entry = json!({
+        "decoder_points": coords.len(),
+        "new_session_load_ms": milliseconds(started.elapsed()),
+    });
+    for (session_name, session) in [
+        ("new_session", &mut new_session),
+        ("report_session", &mut *decoder),
+    ] {
+        for with_mask in [false, true] {
+            let mask_input = with_mask.then_some(previous.as_slice());
+            for _ in 0..3 {
+                run_point_decoder_with_mask(session, features, &coords, &labels, mask_input)?;
+            }
+            let samples = time_runs(options.runs, || {
+                run_point_decoder_with_mask(session, features, &coords, &labels, mask_input)
+                    .map(|_| ())
+            })?;
+            let key = if with_mask {
+                "with_mask_input"
+            } else {
+                "without_mask_input"
+            };
+            entry[session_name][key] = latency_summary(&samples);
+        }
+    }
+    Ok(entry)
+}
+
+fn run_stroke_report(options: &StrokeOptions) -> Result<()> {
+    ort_runtime::initialize_ort_environment()?;
+    let export_report: Value = serde_json::from_str(
+        &fs::read_to_string(options.onnx_dir.join("export_report.json"))
+            .context("failed to read export_report.json")?,
+    )?;
+    let model_input = ModelInput::from_export_report(&export_report)?;
+    let side = model_input.low_res_mask_size;
+    let model_size = model_input.image_size as f32;
+    let prompts: Value = serde_json::from_str(&fs::read_to_string(&options.prompts)?)?;
+    let targets: Value = serde_json::from_str(&fs::read_to_string(&options.targets)?)?;
+    let compare: Value = serde_json::from_str(&fs::read_to_string(&options.reference_scores)?)?;
+    let reference_scores = compare["results"].as_array().cloned().unwrap_or_default();
+    let mut report = json!({
+        "device_request": options.device_text,
+        "session_settings": SessionSettings::Production.label(),
+        "variant": export_report["variant"],
+        "device_description": ort_runtime::describe_device_request(options.device),
+        "os": std::env::consts::OS,
+        "arch": std::env::consts::ARCH,
+        "strokes": {
+            "margin_of_short_side": options.margin,
+            "lengths_of_inner_chord": options.lengths,
+            "counts": options.counts,
+            "spacings_of_short_side": options.spacings,
+            "max_spacing_points": options.max_spacing_points,
+            "fixed_directions_degrees": STROKE_DIRECTIONS_DEGREES,
+            "primary": {
+                "direction": "principal axis of the reference component that holds the prompt point",
+                "length_of_inner_chord": options.primary_length,
+                "count": options.primary_count,
+            },
+            "corrective_steps": options.corrective_steps,
+            "corrective_stroke_margin": "half of the depth of the error region",
+            "stop_iou": options.stop_iou,
+            "target_iou": TARGET_IOU,
+            "evaluation_max_edge": options.evaluation_max_edge,
+            "pad_points": options.pad_points.map(|p| json!({ "total": p.total, "mode": p.name() })),
+            "decoder_sessions": if options.session_per_point_count { "one per point count" } else { "one" },
+            "selection": "one point: multimask output, best predicted IoU (E4 default), or the largest multimask output in the largest_mask sequences; several points: single-mask output (token 0, or the best multimask token when token 0 is not stable)",
+        },
+        "memory_before_load": process_memory::sample(),
+        "checks": {},
+        "graphs": {},
+        "images": [],
+    });
+
+    let mut sessions: BTreeMap<&str, Session> = BTreeMap::new();
+    let mut load_check = json!({});
+    for name in [POINT_ENCODER, POINT_DECODER] {
+        let path = options.onnx_dir.join(format!("{name}.onnx"));
+        let started = Instant::now();
+        match ort_runtime::load_session(&path, options.device) {
+            Ok(session) => {
+                let load_ms = milliseconds(started.elapsed());
+                println!("[load] {name}: {load_ms:.0} ms");
+                load_check[name] = json!({ "status": "passed" });
+                report["graphs"][name] = json!({ "load_ms": load_ms });
+                sessions.insert(name, session);
+            }
+            Err(error) => {
+                println!("[load] {name}: FAILED {error}");
+                load_check[name] = json!({ "status": "failed", "error": format!("{error:#}") });
+            }
+        }
+    }
+    report["checks"]["SegmentationGraphsLoadWithProductionSessionSettings"] = load_check;
+    report["memory_after_all_loads"] = process_memory::sample();
+    let (Some(mut encoder), Some(decoder)) = (
+        sessions.remove(POINT_ENCODER),
+        sessions.remove(POINT_DECODER),
+    ) else {
+        return write_report(&options.out, &report);
+    };
+    let mut decoders = StrokeDecoders {
+        report: decoder,
+        per_point_count: options.session_per_point_count.then(BTreeMap::new),
+        graph_path: options.onnx_dir.join(format!("{POINT_DECODER}.onnx")),
+        device: options.device,
+        load_ms: BTreeMap::new(),
+    };
+
+    let mut decode_ms_by_count: BTreeMap<usize, Vec<f64>> = BTreeMap::new();
+    let mut first_image = true;
+    for entry in prompts["images"].as_array().into_iter().flatten() {
+        let file = entry["file"]
+            .as_str()
+            .ok_or_else(|| anyhow!("image entry without file"))?;
+        let stem = Path::new(file)
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or(file)
+            .to_string();
+        let photo = image::open(options.photos.join(file))
+            .with_context(|| format!("failed to open {file}"))?
+            .to_rgb8();
+        let (width, height) = photo.dimensions();
+        let pixels = preprocess(&photo, &model_input);
+        let frame = EvaluationFrame::new(&photo, options.evaluation_max_edge);
+        drop(photo);
+        let started = Instant::now();
+        let features = run_point_encoder(&mut encoder, &pixels)?;
+        let encoder_ms = milliseconds(started.elapsed());
+        let short_side = frame.width.min(frame.height) as f32;
+        let mut image_report = json!({
+            "file": file, "width": width, "height": height,
+            "evaluation_width": frame.width, "evaluation_height": frame.height,
+            "encoder_ms": encoder_ms, "prompts": [],
+        });
+
+        if first_image {
+            let mut timing = json!({});
+            for &count in &options.timing_counts {
+                let entry = stroke_decoder_timing(
+                    &mut decoders.report,
+                    options,
+                    &features,
+                    model_size,
+                    count,
+                )?;
+                println!("[timing] {count} points: {entry}");
+                timing[count.to_string()] = entry;
+            }
+            report["decoder_time_per_stroke"] = json!({ "photo": file, "points": timing });
+            report["memory_after_inference"] = process_memory::sample();
+            if let Some(profile_dir) = &options.profile_dir {
+                let mut placement = json!({ "runs_per_profile": options.runs + 1 });
+                for &count in &options.profile_counts {
+                    let mut coords = timing_points(count, model_size);
+                    let mut labels = vec![1.0f32; count];
+                    pad_prompt(&mut coords, &mut labels, options.pad_points)?;
+                    let prefix = profile_dir.join(format!(
+                        "{POINT_DECODER}_{count}pt_{}",
+                        options.device_text.replace(':', "_")
+                    ));
+                    placement[count.to_string()] = operator_placement(
+                        &options.onnx_dir.join(format!("{POINT_DECODER}.onnx")),
+                        options.device,
+                        SessionSettings::Production,
+                        &prefix,
+                        |session| {
+                            for _ in 0..=options.runs {
+                                run_point_decoder(session, &features, &coords, &labels)?;
+                            }
+                            Ok(())
+                        },
+                    )
+                    .unwrap_or_else(|e| json!({ "status": "failed", "error": format!("{e:#}") }));
+                }
+                report["operator_placement"] = json!({ POINT_DECODER: placement });
+            }
+        }
+
+        let image_targets = &targets["targets"][file];
+        for set_entry in prompt_sets(entry)? {
+            if set_entry.points.len() != 1 || !set_entry.boxes.is_empty() {
+                continue;
+            }
+            let (x, y, _) = set_entry.points[0];
+            let target = &image_targets[set_entry.name.as_str()];
+            let unavailable = |reference: Option<&str>, reason: &str| {
+                json!({
+                    "name": set_entry.name, "point": [x, y], "intent": target["intent"],
+                    "reference": reference, "status": "unavailable", "reason": reason,
+                })
+            };
+            let Some(reference_name) =
+                target_reference_name(&stem, &target["reference"], &reference_scores, file)?
+            else {
+                let skipped = unavailable(None, "no reference mask");
+                image_report["prompts"]
+                    .as_array_mut()
+                    .unwrap()
+                    .push(skipped);
+                continue;
+            };
+            let reference = frame.load_reference(&options.reference_masks.join(&reference_name))?;
+            let region = Region::from_mask(&reference);
+            let click = [x * frame.width as f32, y * frame.height as f32];
+            let start_distance = region.distance_at(click);
+            if start_distance <= 0.0 {
+                let skipped = unavailable(
+                    Some(&reference_name),
+                    "the prompt point is outside the reference",
+                );
+                image_report["prompts"]
+                    .as_array_mut()
+                    .unwrap()
+                    .push(skipped);
+                continue;
+            }
+            let context = StrokeContext {
+                frame: &frame,
+                features: &features,
+                side,
+                model_size,
+                reference: &reference,
+                options,
+            };
+            // The stroke points keep the margin from the edge; a prompt point closer to the edge
+            // than the margin uses half of its own distance as the margin.
+            let margin = (options.margin * short_side).min(start_distance * 0.5);
+            let start_index = region.index(click).unwrap_or(0);
+            let principal = region.principal_direction(start_index);
+            let mut directions: Vec<(String, [f32; 2])> =
+                vec![("principal".to_string(), principal)];
+            for degrees in STROKE_DIRECTIONS_DEGREES {
+                let radians = degrees.to_radians();
+                directions.push((format!("{degrees:.0}"), [radians.cos(), radians.sin()]));
+            }
+
+            // One click: the same decoder run gives the multimask and the single-mask selection.
+            let (click_output, click_ms) = timed_decode(
+                &mut decoders,
+                &context,
+                &[click],
+                &[1.0],
+                None,
+                &mut decode_ms_by_count,
+            )?;
+            let click_summary = decode_summary(&click_output, &frame, side, &reference)?;
+
+            let mut sweep = Vec::new();
+            for (direction_name, direction) in &directions {
+                let chord = region.inner_chord(click, *direction, margin);
+                for &fraction in &options.lengths {
+                    let Some(stroke) = Stroke::along_chord(click, *direction, chord, fraction)
+                    else {
+                        continue;
+                    };
+                    let mut runs: Vec<(usize, Option<f32>)> =
+                        options.counts.iter().map(|&c| (c.max(2), None)).collect();
+                    for &spacing in &options.spacings {
+                        let spacing_px = spacing * short_side;
+                        let count = ((stroke.length() / spacing_px).floor() as usize + 1)
+                            .clamp(2, options.max_spacing_points);
+                        runs.push((count, Some(spacing)));
+                    }
+                    for (count, spacing) in runs {
+                        let points = stroke.sample(count);
+                        let labels = vec![1.0f32; count];
+                        let (output, decode_ms) = timed_decode(
+                            &mut decoders,
+                            &context,
+                            &points,
+                            &labels,
+                            None,
+                            &mut decode_ms_by_count,
+                        )?;
+                        sweep.push(json!({
+                            "direction": direction_name,
+                            "direction_vector": direction,
+                            "length_of_inner_chord": fraction,
+                            "stroke": stroke_json(&frame, &stroke),
+                            "count": count,
+                            "spacing_of_short_side": spacing,
+                            "spacing_px": stroke.length() / (count - 1) as f32,
+                            "decode_ms": decode_ms,
+                            "result": decode_summary(&output, &frame, side, &reference)?,
+                        }));
+                    }
+                }
+            }
+
+            let principal_chord = region.inner_chord(click, principal, margin);
+            let first = FirstInteractions {
+                click,
+                stroke: Stroke::along_chord(
+                    click,
+                    principal,
+                    principal_chord,
+                    options.primary_length,
+                ),
+                full_stroke: Stroke::along_chord(click, principal, principal_chord, 1.0),
+            };
+            let mask_prefix = options
+                .mask_dir
+                .as_ref()
+                .map(|d| d.join(format!("{stem}__{}", set_entry.name)));
+            let mut sequences = json!({});
+            for sequence in &CORRECTION_SEQUENCES {
+                sequences[sequence.name] = simulate_corrections(
+                    &mut decoders,
+                    &context,
+                    sequence,
+                    &first,
+                    mask_prefix.as_deref(),
+                    &mut decode_ms_by_count,
+                )?;
+            }
+            let strokes = &sequences["stroke_then_strokes"];
+            println!(
+                "[strokes] {stem} {}: click {:.3}, stroke {:.3} -> {:.3} after {} interactions, clicks -> {:.3}",
+                set_entry.name,
+                click_summary["best_score_iou"].as_f64().unwrap_or(0.0),
+                strokes["steps"][0]["reference_iou"].as_f64().unwrap_or(0.0),
+                strokes["final_reference_iou"].as_f64().unwrap_or(0.0),
+                strokes["steps"].as_array().map_or(0, Vec::len),
+                sequences["click_then_clicks"]["final_reference_iou"]
+                    .as_f64()
+                    .unwrap_or(0.0),
+            );
+            image_report["prompts"].as_array_mut().unwrap().push(json!({
+                "name": set_entry.name,
+                "point": [x, y],
+                "intent": target["intent"],
+                "reference": reference_name,
+                "reference_area_fraction": mask_fraction(&reference),
+                "start_distance_px": start_distance,
+                "margin_px": margin,
+                "principal_direction": principal,
+                "principal_inner_chord_px": [principal_chord.0, principal_chord.1],
+                "click": { "decode_ms": click_ms, "result": click_summary },
+                "sweep": sweep,
+                "sequences": sequences,
+            }));
+        }
+
+        report["images"].as_array_mut().unwrap().push(image_report);
+        write_report(&options.out, &report)?;
+        first_image = false;
+    }
+    let mut by_count = json!({});
+    for (count, samples) in &decode_ms_by_count {
+        by_count[count.to_string()] = latency_summary(samples);
+    }
+    report["decode_ms_by_point_count"] = by_count;
+    if decoders.per_point_count.is_some() {
+        report["decoder_sessions_per_point_count"] = json!({
+            "sessions": decoders.load_ms.len(),
+            "load_ms": decoders
+                .load_ms
+                .iter()
+                .map(|(count, ms)| (count.to_string(), json!(ms)))
+                .collect::<serde_json::Map<_, _>>(),
+        });
+    }
     report["memory_at_end"] = process_memory::sample();
     write_report(&options.out, &report)
 }
