@@ -183,6 +183,7 @@ set(ALCEDO_AI_PROTO_DIR "${ALCEDO_SEMANTIC_PROTO_DIR}")
 set(ALCEDO_AI_COMMON_PROTO "${ALCEDO_AI_PROTO_DIR}/ai_common.proto")
 set(ALCEDO_AI_RUNTIME_PROTO "${ALCEDO_AI_PROTO_DIR}/ai_runtime.proto")
 set(ALCEDO_AI_IMAGE_ANALYSIS_PROTO "${ALCEDO_AI_PROTO_DIR}/image_analysis.proto")
+set(ALCEDO_AI_SEGMENTATION_PROTO "${ALCEDO_AI_PROTO_DIR}/segmentation.proto")
 set(ALCEDO_AI_PROTO_GEN_DIR "${ALCEDO_BINARY_ROOT}/generated/ai")
 
 add_custom_command(
@@ -252,12 +253,33 @@ add_custom_command(
     VERBATIM
 )
 
+add_custom_command(
+    OUTPUT
+        "${ALCEDO_AI_PROTO_GEN_DIR}/segmentation.pb.cc"
+        "${ALCEDO_AI_PROTO_GEN_DIR}/segmentation.pb.h"
+        "${ALCEDO_AI_PROTO_GEN_DIR}/segmentation.grpc.pb.h"
+        "${ALCEDO_AI_PROTO_GEN_DIR}/segmentation.grpc.pb.cc"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${ALCEDO_AI_PROTO_GEN_DIR}"
+    COMMAND ${PUERHLAB_PROTOC_EXECUTABLE}
+        --proto_path=${ALCEDO_AI_PROTO_DIR}
+        --cpp_out=${ALCEDO_AI_PROTO_GEN_DIR}
+        --grpc_out=${ALCEDO_AI_PROTO_GEN_DIR}
+        --plugin=protoc-gen-grpc=${PUERHLAB_GRPC_CPP_PLUGIN_EXECUTABLE}
+        "${ALCEDO_AI_SEGMENTATION_PROTO}"
+    DEPENDS
+        "${ALCEDO_AI_SEGMENTATION_PROTO}"
+        "${ALCEDO_AI_COMMON_PROTO}"
+    VERBATIM
+)
+
 set(ALCEDO_AI_PROTO_SRCS
     "${ALCEDO_AI_PROTO_GEN_DIR}/ai_common.pb.cc"
     "${ALCEDO_AI_PROTO_GEN_DIR}/ai_runtime.pb.cc"
     "${ALCEDO_AI_PROTO_GEN_DIR}/ai_runtime.grpc.pb.cc"
     "${ALCEDO_AI_PROTO_GEN_DIR}/image_analysis.pb.cc"
     "${ALCEDO_AI_PROTO_GEN_DIR}/image_analysis.grpc.pb.cc"
+    "${ALCEDO_AI_PROTO_GEN_DIR}/segmentation.pb.cc"
+    "${ALCEDO_AI_PROTO_GEN_DIR}/segmentation.grpc.pb.cc"
 )
 set(ALCEDO_AI_PROTO_HDRS
     "${ALCEDO_AI_PROTO_GEN_DIR}/ai_common.pb.h"
@@ -265,6 +287,8 @@ set(ALCEDO_AI_PROTO_HDRS
     "${ALCEDO_AI_PROTO_GEN_DIR}/ai_runtime.grpc.pb.h"
     "${ALCEDO_AI_PROTO_GEN_DIR}/image_analysis.pb.h"
     "${ALCEDO_AI_PROTO_GEN_DIR}/image_analysis.grpc.pb.h"
+    "${ALCEDO_AI_PROTO_GEN_DIR}/segmentation.pb.h"
+    "${ALCEDO_AI_PROTO_GEN_DIR}/segmentation.grpc.pb.h"
 )
 
 add_library(AiProto ${ALCEDO_AI_PROTO_SRCS} ${ALCEDO_AI_PROTO_HDRS})
@@ -284,6 +308,14 @@ def_library(AiSidecarRuntimeService
         "${ALCEDO_INCLUDE_ROOT}/app/ai_sidecar_runtime_service.hpp"
     PUBLIC_DEPS Qt6::Core Qt6::Network SidecarClient
     PRIVATE_DEPS AppDiagnostics
+)
+
+# AI Mask segmentation (SM3.A): one tool activation over the sidecar segmentation service.
+def_library(AiMaskSegmentationService
+    SOURCES
+        "${ALCEDO_APP_ROOT}/ai_mask_segmentation_service.cpp"
+        "${ALCEDO_INCLUDE_ROOT}/app/ai_mask_segmentation_service.hpp"
+    PUBLIC_DEPS SidecarClient
 )
 
 def_library(AiCredentialStore

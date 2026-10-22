@@ -11,7 +11,9 @@ use crate::service::credential_vault::CredentialVault;
 use crate::service::embedding::EmbeddingEngine;
 use crate::service::image_analysis::ImageAnalysisProvider;
 use crate::service::registry::register_services;
+use crate::service::segmentation::engine::SegmentationEngine;
 
+#[allow(clippy::too_many_arguments)]
 pub async fn start_server(
     config: AppConfig,
     semantic_engine: Arc<dyn EmbeddingEngine>,
@@ -20,6 +22,7 @@ pub async fn start_server(
     capabilities: Vec<AiCapability>,
     image_providers: HashMap<String, Arc<dyn ImageAnalysisProvider>>,
     default_image_provider_id: String,
+    segmentation_engine: Arc<SegmentationEngine>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let addr = config.listen_addr().parse()?;
 
@@ -34,6 +37,7 @@ pub async fn start_server(
         capabilities,
         image_providers,
         default_image_provider_id,
+        segmentation_engine,
     )?;
 
     router.serve(addr).await?;

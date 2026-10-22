@@ -7,6 +7,7 @@ use crate::config::AppConfig;
 use crate::proto::alcedo::ai::AiCapability;
 use crate::proto::alcedo::ai::ai_runtime_service_server::AiRuntimeServiceServer;
 use crate::proto::alcedo::ai::image_analysis_service_server::ImageAnalysisServiceServer;
+use crate::proto::alcedo::ai::segmentation_service_server::SegmentationServiceServer;
 use crate::proto::common::health_service_server::HealthServiceServer;
 use crate::proto::semantic::model_manager_service_server::ModelManagerServiceServer;
 use crate::proto::semantic::semantic_service_server::SemanticServiceServer;
@@ -14,13 +15,18 @@ use crate::server::ai_runtime::AiRuntimeServiceImpl;
 use crate::server::health::HealthServiceImpl;
 use crate::server::image_analysis::ImageAnalysisServiceImpl;
 use crate::server::model_manager::ModelManagerServiceImpl;
+use crate::server::segmentation::SegmentationServiceImpl;
 use crate::server::semantic::SemanticServiceImpl;
 use crate::service::cancellation_registry::CancellationRegistry;
 use crate::service::credential_vault::CredentialVault;
 use crate::service::embedding::EmbeddingEngine;
 use crate::service::image_analysis::ImageAnalysisProvider;
+use crate::service::segmentation::engine::SegmentationEngine;
 
 const FILE_DESCRIPTOR_SET: &[u8] = tonic::include_file_descriptor_set!("semantic_descriptor");
+/// Message limit of the segmentation service: a 4096 x 4096 RGB8 image is 50.3 MB.
+const SEGMENTATION_MAX_MESSAGE_BYTES: usize = 64 * 1024 * 1024;
+
 pub fn register_services(
     mut builder: Server,
     config: &AppConfig,
@@ -30,6 +36,7 @@ pub fn register_services(
     capabilities: Vec<AiCapability>,
     image_providers: HashMap<String, Arc<dyn ImageAnalysisProvider>>,
     default_image_provider_id: String,
+    segmentation_engine: Arc<SegmentationEngine>,
 ) -> anyhow::Result<tonic::transport::server::Router> {
     let health_service = HealthServiceImpl;
     let semantic_service = SemanticServiceImpl::new(
@@ -68,5 +75,10 @@ pub fn register_services(
                 .max_encoding_message_size(config.max_message_bytes),
         )
         .add_service(AiRuntimeServiceServer::new(ai_runtime_service))
-        .add_service(ImageAnalysisServiceServer::new(image_analysis_service)))
+        .add_service(ImageAnalysisServiceServer::new(image_analysis_service))
+        .add_service(
+            SegmentationServiceServer::new(SegmentationServiceImpl::new(segmentation_engine))
+                .max_decoding_message_size(SEGMENTATION_MAX_MESSAGE_BYTES)
+                .max_encoding_message_size(SEGMENTATION_MAX_MESSAGE_BYTES),
+        ))
 }

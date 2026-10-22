@@ -8,6 +8,7 @@ pub mod encoder_residency;
 pub mod inference;
 pub mod model_adapters;
 pub mod registry;
+pub mod segmentation;
 
 pub mod image_analysis;
 pub mod model_assets;

@@ -75,6 +75,11 @@ fn run_server() -> anyhow::Result<()> {
         // The mock provider advertises its own no-credential image-analysis capability.
         &[mock_capability],
     );
+    // AI Mask segmentation: no model loads here; the host sends the model directory in
+    // LoadSegmentationModels (native Core ML on macOS, ONNX Runtime elsewhere).
+    let segmentation_engine = Arc::new(service::segmentation::engine::SegmentationEngine::new(
+        service::segmentation::platform_backend_factory(),
+    ));
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
@@ -100,6 +105,7 @@ fn run_server() -> anyhow::Result<()> {
             capabilities,
             image_providers,
             default_image_provider_id,
+            segmentation_engine,
         ))
         .map_err(|err| anyhow!("{err}"))
 }

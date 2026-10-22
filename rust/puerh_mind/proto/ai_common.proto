@@ -53,6 +53,8 @@ enum AiErrorCode {
   AI_ERROR_PAYLOAD_DECODE        = 10;
   AI_ERROR_CANCELLED_BY_CLIENT   = 11;
   AI_ERROR_INTERNAL              = 12;
+  AI_ERROR_INVALID_INPUT         = 13;  // a request field fails validation
+  AI_ERROR_SESSION_NOT_FOUND     = 14;  // the named sidecar session does not exist
 }
 
 enum AiInputKind {

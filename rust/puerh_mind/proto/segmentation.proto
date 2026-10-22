@@ -1,0 +1,140 @@
+syntax = "proto3";
+
+package alcedo.ai;
+
+import "ai_common.proto";
+
+// Local AI Mask segmentation (master plan section 9.2.1, SM3.A).
+//
+// The sidecar loads the SAM 2.1 tiny encoder and decoder from a model directory that the host
+// names in LoadSegmentationModels. Windows runs ONNX Runtime with DirectML; macOS runs compiled
+// Core ML models. A segmentation session holds the image embedding of one image. The host keeps
+// the selection (points, box, previous logits) and sends all of it with each decode request.
+//
+// Each response carries an AiResponseHeader. The gRPC status is OK unless the transport fails;
+// a failed operation sets the header status, the error code, and the real error message.
+//
+// Coordinates are normalized to [0, 1] on each axis of the image of the session.
+
+service SegmentationService {
+  // Loads the encoder and the decoder now. A request with the loaded directory and device does
+  // nothing. A request with another directory or device ends all sessions and loads again.
+  rpc LoadSegmentationModels(LoadSegmentationModelsRequest) returns (LoadSegmentationModelsResponse);
+  // Ends all sessions and unloads the models. Idempotent.
+  rpc UnloadSegmentationModels(UnloadSegmentationModelsRequest) returns (UnloadSegmentationModelsResponse);
+  rpc GetSegmentationStatus(GetSegmentationStatusRequest) returns (GetSegmentationStatusResponse);
+  // Runs the encoder once on an RGB8 image and keeps its outputs as a new session.
+  rpc StartSegmentationSession(StartSegmentationSessionRequest) returns (StartSegmentationSessionResponse);
+  // Runs the decoder once on the embedding of a session.
+  rpc DecodeSegmentationPrompt(DecodeSegmentationPromptRequest) returns (DecodeSegmentationPromptResponse);
+  rpc EndSegmentationSession(EndSegmentationSessionRequest) returns (EndSegmentationSessionResponse);
+}
+
+message LoadSegmentationModelsRequest {
+  AiRequestHeader header = 1;
+  // Absolute path of the directory with the model files of the platform.
+  string model_directory = 2;
+  // "" for the platform default ("directml" on Windows, "coreml" on macOS), "directml:N", or
+  // "cpu" (development and tests only).
+  string device = 3;
+}
+
+message LoadSegmentationModelsResponse {
+  AiResponseHeader header = 1;
+}
+
+message UnloadSegmentationModelsRequest {
+  AiRequestHeader header = 1;
+}
+
+message UnloadSegmentationModelsResponse {
+  AiResponseHeader header = 1;
+}
+
+message GetSegmentationStatusRequest {
+  AiRequestHeader header = 1;
+}
+
+message SegmentationModelResidency {
+  string role = 1;    // "encoder" or "decoder"
+  string device = 2;  // device label, for example "directml:0" or "coreml-native:cpuonly"
+  int64 load_ms = 3;
+}
+
+message GetSegmentationStatusResponse {
+  AiResponseHeader header = 1;
+  bool loaded = 2;
+  string model_set_id = 3;
+  string model_directory = 4;
+  string device = 5;
+  string backend = 6;  // "onnxruntime-directml", "onnxruntime-cpu", or "coreml-native"
+  repeated SegmentationModelResidency models = 7;
+  uint32 session_count = 8;
+}
+
+message StartSegmentationSessionRequest {
+  AiRequestHeader header = 1;
+  uint32 width = 2;
+  uint32 height = 3;
+  // Row-major RGB8 pixels, width * height * 3 bytes. The long edge is at most 4096.
+  bytes rgb8_pixels = 4;
+}
+
+message StartSegmentationSessionResponse {
+  AiResponseHeader header = 1;
+  string session_id = 2;
+  int64 encoder_ms = 3;
+}
+
+enum SegmentationPointLabel {
+  SEGMENTATION_POINT_LABEL_SUBTRACT = 0;
+  SEGMENTATION_POINT_LABEL_ADD = 1;
+}
+
+message SegmentationPoint {
+  float x = 1;
+  float y = 2;
+  SegmentationPointLabel label = 3;
+}
+
+message SegmentationBox {
+  float x0 = 1;
+  float y0 = 2;
+  float x1 = 3;
+  float y1 = 4;
+}
+
+message DecodeSegmentationPromptRequest {
+  AiRequestHeader header = 1;
+  string session_id = 2;
+  repeated SegmentationPoint points = 3;
+  SegmentationBox box = 4;  // absent: no box
+  // Empty, or the 256 x 256 logits of the previous selected mask (row-major).
+  repeated float mask_input = 5;
+}
+
+message SegmentationMaskLevel {
+  repeated float logits = 1;  // logit_size x logit_size, row-major, clipped to +-32
+  float score = 2;            // predicted IoU of the decoder token
+  uint32 token = 3;           // decoder mask token, 0 to 3
+  uint32 area = 4;            // number of logits > 0
+}
+
+message DecodeSegmentationPromptResponse {
+  AiResponseHeader header = 1;
+  // One point without a box: three levels sorted by area. Otherwise one mask.
+  repeated SegmentationMaskLevel masks = 2;
+  uint32 selected_index = 3;
+  uint32 logit_size = 4;
+  int64 decoder_ms = 5;
+}
+
+message EndSegmentationSessionRequest {
+  AiRequestHeader header = 1;
+  string session_id = 2;
+}
+
+message EndSegmentationSessionResponse {
+  AiResponseHeader header = 1;
+  bool ended = 2;  // false: no such session
+}
