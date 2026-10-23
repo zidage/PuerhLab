@@ -4,6 +4,7 @@
 
 #include "app/ai_mask_segmentation_service.hpp"
 
+#include <optional>
 #include <utility>
 
 namespace alcedo {
@@ -87,8 +88,8 @@ auto AiMaskSegmentationService::Decode(const SegmentationPrompt& prompt)
   return client_->Decode(session_id_, prompt, timeouts_.decode);
 }
 
-auto AiMaskSegmentationService::RunTask(SegmentationTask             task,
-                                        const std::vector<uint32_t>& person_indices)
+auto AiMaskSegmentationService::RunTask(SegmentationTask        task,
+                                        std::optional<uint32_t> person_index)
     -> SegmentationTaskResult {
   SegmentationTaskResult result;
   if (closed_) {
@@ -99,7 +100,7 @@ auto AiMaskSegmentationService::RunTask(SegmentationTask             task,
     result.status = LocalFailure("no segmentation session: start an image first");
     return result;
   }
-  return client_->RunTask(session_id_, task, person_indices, timeouts_.task);
+  return client_->RunTask(session_id_, task, person_index, timeouts_.task);
 }
 
 auto AiMaskSegmentationService::EndImage() -> SegmentationCallStatus {

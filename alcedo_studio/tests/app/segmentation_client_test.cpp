@@ -14,6 +14,7 @@
 
 #include <chrono>
 #include <memory>
+#include <optional>
 #include <mutex>
 #include <set>
 #include <string>
@@ -126,21 +127,28 @@ class RecordingSegmentationService final : public alcedo::ai::SegmentationServic
       task_request_ = *request;
     }
     SetOkHeader(response->mutable_header());
-    // Sky: not found. People: a list of two and the union of the selection.
+    // Sky: not found. People and Person: an alpha grid of 8 x 4 values and a list of two people;
+    // Person: the grid covers the crop rectangle (0.25, 0.1)-(0.75, 0.9).
     if (request->task() == alcedo::ai::SEGMENTATION_TASK_SKY) {
       response->set_message("No sky found: sky presence 0.312 is below 0.423.");
       response->set_presence(0.312F);
       response->set_presence_threshold(0.423F);
       return grpc::Status::OK;
     }
+    const bool person_task = request->task() == alcedo::ai::SEGMENTATION_TASK_PERSON;
     response->set_found(true);
-    response->set_mask_kind(alcedo::ai::SEGMENTATION_TASK_MASK_KIND_BINARY);
+    response->set_mask_kind(alcedo::ai::SEGMENTATION_TASK_MASK_KIND_ALPHA);
     response->set_mask_width(8);
     response->set_mask_height(4);
-    std::string mask(8 * 4, '\0');
-    mask[9] = static_cast<char>(255);
-    response->set_mask_r8(mask);
+    response->mutable_alpha_values()->Resize(8 * 4, 0.25F);
+    response->set_alpha_values(9, 0.75F);
+    auto* mask_box = response->mutable_mask_box();
+    mask_box->set_x0(person_task ? 0.25F : 0.0F);
+    mask_box->set_y0(person_task ? 0.1F : 0.0F);
+    mask_box->set_x1(person_task ? 0.75F : 1.0F);
+    mask_box->set_y1(person_task ? 0.9F : 1.0F);
     response->set_presence(0.99F);
+    response->set_subject_score(0.93F);
     response->set_mask_area(1);
     response->set_model_ms(21);
     for (uint32_t index : {0U, 1U}) {
@@ -151,6 +159,8 @@ class RecordingSegmentationService final : public alcedo::ai::SegmentationServic
       person->mutable_box()->set_x1(0.3F + 0.5F * static_cast<float>(index));
       person->mutable_box()->set_y1(0.9F);
       person->set_score(0.8F - 0.1F * static_cast<float>(index));
+      person->set_subject_fraction(index == 0 ? 0.6F : 0.05F);
+      person->set_in_subject(index == 0);
     }
     return grpc::Status::OK;
   }
@@ -328,26 +338,43 @@ TEST_F(SegmentationClientTest, DecodeRequestCarriesPromptAndMaskInput) {
   EXPECT_EQ(result.decoder_ms, 12);
 }
 
-TEST_F(SegmentationClientTest, RunTaskCarriesTaskAndSelection) {
-  const auto result = client_->RunTask("session-1", SegmentationTask::kPeople, {1, 0}, kTimeout);
+TEST_F(SegmentationClientTest, RunTaskCarriesTaskAndPersonIndex) {
+  const auto person = client_->RunTask("session-1", SegmentationTask::kPerson, 1U, kTimeout);
+
+  ASSERT_TRUE(person.status.ok) << person.status.error;
+  auto request = service_.TaskRequest();
+  EXPECT_EQ(request.session_id(), "session-1");
+  EXPECT_EQ(request.task(), alcedo::ai::SEGMENTATION_TASK_PERSON);
+  ASSERT_TRUE(request.has_person_index());
+  EXPECT_EQ(request.person_index(), 1U);
+
+  const auto people =
+      client_->RunTask("session-1", SegmentationTask::kPeople, std::nullopt, kTimeout);
+
+  ASSERT_TRUE(people.status.ok) << people.status.error;
+  request = service_.TaskRequest();
+  EXPECT_EQ(request.task(), alcedo::ai::SEGMENTATION_TASK_PEOPLE);
+  EXPECT_FALSE(request.has_person_index());
+}
+
+TEST_F(SegmentationClientTest, RunTaskMapsAlphaMaskBoxAndSubjectFraction) {
+  const auto result = client_->RunTask("session-1", SegmentationTask::kPerson, 0U, kTimeout);
 
   ASSERT_TRUE(result.status.ok) << result.status.error;
-  const auto request = service_.TaskRequest();
-  EXPECT_EQ(request.session_id(), "session-1");
-  EXPECT_EQ(request.task(), alcedo::ai::SEGMENTATION_TASK_PEOPLE);
-  ASSERT_EQ(request.person_indices_size(), 2);
-  EXPECT_EQ(request.person_indices(0), 1U);
-  EXPECT_EQ(request.person_indices(1), 0U);
-
   EXPECT_TRUE(result.found);
   EXPECT_TRUE(result.message.empty());
-  EXPECT_EQ(result.mask_kind, SegmentationTaskMaskKind::kBinary);
+  EXPECT_EQ(result.mask_kind, SegmentationTaskMaskKind::kAlpha);
   EXPECT_EQ(result.mask_width, 8U);
   EXPECT_EQ(result.mask_height, 4U);
-  ASSERT_EQ(result.mask_r8.size(), 8U * 4U);
-  EXPECT_EQ(result.mask_r8[9], 255);
-  EXPECT_EQ(result.mask_r8[8], 0);
-  EXPECT_TRUE(result.alpha_values.empty());
+  ASSERT_EQ(result.alpha_values.size(), 8U * 4U);
+  EXPECT_FLOAT_EQ(result.alpha_values[9], 0.75F);
+  EXPECT_FLOAT_EQ(result.alpha_values[8], 0.25F);
+  EXPECT_TRUE(result.mask_r8.empty());
+  EXPECT_FLOAT_EQ(result.mask_box.x0, 0.25F);
+  EXPECT_FLOAT_EQ(result.mask_box.y0, 0.1F);
+  EXPECT_FLOAT_EQ(result.mask_box.x1, 0.75F);
+  EXPECT_FLOAT_EQ(result.mask_box.y1, 0.9F);
+  EXPECT_FLOAT_EQ(result.subject_score, 0.93F);
   EXPECT_EQ(result.mask_area, 1U);
   EXPECT_EQ(result.model_ms, 21);
   ASSERT_EQ(result.people.size(), 2U);
@@ -355,14 +382,24 @@ TEST_F(SegmentationClientTest, RunTaskCarriesTaskAndSelection) {
   EXPECT_FLOAT_EQ(result.people[1].box.x0, 0.6F);
   EXPECT_FLOAT_EQ(result.people[1].box.y1, 0.9F);
   EXPECT_FLOAT_EQ(result.people[1].score, 0.7F);
+  EXPECT_FLOAT_EQ(result.people[0].subject_fraction, 0.6F);
+  EXPECT_TRUE(result.people[0].in_subject);
+  EXPECT_FLOAT_EQ(result.people[1].subject_fraction, 0.05F);
+  EXPECT_FALSE(result.people[1].in_subject);
+
+  const auto people =
+      client_->RunTask("session-1", SegmentationTask::kPeople, std::nullopt, kTimeout);
+  ASSERT_TRUE(people.status.ok) << people.status.error;
+  EXPECT_FLOAT_EQ(people.mask_box.x0, 0.0F);
+  EXPECT_FLOAT_EQ(people.mask_box.y1, 1.0F);
 }
 
 TEST_F(SegmentationClientTest, RunTaskNotFoundIsSuccessWithMessage) {
-  const auto result = client_->RunTask("session-1", SegmentationTask::kSky, {}, kTimeout);
+  const auto result = client_->RunTask("session-1", SegmentationTask::kSky, std::nullopt, kTimeout);
 
   ASSERT_TRUE(result.status.ok) << result.status.error;
   EXPECT_EQ(service_.TaskRequest().task(), alcedo::ai::SEGMENTATION_TASK_SKY);
-  EXPECT_EQ(service_.TaskRequest().person_indices_size(), 0);
+  EXPECT_FALSE(service_.TaskRequest().has_person_index());
   EXPECT_FALSE(result.found);
   EXPECT_EQ(result.message, "No sky found: sky presence 0.312 is below 0.423.");
   EXPECT_EQ(result.mask_kind, SegmentationTaskMaskKind::kNone);

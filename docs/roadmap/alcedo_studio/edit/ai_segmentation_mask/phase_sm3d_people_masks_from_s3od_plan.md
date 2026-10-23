@@ -2,7 +2,8 @@
 
 Date: 2026-10-23.
 
-Status: planned.
+Status: implemented and verified on Windows and macOS on 2026-10-23
+(`feature/ai-segmentation-sm3d`, section 12).
 
 Parent plan: [AI Segmentation Mask Master Plan](../ai_segmentation_mask_master_plan.md), decisions
 D21 and D22, and the SM3.D entry of the phase summary.
@@ -507,9 +508,131 @@ Read `AGENTS.md` and the applicable skills again before implementation.
 
 ## 12. Completion record
 
-Not started. The executor writes here: the status, the source revision and branch, the lab commit,
-the user check result (manual verification, separate from automated evidence), the final values
-of `PERSON_CROP_MARGIN` and `PERSON_IN_SUBJECT_FRACTION` with the agreement count of E8, the
-actual changed modules and diff, each change of a decision with its reason, the primary call
-chains, the test results, the port check results on DirectML, CPU, and Core ML, the measurements of
-section 9, and the issue numbers of the problems found.
+### 12.1 SM3.D completion record (2026-10-23)
+
+**Status:** SM3.D.1 and SM3.D.2 are implemented. Windows: all tests pass; the port check passes on
+DirectML and on the ONNX Runtime CPU device. macOS: all tests pass; the port check passes on Core
+ML `All` (section 12.3).
+
+**Source revision and branch:** `feature/ai-segmentation-sm3d` on `2722a740` (`main`). Lab:
+`feature/people-from-s3od` of `alcedo-ai-mask-lab` on `2a33061` (commits `e34924f`, `9d069be`,
+`21acc07`).
+
+**User check (manual verification, 2026-10-23):** the user reviewed the check pages of section 7.1
+step 3 (9 photos with people, 53 listed people, including `DSC00527` and `2088064441`) and accepted
+the person edges. The findings that the user saw with the pages: small out-of-focus people next to a
+sharp subject (`DSC_1535` persons 4, 5, 6) give the alpha of a part of the subject (issue #475), and
+3 small people have no crop alpha >= 0.5 (E9). Lab report:
+`docs/exploration/sm3d_people_from_s3od.md` of the lab.
+
+**Final values:** `PERSON_CROP_MARGIN` 0.1 (no change after the check). `PERSON_IN_SUBJECT_FRACTION`
+0.15: 48 of the 50 people with a crop alpha agree with the lab rule of E8 (0.05 to 0.30: 47; 0.50:
+44; 0.70 and higher: 35). The two people that do not agree are `DSC_1535` persons 4 and 5 (the crop
+alpha is the arm of the subject).
+
+**Decisions made during the work:**
+
+| Item | Decision | Reason |
+| --- | --- | --- |
+| Pixel edges of E3 and of `subject_fraction` | `floor(v * size + 1e-4)` and `ceil(v * size - 1e-4)`, computed in float64 from the float32 box corners, in the lab and in Rust; `PERSON_CROP_MARGIN` is float64. | The box corners are float32 values. Without the tolerance, the box (0.2, 0.3)-(0.4, 0.7) of section 8.1 gives x 180 to 421, not 420. The same float64 arithmetic in both programs gives the same rectangles: all 53 crop rectangles are equal in pixels on DirectML, CPU, and Core ML. |
+| People list of a Person result | The entries carry `subject_fraction` and `in_subject` of the stored Subject alpha; 0 and false when the image has no Subject alpha yet. | The test `cached_key_only_start_runs_person_from_stored_crop` (section 8.1) allows one S3OD run, so a Person request cannot run S3OD on the photo. The host reads the included state from the People result (SM5.2). |
+| `mask_box` | Part of the `Alpha` mask value (`TaskMaskValues::Alpha { values, mask_box }`), not a separate optional field. | Only an alpha grid has a box (E10); the type keeps that rule. |
+| S3OD input resize (issue #474) | `subject_input_image` now gives the bytes of `cv2.resize(..., INTER_LINEAR)`: the vertical pass uses the OpenCV SIMD rule `((((a >> 4) * w0) >> 16) + (((b >> 4) * w1) >> 16) + 2) >> 2`, the vertical weights at the image edges are not clamped (only the rows), and each weight is rounded separately, ties to even. | The first port check failed on 22 of 53 person crops on DirectML (minimum IoU 0.616) and differed on the CPU too. The SM3.C resize was off by one in 6 % to 15 % of the values; whole photos tolerate that, small upscaled crops do not. The new resize is bit-exact on the 53 crops, the 14 photos, and 300 random sizes; the Subject grid IoU on the CPU also rose from 0.998423 to 0.999445. |
+| Port check criterion of the person crop alpha (section 8.3) | 0.998 on the CPU devices, as planned. On the float16 devices (DirectML, Core ML `All`): IoU >= 0.99, or at most 0.05 % of the crop grid pixels different. | With the bit-exact input, DirectML gives IoUs down to 0.9926, and onnxruntime-directml in Python on the same inputs gives the same values (a temporary check script on the port reference crops). Small upscaled crops have wide edges near 0.5. `DSC_1535` person 5 (the subject arm, 1,719 inside pixels) has IoU 0.954 with 82 different pixels (0.022 %). The plan assumed the Subject tolerance; it does not hold for float16 crop runs. |
+| Lab measurement scripts of issues #5 and #8 | The old People rule stays in the lab as `select_people_sam_boxes`, used only by `compare_providers.py` and `compare_with_measurement_scripts.py`. | These scripts reproduce recorded results of earlier issues. The People tool and the check use the new rule. |
+
+**Actual changed modules and diff:** Alcedo Studio about 2,230 changed lines (1,753 added, 473
+removed): Rust production about 560 (task rules, image entry, engine, server, proto), Rust unit tests
+about 700, port check 345, Python reference 77, C++ 90 and its tests 86, documents. Lab: 2,700
+added lines, of which 1,879 are the result JSON (scripts 700, report 122). The estimate (1,300 to
+1,750) was low because of the engine tests and the port check.
+
+**Primary success call chain:**
+
+```text
+AiMaskSegmentationService::StartImage(pixels, key)
+  -> SegmentationClient::StartSession -> StartSegmentationSession -> SegmentationEngine::start_session
+       -> sam2::preprocess_image, task_masks::subject_input_image, encoder
+       -> head.run -> people_list_of (presences, decode_people, people_list,
+          person_crop_rect + person_crop_image per person) -> ImageEntry::new -> cache insert
+AiMaskSegmentationService::RunTask(kPeople)
+  -> RunSegmentationTask(PEOPLE) -> run_task -> validate_task_request -> people_task
+       -> photo_subject_alpha (subject slot, subject_alpha_of: one S3OD run per entry)
+       -> person_list_entries (subject_fraction, in_subject)
+       -> TaskResult{Alpha{Subject alpha, mask_box (0, 0, 1, 1)}, People list}
+AiMaskSegmentationService::RunTask(kPerson, 2)
+  -> RunSegmentationTask(PERSON, 2) -> person_task
+       -> person_alphas[2] slot: subject_input_image(stored crop) -> subject_alpha_of (one S3OD run)
+       -> TaskResult{Alpha{crop alpha, mask_box = crop rectangle}, People list} or E9 message
+```
+
+**Primary failure call chain:**
+
+```text
+start_session -> head.run fails -> SegmentationError::Inference -> header INTERNAL; no session, no
+  cache entry (a key-only start reports IMAGE_NOT_CACHED)
+person_task -> S3OD fails -> Inference -> person_alphas[i] stays empty; the next request runs S3OD
+  again -> C++ SegmentationTaskResult.status.ok = false with the runtime message
+run_task(PERSON without index | other task with index | index outside the list) -> InvalidInput
+  before any model run -> header INVALID_ARGUMENT
+```
+
+### 12.2 Windows verification
+
+| Test | Result |
+| --- | --- |
+| `cargo test --release -- --skip live_` | 365 + 4 + 5 + 1 passed, 0 failed, 0 warnings (`main`: 346 + 4 + 5 + 1 at SM3.C; the SM3.C People tests were replaced as section 8.1 says) |
+| New and changed Rust tests of section 8.1 (`task_masks` 6 including `subject_input_image_matches_opencv_resize_bit_for_bit`, `engine` 16, `server` 3) | all passed |
+| Port check, DirectML, 2 runs | passed: 201 compared masks; prompt masks minimum photo IoU 0.999973; Sky unions IoU 1.0; Subject grid IoU at least 0.998520; People alpha equal to the Subject alpha; 53 crop rectangles equal; person crop IoU at least 0.9926 (one crop at 0.954 with 0.022 % different pixels); fractions within 0.01; key-only starts give the stored person alphas |
+| Port check, ONNX Runtime CPU | passed with the planned 0.998: person crop IoU at least 0.999330; Subject at least 0.999445; the 3 "not found" persons agree with the reference |
+| `cargo clippy --release --all-targets` | no new finding: 70 warnings and the `semantic.rs` error on `main` and on the branch (issue #476) |
+| C++ `SegmentationClientTest`, `AiMaskSegmentationServiceTest` (`win_debug`) | 22 of 22 passed (`RunTaskCarriesTaskAndPersonIndex`, `RunTaskMapsAlphaMaskBoxAndSubjectFraction`, `RunTaskUsesCurrentSession` changed or new) |
+
+**Measurements (Windows, RTX 3080 Laptop, DirectML, release):**
+
+| Item | Value | Expected |
+| --- | ---: | --- |
+| Start with pixels (preprocessing, encoder, head, crops), port check p50 | 149 to 154 ms (first 249 to 278) | SM3.C value plus 2 to 30 ms (SM3.C: 206 to 215 ms with task requests) |
+| CPU time of the crops at the start, `DSC00527` (20 people); largest photo | 1.1 ms; 15 ms (`DSC00674`, one 2731 x 4096 crop resized) | under 100 ms |
+| Bytes of the stored crops: `DSC00527` in total; largest crop of one person | 2.91 MB; 2.12 MB (`DSC00326`) | at most 3 MB per person |
+| First People request of a photo (one S3OD run), p50 | 212 to 215 ms (first in the process 251 to 299) | about 210 ms |
+| Person request, first, p50 (53 people); from the entry, p50 of all stored requests | 206 ms (202 to 228); 0.37 to 0.43 ms | about 191 ms and 3 ms |
+| Dedicated GPU memory, peak of the port check (People and 53 Person requests) | 2,955 MB | below 3 GB (SM3.C peak 2,955 MB) |
+
+### 12.3 macOS verification
+
+Mac: Apple Silicon, macOS 27.0.1, rustc 1.90.0, `yurunmac.local`. Source: `origin/main`
+(`2722a740`) with the patch of this branch. Models: `point_encoder.mlmodelc`,
+`point_decoder.mlmodelc`, `people_sky_head.mlmodelc` with its JSON file (SHA-256 `43981e9e…`, the
+same file as on Windows), and `s3od.mlmodelc` (`float16_embeddings_attention_float32`) from the
+lab, against a copy of the Windows port reference `build/tmp/sm3d/port_reference`.
+
+| Test | Result |
+| --- | --- |
+| `cargo test --release -- --skip live_` | 368 + 4 + 5 + 1 passed, 0 failed (3 more tests than on Windows: the macOS-only tests) |
+| C++ `SegmentationClientTest`, `AiMaskSegmentationServiceTest` (`macos-debug`) | 22 of 22 passed |
+| Port check, Core ML `All` (device `""`, `coreml-native:all`), 2 runs | passed with the float16 rule of section 12.1: 201 compared masks; prompt masks minimum photo IoU 0.999964; Sky unions IoU at least 0.999999; Subject grid IoU at least 0.998243; Background at least 0.999960; People alpha equal to the Subject alpha; 53 crop rectangles equal to the reference; person crop IoU at least 0.994048 except `DSC_1535` person 5 (0.909250, the subject arm; inside the 0.05 % share); fractions within 0.01. The first run with the CPU criterion 0.998 failed on 3 crops (`DSC00527` person 19, `DSC00562` person 5, `DSC_1535` person 5). |
+| Port check, Core ML `CPUOnly` (device `cpu`) | failed (issue #477): 6 person crops below 0.998 and above the 0.05 % share (minimum `DSC_1456` person 1, IoU 0.908918, 1.34 % different) and `Nikon-D800e-raw-00007` Subject grid IoU 0.996392. The app uses Core ML `All`, not this device. The prompt masks, Sky, and Background pass (minimum photo IoU 0.999973). |
+
+This port check also is the open SM3.C macOS port check (SM3.C plan, section 13.2): the SM3.C
+tasks pass on Core ML `All`.
+
+**Measurements (macOS, Core ML `All`, release, port check):**
+
+| Item | Value | Expected |
+| --- | ---: | --- |
+| Start with pixels, encoder p50 | 424 to 430 ms | not specified for macOS |
+| Decoder p50 (1 to 4 points) | 41 to 44 ms | — |
+| CPU time of the crops at the start, `DSC00527`; largest photo | 0.6 ms; 11 ms (`P1024439`) | under 100 ms |
+| Bytes of the stored crops | equal to Windows (same rectangles and resize) | at most 3 MB per person |
+| First People request of a photo (one S3OD run), p50 | 964 and 1,012 ms | about 210 ms (Windows value); issue #478 |
+| Person request, first, p50 (53 people) | 1,030 and 1,024 ms | issue #478 |
+| Core ML `CPUOnly`: People p50; Person p50 | 3,348 to 3,361 ms; 3,405 to 3,444 ms | — |
+
+### 12.4 Issues
+
+- #474: S3OD input resize differs from OpenCV (fixed by this phase).
+- #475: a click on a small blurred person next to the subject subtracts a part of the subject.
+- #476: `cargo clippy --all-targets` stops on an always-true assertion in the semantic server test.
+- #477: the port check fails on the Core ML `CPUOnly` device (Subject and person crops).
+- #478: S3OD on Core ML takes about 1.0 s for each People or Person request (Windows: about 0.2 s).

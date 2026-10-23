@@ -11,6 +11,7 @@
 
 #include <chrono>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -83,11 +84,11 @@ class FakeSegmentationClient final : public sidecar_client::SegmentationClient {
     return fail_end_ ? Failed("transport closed") : Ok();
   }
   auto RunTask(const std::string& session_id, SegmentationTask task,
-               const std::vector<uint32_t>& person_indices, std::chrono::milliseconds /*timeout*/)
+               std::optional<uint32_t> person_index, std::chrono::milliseconds /*timeout*/)
       -> SegmentationTaskResult override {
     std::string entry = "task " + session_id + " " + std::to_string(static_cast<int>(task));
-    for (const auto index : person_indices) {
-      entry += " " + std::to_string(index);
+    if (person_index.has_value()) {
+      entry += " person " + std::to_string(*person_index);
     }
     log_->push_back(entry);
     return SegmentationTaskResult{.status = Ok(), .found = true};
@@ -262,11 +263,11 @@ TEST(AiMaskSegmentationServiceTest, RunTaskUsesCurrentSession) {
   ASSERT_TRUE(under_test.service->StartImage(Image(8)).status.ok);
   ASSERT_TRUE(under_test.service->StartImage(Image(16)).status.ok);
 
-  EXPECT_TRUE(under_test.service->RunTask(SegmentationTask::kPeople, {2, 0}).found);
+  EXPECT_TRUE(under_test.service->RunTask(SegmentationTask::kPerson, 2U).found);
   EXPECT_TRUE(under_test.service->RunTask(SegmentationTask::kSubject).status.ok);
 
   EXPECT_EQ(*under_test.log, (CallLog{"start s1 8 96", "end s1", "start s2 16 192",
-                                      "task s2 4 2 0", "task s2 1"}));
+                                      "task s2 5 person 2", "task s2 1"}));
 }
 
 }  // namespace

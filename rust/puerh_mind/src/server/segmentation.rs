@@ -1,4 +1,4 @@
-//! `SegmentationService` server (master plan section 9.2, SM3.A, SM3.B, and SM3.C).
+//! `SegmentationService` server (master plan section 9.2, SM3.A, SM3.B, SM3.C, and SM3.D).
 //!
 //! Converts the proto messages to engine values, runs the engine on the blocking thread pool, and
 //! reports each outcome in the `AiResponseHeader`: the gRPC status stays OK, and a failed
@@ -169,6 +169,7 @@ fn task_from_request(
         Ok(ProtoSegmentationTask::Background) => SegmentationTask::Background,
         Ok(ProtoSegmentationTask::Sky) => SegmentationTask::Sky,
         Ok(ProtoSegmentationTask::People) => SegmentationTask::People,
+        Ok(ProtoSegmentationTask::Person) => SegmentationTask::Person,
         Ok(ProtoSegmentationTask::Unspecified) | Err(_) => {
             return Err(SegmentationError::InvalidInput(format!(
                 "segmentation task {} is not a task mask",
@@ -178,7 +179,7 @@ fn task_from_request(
     };
     Ok(TaskRequest {
         task,
-        person_indices: request.person_indices.clone(),
+        person_index: request.person_index,
     })
 }
 
@@ -407,6 +408,8 @@ impl SegmentationService for SegmentationServiceImpl {
                         y1: person.y1,
                     }),
                     score: person.score,
+                    subject_fraction: person.subject_fraction,
+                    in_subject: person.in_subject,
                 })
                 .collect();
             if let Some(mask) = result.mask {
@@ -418,9 +421,15 @@ impl SegmentationService for SegmentationServiceImpl {
                         response.mask_kind = SegmentationTaskMaskKind::Binary as i32;
                         response.mask_r8 = values;
                     }
-                    TaskMaskValues::Alpha(values) => {
+                    TaskMaskValues::Alpha { values, mask_box } => {
                         response.mask_kind = SegmentationTaskMaskKind::Alpha as i32;
                         response.alpha_values = values;
+                        response.mask_box = Some(SegmentationBox {
+                            x0: mask_box.x0,
+                            y0: mask_box.y0,
+                            x1: mask_box.x1,
+                            y1: mask_box.y1,
+                        });
                     }
                 }
             }
@@ -675,14 +684,14 @@ mod tests {
         service: &SegmentationServiceImpl,
         session_id: &str,
         task: ProtoSegmentationTask,
-        person_indices: Vec<u32>,
+        person_index: Option<u32>,
     ) -> RunSegmentationTaskResponse {
         service
             .run_segmentation_task(Request::new(RunSegmentationTaskRequest {
                 header: None,
                 session_id: session_id.to_string(),
                 task: task as i32,
-                person_indices,
+                person_index,
             }))
             .await
             .expect("transport ok")
@@ -699,7 +708,7 @@ mod tests {
             &service,
             &session.session_id,
             ProtoSegmentationTask::Sky,
-            vec![],
+            None,
         )
         .await;
         assert_eq!(
@@ -709,13 +718,14 @@ mod tests {
         assert!(!sky.found);
         assert!(sky.message.starts_with("No sky found"), "{}", sky.message);
         assert!(sky.mask_r8.is_empty() && sky.alpha_values.is_empty());
+        assert!(sky.mask_box.is_none());
         assert!(sky.presence_threshold > 0.42 && sky.presence_threshold < 0.43);
 
         let unspecified = run_task(
             &service,
             &session.session_id,
             ProtoSegmentationTask::Unspecified,
-            vec![],
+            None,
         )
         .await;
         assert_eq!(
@@ -725,16 +735,26 @@ mod tests {
                 AiErrorCode::AiErrorInvalidInput as i32
             )
         );
-        let missing = run_task(&service, "missing", ProtoSegmentationTask::People, vec![]).await;
+        let missing = run_task(&service, "missing", ProtoSegmentationTask::People, None).await;
         assert_eq!(
             header_status(&missing.header).1,
             AiErrorCode::AiErrorSessionNotFound as i32
         );
     }
 
-    #[tokio::test]
-    async fn server_maps_people_list_and_binary_mask() {
-        use crate::service::segmentation::model_set::{CENTER_LOGITS_SHAPE, HEAD_GRID};
+    /// A service whose fake head lists one person (a 4 x 8 cell box centered on the head grid cell
+    /// at row 20, column 32) and whose fake S3OD alpha is @p alpha. Returns the service, the fake
+    /// calls, and a session on a 640 x 480 image.
+    async fn service_with_one_person(
+        alpha: f32,
+    ) -> (
+        SegmentationServiceImpl,
+        Arc<crate::service::segmentation::test_support::FakeCalls>,
+        String,
+    ) {
+        use crate::service::segmentation::model_set::{
+            CENTER_LOGITS_SHAPE, HEAD_GRID, LOG_SIZE_SHAPE,
+        };
         use crate::service::segmentation::tensor::TensorF32;
         use crate::service::segmentation::test_support::empty_head_output;
 
@@ -742,10 +762,17 @@ mod tests {
         let calls = factory.calls.clone();
         let mut head = empty_head_output();
         head.presence_logits = TensorF32::new(vec![1, 2], vec![-5.0, 5.0]).expect("presence");
-        let mut center = vec![-10.0f32; HEAD_GRID * HEAD_GRID];
-        center[20 * HEAD_GRID + 32] = 3.0;
+        let plane = HEAD_GRID * HEAD_GRID;
+        let cell = 20 * HEAD_GRID + 32;
+        let mut center = vec![-10.0f32; plane];
+        center[cell] = 3.0;
         head.center_logits = TensorF32::new(CENTER_LOGITS_SHAPE.to_vec(), center).expect("center");
+        let mut log_size = vec![0.0f32; 2 * plane];
+        log_size[cell] = 4f32.ln();
+        log_size[plane + cell] = 8f32.ln();
+        head.log_size = TensorF32::new(LOG_SIZE_SHAPE.to_vec(), log_size).expect("size");
         *calls.head_output.lock().expect("head output") = Some(head);
+        *calls.subject_alpha.lock().expect("alpha") = alpha;
         let service =
             SegmentationServiceImpl::new(Arc::new(SegmentationEngine::new(Arc::new(factory))));
         service
@@ -756,34 +783,142 @@ mod tests {
             }))
             .await
             .expect("transport ok");
-        let session = start_with_key(&service, "", true).await;
-        let people = run_task(
-            &service,
-            &session.session_id,
-            ProtoSegmentationTask::People,
-            vec![0],
-        )
-        .await;
+        let started = service
+            .start_segmentation_session(Request::new(StartSegmentationSessionRequest {
+                header: None,
+                width: 640,
+                height: 480,
+                rgb8_pixels: vec![50; 640 * 480 * 3],
+                image_key: String::new(),
+            }))
+            .await
+            .expect("transport ok")
+            .into_inner();
+        assert!(!started.session_id.is_empty());
+        (service, calls, started.session_id)
+    }
+
+    #[tokio::test]
+    async fn server_maps_people_alpha_list_and_fractions() {
+        let (service, _calls, session_id) = service_with_one_person(0.8).await;
+        let people = run_task(&service, &session_id, ProtoSegmentationTask::People, None).await;
         assert_eq!(
             header_status(&people.header).0,
             AiResponseStatus::AiStatusOk as i32
         );
         assert!(people.found);
         assert!(people.message.is_empty());
-        assert_eq!(people.mask_kind, SegmentationTaskMaskKind::Binary as i32);
-        // The union mask has the size of the 8 x 4 session image.
-        assert_eq!((people.mask_width, people.mask_height), (8, 4));
-        assert_eq!(people.mask_r8.len(), 8 * 4);
-        assert!(people.alpha_values.is_empty());
+        assert_eq!(people.mask_kind, SegmentationTaskMaskKind::Alpha as i32);
+        // The 640 x 480 image resized to a long edge of 1024.
+        assert_eq!((people.mask_width, people.mask_height), (1024, 768));
+        assert_eq!(people.alpha_values.len(), 1024 * 768);
+        assert!(people.mask_r8.is_empty());
+        let mask_box = people.mask_box.expect("mask box");
+        assert_eq!(
+            (mask_box.x0, mask_box.y0, mask_box.x1, mask_box.y1),
+            (0.0, 0.0, 1.0, 1.0)
+        );
         assert_eq!(people.people.len(), 1);
         let person = &people.people[0];
         assert_eq!(person.index, 0);
-        // A 1 x 1 cell box (log size 0) centered on the cell (20, 32).
         let prompt_box = person.r#box.expect("box");
         assert_eq!(
             (prompt_box.x0, prompt_box.y0, prompt_box.x1, prompt_box.y1),
-            (31.5 / 64.0, 19.5 / 64.0, 32.5 / 64.0, 20.5 / 64.0)
+            (30.0 / 64.0, 16.0 / 64.0, 34.0 / 64.0, 24.0 / 64.0)
         );
-        assert!(people.model_ms >= 0);
+        assert_eq!(person.subject_fraction, 1.0);
+        assert!(person.in_subject);
+        assert_eq!(people.subject_score, 0.95);
+    }
+
+    #[tokio::test]
+    async fn server_maps_person_alpha_and_mask_box() {
+        let (service, calls, session_id) = service_with_one_person(0.8).await;
+        let found = run_task(
+            &service,
+            &session_id,
+            ProtoSegmentationTask::Person,
+            Some(0),
+        )
+        .await;
+        assert_eq!(
+            header_status(&found.header).0,
+            AiResponseStatus::AiStatusOk as i32
+        );
+        assert!(found.found);
+        assert_eq!(found.mask_kind, SegmentationTaskMaskKind::Alpha as i32);
+        // The crop: x 30 to 34 cells (300 to 340 px) and y 16 to 24 cells (120 to 180 px),
+        // widened by 4 px and 6 px: 296 to 344 and 114 to 186, 48 x 72 px, resized to 683 x 1024.
+        assert_eq!((found.mask_width, found.mask_height), (683, 1024));
+        assert_eq!(found.alpha_values.len(), 683 * 1024);
+        let mask_box = found.mask_box.expect("mask box");
+        assert_eq!(
+            (mask_box.x0, mask_box.y0, mask_box.x1, mask_box.y1),
+            (296.0 / 640.0, 114.0 / 480.0, 344.0 / 640.0, 186.0 / 480.0)
+        );
+        assert_eq!(found.people.len(), 1);
+
+        // A second image whose crop alpha stays below 0.5: not found, with the message.
+        *calls.subject_alpha.lock().expect("alpha") = 0.3;
+        let started = service
+            .start_segmentation_session(Request::new(StartSegmentationSessionRequest {
+                header: None,
+                width: 640,
+                height: 480,
+                rgb8_pixels: vec![60; 640 * 480 * 3],
+                image_key: String::new(),
+            }))
+            .await
+            .expect("transport ok")
+            .into_inner();
+        let not_found = run_task(
+            &service,
+            &started.session_id,
+            ProtoSegmentationTask::Person,
+            Some(0),
+        )
+        .await;
+        assert_eq!(
+            header_status(&not_found.header).0,
+            AiResponseStatus::AiStatusOk as i32
+        );
+        assert!(!not_found.found);
+        assert!(
+            not_found
+                .message
+                .starts_with("No person found in the crop of person 0"),
+            "{}",
+            not_found.message
+        );
+        assert!(not_found.alpha_values.is_empty() && not_found.mask_box.is_none());
+    }
+
+    #[tokio::test]
+    async fn server_rejects_person_without_index() {
+        use std::sync::atomic::Ordering;
+
+        let (service, calls, session_id) = service_with_one_person(0.8).await;
+        for (task, person_index) in [
+            (ProtoSegmentationTask::Person, None),
+            (ProtoSegmentationTask::People, Some(0)),
+        ] {
+            let response = run_task(&service, &session_id, task, person_index).await;
+            assert_eq!(
+                header_status(&response.header),
+                (
+                    AiResponseStatus::AiStatusInvalidArgument as i32,
+                    AiErrorCode::AiErrorInvalidInput as i32
+                ),
+                "{task:?}"
+            );
+            assert!(!response.found);
+        }
+        // The check comes before the session lookup: an unknown session also reports the index.
+        let response = run_task(&service, "missing", ProtoSegmentationTask::Person, None).await;
+        assert_eq!(
+            header_status(&response.header).1,
+            AiErrorCode::AiErrorInvalidInput as i32
+        );
+        assert_eq!(calls.subject_runs.load(Ordering::SeqCst), 0);
     }
 }

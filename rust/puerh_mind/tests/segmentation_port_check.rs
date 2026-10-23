@@ -17,12 +17,18 @@
 //! - `ALCEDO_SEGMENTATION_PORT_REFERENCE_DIR`: the output directory of the reference script;
 //! - `ALCEDO_SEGMENTATION_PORT_CHECK_DEVICE`: optional device value (`""` is the platform default).
 //!
-//! Task masks (SM3.C): when the reference has task masks, every photo also runs Sky, People (all
-//! people and each person alone), Subject, and Background. The Sky region count, the People list
-//! length, and the list boxes (within 1e-3 cell) must match; the Sky and People unions and each
-//! person mask must have an IoU of at least 0.999 at the photo size against the union of the
-//! reference masks; the Subject and Background alpha >= 0.5 must have an IoU of at least 0.998 on
-//! the S3OD grid. A key-only start of a cached photo must read the stored Subject result.
+//! Task masks (SM3.C and SM3.D): when the reference has task masks, every photo also runs Sky,
+//! People, Person (each listed person), Subject, and Background. The Sky region count, the People
+//! list length, and the list boxes (within 1e-3 cell) must match; the Sky union must have an IoU of
+//! at least 0.999 at the photo size against the union of the reference masks; the Subject and
+//! Background alpha >= 0.5 must have an IoU of at least 0.998 on the S3OD grid; the People alpha
+//! must equal the Subject alpha. For each person, the crop rectangle must be equal in pixels, the
+//! crop alpha >= 0.5 must have an IoU of at least 0.998 on the crop grid, `subject_fraction` must
+//! be within 0.01, and `in_subject` must be equal when the reference fraction is more than 0.01
+//! from `PERSON_IN_SUBJECT_FRACTION`. On DirectML and Core ML `All` (S3OD in float16 on the GPU or
+//! the Neural Engine), a crop alpha passes with an IoU of at least 0.99, or with at most 0.05 % of
+//! its grid pixels different. A key-only start of a cached photo must read the stored
+//! Subject result and give the same person alphas.
 //!
 //! The test returns without a check when one of the first two variables is not set.
 
@@ -32,7 +38,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use alcedo_mind::service::segmentation::engine::{
-    IMAGE_EMBEDDING_CACHE_CAPACITY, RgbImageView, SegmentationEngine, SegmentationError,
+    IMAGE_EMBEDDING_CACHE_CAPACITY, MaskBox, RgbImageView, SegmentationEngine, SegmentationError,
     SegmentationTask, StartSessionRequest, TaskMaskValues, TaskRequest, TaskResult,
 };
 use alcedo_mind::service::segmentation::model_set::{HEAD_GRID, LOGIT_SIZE};
@@ -40,14 +46,28 @@ use alcedo_mind::service::segmentation::platform_backend_factory;
 use alcedo_mind::service::segmentation::sam2::{
     PointLabel, PromptBox, PromptPoint, SegmentationPrompt,
 };
+use alcedo_mind::service::segmentation::task_masks::{self, PERSON_IN_SUBJECT_FRACTION, PersonBox};
 use serde_json::Value;
 
 const MIN_PHOTO_IOU: f64 = 0.999;
 /// Smallest IoU of the Subject and Background alpha >= 0.5 on the S3OD grid (the lab macOS
 /// acceptance criterion for S3OD).
 const MIN_SUBJECT_IOU: f64 = 0.998;
+/// Smallest IoU of a person crop alpha >= 0.5 on the crop grid when S3OD runs in float16 on the GPU
+/// or the Neural Engine (DirectML; Core ML `ComputeUnits::All`). Small person crops are upscaled
+/// to 1024 px, and their alpha is near 0.5 on wide edges: onnxruntime-directml in Python on the
+/// same inputs gives the same IoUs as the sidecar (SM3.D plan, section 12). The CPU devices keep
+/// `MIN_SUBJECT_IOU`.
+const MIN_PERSON_IOU_FLOAT16_DEVICE: f64 = 0.99;
+/// On the float16 devices, a person crop alpha also passes when at most this share of its grid
+/// pixels differs from the reference at 0.5. The IoU of a small mask changes with a few pixels: on
+/// DirectML, `DSC_1535` person 5 has 1,719 inside pixels and 82 different pixels (0.022 %), IoU
+/// 0.954, also in Python.
+const MAX_PERSON_DIFFERENT_SHARE_FLOAT16_DEVICE: f64 = 0.0005;
 /// Largest difference of a People list box corner, in head grid cells.
 const MAX_BOX_DIFFERENCE_CELLS: f32 = 1e-3;
+/// Largest difference of `subject_fraction` (SM3.D plan, section 8.3).
+const MAX_FRACTION_DIFFERENCE: f32 = 0.01;
 /// Number of decodes of one prompt on one session for the steady-state decode time.
 const REPEATED_DECODES: usize = 20;
 
@@ -149,6 +169,11 @@ struct Comparison {
     failures: Vec<String>,
     minimum_iou: f64,
     compared: usize,
+    /// Smallest IoU of a person crop alpha for the S3OD device of this run.
+    minimum_person_iou: f64,
+    /// Largest share of different person crop alpha pixels that passes below the smallest IoU; 0
+    /// on the CPU devices.
+    maximum_person_different_share: f64,
 }
 
 /// Decodes @p record on @p session_id and compares the masks with the reference. Returns the
@@ -220,36 +245,47 @@ fn decode_and_compare(
     (decode_us, point_count)
 }
 
-/// Times of the task requests of the whole check, in milliseconds.
+/// Times and sizes of the task requests of the whole check; times in milliseconds.
 #[derive(Default)]
 struct TaskTimes {
-    /// The first Sky request of each photo: the head and the region decodes.
+    /// The first Sky request of each photo: the region decodes (the head output is stored).
     first_sky_ms: Vec<u64>,
-    /// The first People request of each photo: the person decodes (the head output is stored).
+    /// The first People request of each photo with people: S3OD on the photo with its pre- and
+    /// postprocessing.
     first_people_ms: Vec<u64>,
-    /// The first Subject request of each photo: S3OD with its pre- and postprocessing.
+    /// The first Person request of each listed person: S3OD on the crop.
+    first_person_ms: Vec<u64>,
+    /// The Subject request of each photo: S3OD on the photo, or 0 after a People request.
     first_subject_ms: Vec<u64>,
     /// Requests that read the stored results only, in microseconds.
     stored_request_us: Vec<u64>,
+    /// Per photo with people: the CPU time of the person crops (the crop functions of the engine
+    /// on the reference boxes), in microseconds, and the bytes of the stored crops.
+    crop_us: Vec<(String, u64, usize, usize)>,
 }
 
 fn run_task(
     engine: &SegmentationEngine,
     session_id: &str,
     task: SegmentationTask,
-    person_indices: Vec<u32>,
+    person_index: Option<u32>,
     label: &str,
 ) -> TaskResult {
     engine
-        .run_task(
-            session_id,
-            TaskRequest {
-                task,
-                person_indices,
-            },
-        )
+        .run_task(session_id, TaskRequest { task, person_index })
         .unwrap_or_else(|err| panic!("{label} {task:?}: {err}"))
 }
+
+/// The alpha values and the mask box of an alpha task mask.
+fn alpha_values(result: &TaskResult, label: &str) -> (Vec<f32>, MaskBox) {
+    match &result.mask.as_ref().expect("mask").values {
+        TaskMaskValues::Alpha { values, mask_box } => (values.clone(), *mask_box),
+        TaskMaskValues::Binary(_) => panic!("{label}: the mask must be an alpha mask"),
+    }
+}
+
+/// The alpha values of the Person result of each listed person of each photo (`None`: not found).
+type PersonAlphas = BTreeMap<String, Vec<Option<Vec<f32>>>>;
 
 /// Union at the photo size of the reference logits files @p files (the MVP union).
 fn reference_union(
@@ -303,8 +339,9 @@ fn compare_binary_union(
     }
 }
 
-/// Runs the four task masks on @p session_id and compares them with the task reference of
-/// @p photo (SM3.C plan, section 8).
+/// Runs the task masks on @p session_id and compares them with the task reference of @p photo
+/// (SM3.C plan, section 8; SM3.D plan, section 8.3).
+#[allow(clippy::too_many_arguments)]
 fn compare_tasks(
     engine: &SegmentationEngine,
     session_id: &str,
@@ -313,12 +350,13 @@ fn compare_tasks(
     size: (usize, usize),
     comparison: &mut Comparison,
     times: &mut TaskTimes,
+    person_alphas: &mut PersonAlphas,
 ) {
     let name = photo["name"].as_str().expect("name");
     let tasks = &photo["tasks"];
 
     // Sky.
-    let sky = run_task(engine, session_id, SegmentationTask::Sky, vec![], name);
+    let sky = run_task(engine, session_id, SegmentationTask::Sky, None, name);
     times.first_sky_ms.push(sky.model_ms);
     let reference_regions: Vec<&str> = tasks["sky"]["regions"]
         .as_array()
@@ -359,9 +397,8 @@ fn compare_tasks(
         );
     }
 
-    // People.
-    let people = run_task(engine, session_id, SegmentationTask::People, vec![], name);
-    times.first_people_ms.push(people.model_ms);
+    // People (SM3.D plan, section 8.3).
+    let people = run_task(engine, session_id, SegmentationTask::People, None, name);
     let reference_people = tasks["people"]["people"].as_array().expect("people");
     println!(
         "{name} people: presence {:.4} (reference {:.4}), {} listed (reference {}), {} ms, {}",
@@ -372,6 +409,7 @@ fn compare_tasks(
         people.model_ms,
         people.message
     );
+    let mut alphas = Vec::new();
     if people.people.len() != reference_people.len() {
         comparison.failures.push(format!(
             "{name} people: {} listed, reference {}",
@@ -385,52 +423,171 @@ fn compare_tasks(
                 .push(format!("{name} people: a mask, reference not found"));
         }
     } else {
+        times.first_people_ms.push(people.model_ms);
+        let pixels = std::fs::read(reference_dir.join(photo["pixels"].as_str().expect("pixels")))
+            .expect("pixels");
+        let mut crop_us = 0u64;
+        let (mut crop_bytes, mut largest_crop) = (0usize, 0usize);
         for (index, (entry, reference)) in people.people.iter().zip(reference_people).enumerate() {
+            let label = format!("{name} person {index}");
             let cells: Vec<f32> = reference["box_cells"]
                 .as_array()
                 .expect("box cells")
                 .iter()
-                .map(|value| (value.as_f64().expect("cell") as f32).clamp(0.0, HEAD_GRID as f32))
+                .map(|value| value.as_f64().expect("cell") as f32)
                 .collect();
             let grid = HEAD_GRID as f32;
             let difference = [entry.x0, entry.y0, entry.x1, entry.y1]
                 .iter()
                 .zip(&cells)
-                .map(|(value, cell)| (value * grid - cell).abs())
+                .map(|(value, cell)| (value * grid - cell.clamp(0.0, grid)).abs())
                 .fold(0.0f32, f32::max);
             if difference > MAX_BOX_DIFFERENCE_CELLS {
+                comparison
+                    .failures
+                    .push(format!("{label}: box differs by {difference} cells"));
+            }
+            // The crop CPU work of the start, with the crop functions on the reference box.
+            let reference_box = PersonBox {
+                x0: cells[0],
+                y0: cells[1],
+                x1: cells[2],
+                y1: cells[3],
+                score: 0.0,
+            };
+            let started = Instant::now();
+            let rect = task_masks::person_crop_rect(&reference_box, size.0, size.1);
+            let crop = task_masks::person_crop_image(&pixels, size.0, size.1, rect).expect("crop");
+            crop_us += started.elapsed().as_micros() as u64;
+            crop_bytes += crop.rgb8.len();
+            largest_crop = largest_crop.max(crop.rgb8.len());
+
+            let reference_fraction =
+                reference["subject_fraction"].as_f64().expect("fraction") as f32;
+            let reference_in_subject = reference["in_subject"].as_bool().expect("in_subject");
+            let fraction_difference = (entry.subject_fraction - reference_fraction).abs();
+            if fraction_difference > MAX_FRACTION_DIFFERENCE {
                 comparison.failures.push(format!(
-                    "{name} person {index}: box differs by {difference} cells"
+                    "{label}: subject_fraction {:.4}, reference {reference_fraction:.4}",
+                    entry.subject_fraction
                 ));
             }
-            let started = Instant::now();
+            if (reference_fraction - PERSON_IN_SUBJECT_FRACTION).abs() > MAX_FRACTION_DIFFERENCE
+                && entry.in_subject != reference_in_subject
+            {
+                comparison.failures.push(format!(
+                    "{label}: in_subject {}, reference {reference_in_subject}",
+                    entry.in_subject
+                ));
+            }
+
             let one = run_task(
                 engine,
                 session_id,
-                SegmentationTask::People,
-                vec![index as u32],
+                SegmentationTask::Person,
+                Some(index as u32),
+                name,
+            );
+            times.first_person_ms.push(one.model_ms);
+            let started = Instant::now();
+            let stored = run_task(
+                engine,
+                session_id,
+                SegmentationTask::Person,
+                Some(index as u32),
                 name,
             );
             times
                 .stored_request_us
                 .push(started.elapsed().as_micros() as u64);
-            let label = format!("{name} person {index}");
-            compare_binary_union(
-                &one,
-                &[reference["logits"].as_str().expect("logits")],
-                reference_dir,
-                size,
-                &label,
-                comparison,
+            if stored.model_ms != 0 {
+                comparison
+                    .failures
+                    .push(format!("{label}: the second request ran a model"));
+            }
+            let reference_rect: Vec<usize> = reference["rect"]
+                .as_array()
+                .expect("rect")
+                .iter()
+                .map(|value| value.as_u64().expect("rect value") as usize)
+                .collect();
+            let reference_alpha =
+                read_f32(&reference_dir.join(reference["alpha"].as_str().expect("alpha")));
+            let reference_inside: Vec<bool> =
+                reference_alpha.iter().map(|value| *value >= 0.5).collect();
+            let reference_found = reference_inside.iter().any(|inside| *inside);
+            let Some(mask) = &one.mask else {
+                println!(
+                    "{label}: not found (reference found {reference_found}), {} ms, {}",
+                    one.model_ms, one.message
+                );
+                if reference_found {
+                    comparison
+                        .failures
+                        .push(format!("{label}: not found, reference found"));
+                }
+                alphas.push(None);
+                continue;
+            };
+            let (values, mask_box) = alpha_values(&one, &label);
+            let rect = [
+                (mask_box.x0 * size.0 as f32).round() as usize,
+                (mask_box.y0 * size.1 as f32).round() as usize,
+                (mask_box.x1 * size.0 as f32).round() as usize,
+                (mask_box.y1 * size.1 as f32).round() as usize,
+            ];
+            let reference_size = (
+                reference["alpha_width"].as_u64().expect("alpha width") as u32,
+                reference["alpha_height"].as_u64().expect("alpha height") as u32,
             );
+            if rect.as_slice() != reference_rect.as_slice()
+                || (mask.width, mask.height) != reference_size
+            {
+                comparison.failures.push(format!(
+                    "{label}: crop {rect:?} grid {}x{}, reference {reference_rect:?} grid {}x{}",
+                    mask.width, mask.height, reference_size.0, reference_size.1
+                ));
+                alphas.push(Some(values));
+                continue;
+            }
+            let inside: Vec<bool> = values.iter().map(|value| *value >= 0.5).collect();
+            let grid_iou = iou(&inside, &reference_inside);
+            comparison.compared += 1;
+            let max_difference = values
+                .iter()
+                .zip(&reference_alpha)
+                .map(|(value, reference)| (value - reference).abs())
+                .fold(0.0f32, f32::max);
+            println!(
+                "{label}: crop {rect:?}, grid IoU {grid_iou:.6}, max |alpha difference| {max_difference:.4}, subject_fraction {:.4} (reference {reference_fraction:.4}), in_subject {}, score {:.4} (reference {:.4}), {} ms",
+                entry.subject_fraction,
+                entry.in_subject,
+                one.subject_score,
+                reference["alpha_score"].as_f64().expect("alpha score"),
+                one.model_ms
+            );
+            let different_share = inside
+                .iter()
+                .zip(&reference_inside)
+                .filter(|(a, b)| a != b)
+                .count() as f64
+                / inside.len() as f64;
+            if (grid_iou < comparison.minimum_person_iou
+                && different_share > comparison.maximum_person_different_share)
+                || !reference_found
+            {
+                comparison.failures.push(format!(
+                    "{label}: grid IoU {grid_iou:.6}, {:.4} % different, reference found {reference_found}",
+                    different_share * 100.0
+                ));
+            }
+            alphas.push(Some(values));
         }
-        let files: Vec<&str> = reference_people
-            .iter()
-            .map(|person| person["logits"].as_str().expect("logits"))
-            .collect();
-        let label = format!("{name} people union");
-        compare_binary_union(&people, &files, reference_dir, size, &label, comparison);
+        times
+            .crop_us
+            .push((name.to_string(), crop_us, crop_bytes, largest_crop));
     }
+    person_alphas.insert(name.to_string(), alphas);
 
     // Subject and Background.
     let subject_reference = &tasks["subject"];
@@ -441,11 +598,17 @@ fn compare_tasks(
         subject_reference["height"].as_u64().expect("height") as u32,
     );
     for task in [SegmentationTask::Subject, SegmentationTask::Background] {
-        let result = run_task(engine, session_id, task, vec![], name);
-        if task == SegmentationTask::Subject {
-            times.first_subject_ms.push(result.model_ms);
-        }
+        let result = run_task(engine, session_id, task, None, name);
         let label = format!("{name} {task:?}");
+        if task == SegmentationTask::Subject
+            && people.mask.is_some()
+            && result.mask.is_some()
+            && alpha_values(&people, &label).0 != alpha_values(&result, &label).0
+        {
+            comparison.failures.push(format!(
+                "{label}: the People alpha differs from the Subject alpha"
+            ));
+        }
         let reference_inside: Vec<bool> = reference_alpha
             .iter()
             .map(|value| match task {
@@ -461,9 +624,7 @@ fn compare_tasks(
             }
             continue;
         };
-        let TaskMaskValues::Alpha(values) = &mask.values else {
-            panic!("{label}: the mask must be an alpha mask");
-        };
+        let (values, _) = alpha_values(&result, &label);
         if (mask.width, mask.height) != reference_size {
             comparison.failures.push(format!(
                 "{label}: size {}x{}, reference {}x{}",
@@ -487,6 +648,9 @@ fn compare_tasks(
             subject_reference["score"].as_f64().expect("score"),
             result.model_ms
         );
+        if task == SegmentationTask::Subject {
+            times.first_subject_ms.push(result.model_ms);
+        }
         if grid_iou < MIN_SUBJECT_IOU {
             comparison
                 .failures
@@ -536,15 +700,39 @@ fn segmentation_port_check_matches_reference_masks() {
     );
 
     let photos = manifest["photos"].as_array().expect("photos");
+    let subject_device = status
+        .models
+        .iter()
+        .find(|model| model.role.as_str() == "subject")
+        .map(|model| model.device.clone())
+        .unwrap_or_default();
+    let float16_device =
+        subject_device.starts_with("directml") || subject_device == "coreml-native:all";
     let mut comparison = Comparison {
         failures: Vec::new(),
         minimum_iou: 1.0,
         compared: 0,
+        minimum_person_iou: if float16_device {
+            MIN_PERSON_IOU_FLOAT16_DEVICE
+        } else {
+            MIN_SUBJECT_IOU
+        },
+        maximum_person_different_share: if float16_device {
+            MAX_PERSON_DIFFERENT_SHARE_FLOAT16_DEVICE
+        } else {
+            0.0
+        },
     };
+    println!(
+        "S3OD device {subject_device}: minimum person crop IoU {}, or at most {} % different pixels",
+        comparison.minimum_person_iou,
+        comparison.maximum_person_different_share * 100.0
+    );
     let mut encoder_ms = Vec::new();
     let mut decode_us: BTreeMap<usize, Vec<u64>> = BTreeMap::new();
     let mut first_decode_us = None;
     let mut task_times = TaskTimes::default();
+    let mut person_alphas = PersonAlphas::new();
     for photo in photos {
         let name = photo["name"].as_str().expect("name");
         let size = photo_size(photo);
@@ -588,6 +776,7 @@ fn segmentation_port_check_matches_reference_masks() {
                 size,
                 &mut comparison,
                 &mut task_times,
+                &mut person_alphas,
             );
         }
         engine
@@ -641,7 +830,7 @@ fn segmentation_port_check_matches_reference_masks() {
                 &engine,
                 &session.session_id,
                 SegmentationTask::Subject,
-                vec![],
+                None,
                 name,
             );
             task_times
@@ -651,6 +840,26 @@ fn segmentation_port_check_matches_reference_masks() {
                 subject.model_ms, 0,
                 "{name}: the cached image must keep its Subject result"
             );
+            // The key-only start gives the same person alphas from the stored crops.
+            for (index, stored) in person_alphas[name].iter().enumerate() {
+                let label = format!("{name} person {index} (cached)");
+                let person = run_task(
+                    &engine,
+                    &session.session_id,
+                    SegmentationTask::Person,
+                    Some(index as u32),
+                    &label,
+                );
+                let values = person
+                    .mask
+                    .as_ref()
+                    .map(|_| alpha_values(&person, &label).0);
+                if person.model_ms != 0 || values.as_ref() != stored.as_ref() {
+                    comparison.failures.push(format!(
+                        "{label}: the cached image gives another alpha or ran a model"
+                    ));
+                }
+            }
         }
         // The same prompt on the same features: the decoder session keeps the features bound.
         if repeated_decode_us.is_empty() {
@@ -691,15 +900,41 @@ fn segmentation_port_check_matches_reference_masks() {
     );
     if !task_times.first_subject_ms.is_empty() {
         println!(
-            "first Sky request ms p50 {} (first photo {}); first People request ms p50 {}; first Subject request ms p50 {} (first photo {}); stored-result request us p50 {} ({} requests)",
+            "first Sky request ms p50 {} (first photo {}); first Subject request ms p50 {} (first photo {}); stored-result request us p50 {} ({} requests)",
             median(&mut task_times.first_sky_ms.clone()),
             task_times.first_sky_ms[0],
-            median(&mut task_times.first_people_ms),
             median(&mut task_times.first_subject_ms.clone()),
             task_times.first_subject_ms[0],
             median(&mut task_times.stored_request_us),
             task_times.stored_request_us.len()
         );
+    }
+    if !task_times.first_people_ms.is_empty() {
+        println!(
+            "first People request ms p50 {} ({} photos: {:?}); first Person request ms p50 {} ({} people, min {}, max {})",
+            median(&mut task_times.first_people_ms.clone()),
+            task_times.first_people_ms.len(),
+            task_times.first_people_ms,
+            median(&mut task_times.first_person_ms.clone()),
+            task_times.first_person_ms.len(),
+            task_times
+                .first_person_ms
+                .iter()
+                .min()
+                .copied()
+                .unwrap_or_default(),
+            task_times
+                .first_person_ms
+                .iter()
+                .max()
+                .copied()
+                .unwrap_or_default()
+        );
+        for (name, crop_us, bytes, largest) in &task_times.crop_us {
+            println!(
+                "{name}: person crops {crop_us} us, {bytes} bytes stored, largest crop {largest} bytes"
+            );
+        }
     }
     engine.unload().expect("unload");
     assert!(

@@ -7,6 +7,7 @@
 #include <chrono>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -42,11 +43,12 @@ class SegmentationClient {
                       std::chrono::milliseconds timeout) -> SegmentationDecodeResult = 0;
   virtual auto EndSession(const std::string& session_id, std::chrono::milliseconds timeout)
       -> SegmentationCallStatus = 0;
-  /// Runs the task mask @p task on the session image (SM3.C). @p person_indices selects people of
-  /// the People list for kPeople (empty: all listed people); it must be empty for other tasks.
+  /// Runs the task mask @p task on the session image (SM3.C, SM3.D). @p person_index is the
+  /// index into the People list for kPerson (required); it must be empty for the other tasks. The
+  /// request carries the index only when it has a value.
   virtual auto RunTask(const std::string& session_id, SegmentationTask task,
-                       const std::vector<uint32_t>& person_indices,
-                       std::chrono::milliseconds    timeout) -> SegmentationTaskResult = 0;
+                       std::optional<uint32_t> person_index, std::chrono::milliseconds timeout)
+      -> SegmentationTaskResult = 0;
 };
 
 /**

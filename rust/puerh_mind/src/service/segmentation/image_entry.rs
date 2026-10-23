@@ -1,19 +1,22 @@
-//! The image entry of the segmentation engine (SM3.C plan, decision C7).
+//! The image entry of the segmentation engine (SM3.C plan, decision C7; SM3.D plan, section 5.1).
 //!
 //! An image entry holds what the engine knows about one image: the image size, the image embedding
-//! (SM3.B), the S3OD input image (C8), and the task results. The sessions and the cache entry of one image
-//! share one entry through `Arc`. Each task result is computed once, at the first request that
-//! needs it, and stays until the entry is dropped; the entry lifetime ends at the latest with an
-//! unload or a model change, so a result never outlives the image or the model set that made it.
+//! (SM3.B), the S3OD input image (C8), the head output and the People list with one crop image per
+//! listed person (SM3.D decisions E4 and E5), and the task results. The sessions and the cache
+//! entry of one image share one entry through `Arc`. The head output and the People list are
+//! written once when the entry is made, at the session start, and are read only after that. Each
+//! task result is computed once, at the first request that needs it, and stays until the entry is
+//! dropped; the entry lifetime ends at the latest with an unload or a model change, so a result
+//! never outlives the image or the model set that made it.
 //!
-//! Each result has its own mutex. The engine holds that mutex while it computes the result, so two
-//! requests on one image compute it once. A failed computation stores nothing. The engine locks
-//! the Sky and People results before the head result, never the reverse.
+//! Each task result has its own mutex. The engine holds that mutex while it computes the result, so
+//! two requests on one image compute it once. A failed computation stores nothing. The engine
+//! never holds two result mutexes at the same time.
 
 use std::sync::{Arc, Mutex};
 
 use super::backend::{HeadOutput, ImageFeatures};
-use super::task_masks::{PersonBox, SubjectAlpha, SubjectInputImage};
+use super::task_masks::{PersonBox, PixelRect, SubjectAlpha, SubjectInputImage};
 
 /// Sky result of one image (SM3.C plan, section 2.3).
 #[derive(Debug, Clone, PartialEq)]
@@ -26,21 +29,24 @@ pub struct SkyResult {
     pub message: String,
 }
 
-/// One entry of the People list and the mask of that person.
+/// One entry of the People list and its crop (SM3.D decisions E3 and E4).
 #[derive(Debug, Clone, PartialEq)]
-pub struct PersonMask {
+pub struct PersonCrop {
     pub person: PersonBox,
-    /// The selected decoder mask of the box prompt, clipped logits.
-    pub logits: Vec<f32>,
+    /// The crop rectangle on the session image.
+    pub rect: PixelRect,
+    /// The crop pixels, resized to a long edge of 1024 when the crop is larger.
+    pub image: SubjectInputImage,
 }
 
-/// People result of one image (SM3.C plan, section 2.4).
+/// The People list of one image, made at the session start (SM3.D plan, section 2.3, steps 1 and
+/// 2).
 #[derive(Debug, Clone, PartialEq)]
-pub struct PeopleResult {
+pub struct PeopleList {
     pub presence: f32,
     pub presence_threshold: f32,
-    /// The People list in its list order (C3); empty when no people are found.
-    pub people: Vec<PersonMask>,
+    /// The listed people in the list order (C3); empty when no people are found.
+    pub persons: Vec<PersonCrop>,
     /// The "not found" text; empty when the list has people.
     pub message: String,
 }
@@ -50,15 +56,18 @@ pub type ResultSlot<T> = Mutex<Option<Arc<T>>>;
 
 /// See the module documentation.
 pub struct ImageEntry {
-    /// Size of the session image; the size of the Sky and People union masks.
+    /// Size of the session image; the size of the Sky union mask, and the size that the person
+    /// crop rectangles and the mask boxes refer to.
     pub width: usize,
     pub height: usize,
     pub features: Arc<dyn ImageFeatures>,
     pub subject_input: SubjectInputImage,
-    pub head: ResultSlot<HeadOutput>,
+    pub head: HeadOutput,
+    pub people: PeopleList,
     pub sky: ResultSlot<SkyResult>,
-    pub people: ResultSlot<PeopleResult>,
     pub subject: ResultSlot<SubjectAlpha>,
+    /// The S3OD alpha of each person crop, in the order of `people.persons`.
+    pub person_alphas: Vec<ResultSlot<SubjectAlpha>>,
 }
 
 impl ImageEntry {
@@ -67,16 +76,20 @@ impl ImageEntry {
         height: usize,
         features: Arc<dyn ImageFeatures>,
         subject_input: SubjectInputImage,
+        head: HeadOutput,
+        people: PeopleList,
     ) -> Self {
+        let person_alphas = people.persons.iter().map(|_| Mutex::new(None)).collect();
         Self {
             width,
             height,
             features,
             subject_input,
-            head: Mutex::new(None),
+            head,
+            people,
             sky: Mutex::new(None),
-            people: Mutex::new(None),
             subject: Mutex::new(None),
+            person_alphas,
         }
     }
 }
