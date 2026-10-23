@@ -2,14 +2,16 @@
 
 Date: 2026-10-23.
 
-Status: planned (`feature/ai-segmentation-sm4-analysis-render`).
+Status: implemented and verified on Windows on 2026-10-23
+(`feature/ai-segmentation-sm4`, #466). The measurements of section 9 are not
+taken (section 13.2).
 
 Parent plan: [AI Segmentation Mask Master Plan](../ai_segmentation_mask_master_plan.md), section
 9.3.
 
 Prerequisites: SM3.A and SM3.B (merged to `main` in `61d3f705`): the `AiMaskSegmentationService`
-start calls with an image key. SM3.C ([phase plan](phase_sm3c_task_masks_plan.md), #465) is not a
-dependency; this branch starts from it only to keep the roadmap documents in one line.
+start calls with an image key. SM3.C ([phase plan](phase_sm3c_task_masks_plan.md), merged in
+`99f4ad7a`, #465) is not a dependency.
 
 Source revision used for the audit: `4ec7230a` on `feature/ai-segmentation-sm3c`.
 
@@ -183,10 +185,10 @@ analysis (u, v) -> AiMaskAnalysisToItemTransform(mapping) -> item point         
 | `edit/runtime/graph_compiler.cpp`, `include/edit/runtime/graph_compiler.hpp` | `ImageParamsForRequest` returns default `ImageGeometryParams` for `ReferenceSource`. |
 | `include/edit/graph/develop_node_model.hpp`, `edit/graph/develop_node_model.cpp` | `DevelopParamsModel::UseAllSettingsFrom(const DevelopParamsModel&)`. |
 | `include/edit/graph/pipeline_document.hpp`, `edit/graph/pipeline_document.cpp` | `PipelineDocument::UseDevelopSettingsFrom(const PipelineDocument&)`, with the checks of `UseSensorSettingsFrom`. |
-| `include/app/ai_mask_analysis_image.hpp`, `app/ai_mask_analysis_image.cpp` (new; library `AiMaskAnalysisImage`) | `kAiMaskAnalysisMaxLongEdge`, `BuildAiMaskAnalysisDocument`, `MakeAiMaskAnalysisImageKey`, `MakeAiMaskAnalysisRenderRequest`, `ConvertAiMaskAnalysisImage`. |
+| `include/app/ai_mask_analysis_image.hpp`, `app/ai_mask_analysis_image.cpp` (new; library `AiMaskAnalysisImage`, linked by `EditorSessionService`, `AlbumBackendLib`, and the test binaries that compile the history port) | `kAiMaskAnalysisMaxLongEdge`, `BuildAiMaskAnalysisDocument`, `MakeAiMaskAnalysisImageKey`, `MakeAiMaskAnalysisRenderRequest`, `ConvertAiMaskAnalysisImage`. |
 | `include/app/editor_session_ports.hpp` | `IEditorHistoryPort::BuildAiMaskAnalysisInput` (default rejects). |
 | `album_backend/editor_session_history_port.{hpp,cpp}` | Implementation under the history lock. |
-| `include/app/editor_session_service.hpp`, `app/editor_session_service.cpp`, `editor_session_command_queue.hpp` | `EditorAiMaskAnalysisContent`, `EditorAiMaskAnalysisStatus`, `EditorAiMaskAnalysisResult`, `RenderAiMaskAnalysisImage`, command kind. |
+| `include/app/editor_session_service.hpp`, `app/editor_session_service.cpp`, `editor_session_command_queue.hpp`, `editor_action_policy.cpp` | `EditorAiMaskAnalysisContent`, `EditorAiMaskAnalysisStatus`, `EditorAiMaskAnalysisResult`, `RenderAiMaskAnalysisImage`, command kind. |
 | `include/ui/edit_viewer/ai_mask_prompt_geometry.hpp`, `ui/edit_viewer/ai_mask_prompt_geometry.cpp` (new, in `EditorViewerLogic`) | `MapItemToAiMaskPromptPoint`, `MapItemRectToAiMaskPromptBox`, `AiMaskAnalysisToItemTransform`. |
 
 ---
@@ -237,12 +239,13 @@ Expected diff: about 450 lines (production 150, tests 300).
 | Test | Target | Assertion |
 | --- | --- | --- |
 | `ReferenceSourceRequestIgnoresCropAndRotation` | `GpuDagGeometryTest` | A document with crop and rotation 7 degrees binds `edit_extent` = `full_reference_extent`, `reference_to_edit` = identity, and a pure-scale `render_to_reference`; a 4096 long-edge request keeps the aspect ratio. |
-| `ReferenceSourceFrameMatchesTheUncroppedUnrotatedDocument` | `GpuDagCudaDocumentGeometryRequestTest` | The `ReferenceSource` render of the cropped and rotated fixture equals the render of the same source without crop and rotation within 1/1024, and reuses the sensor result. |
-| `UseAllSettingsTakesWhiteBalanceAndSensorSettings` | `EditorComparisonInputsTest` | After the call, every Develop field and stamp equals the current Model; a self call throws and changes nothing. |
-| `AnalysisDocumentHasTheRootLookAndTheCurrentDevelop` | `AiMaskAnalysisImageTest` (new) | Exposure of the analysis grade equals the root; white balance and Lens equal the current document; the snapshot has the current lineage and element. |
-| `AnalysisImageKeyIgnoresGradingAndTracksDevelop` | `AiMaskAnalysisImageTest` | Equal states give equal keys; a Color Grade change keeps the key; a white balance change, another element id, or another image id changes it; the key has `am1-` and 32 hex digits. |
-| `ConversionRoundsToRgb8AndDropsAlpha` | `AiMaskAnalysisImageTest` | Known RGBA32F values give the expected RGB8 bytes, row-major. |
-| `ConversionRejectsHdrNonFiniteAndSizeErrors` | `AiMaskAnalysisImageTest` | ST 2084, HLG, NaN, a size mismatch, and a long edge of 4097 throw with the reason. |
+| `ReferenceSourceFrameMatchesTheUncroppedUnrotatedDocument` | `GpuDagCudaDocumentGeometryRequestTest` | The `ReferenceSource` render of the cropped and rotated fixture has the size of the uncropped source, equals the render of the same source without crop and rotation within 1/1024, and reuses the sensor result. |
+| `UseAllSettingsTakesWhiteBalanceAndSensorSettings` | `EditorComparisonInputsTest` (`AiMaskAnalysisDevelopTest` suite) | After the call, every Develop field and stamp equals the current Model; a self call throws and changes nothing. |
+| `AiMaskAnalysisDocumentHasTheRootLookAndTheCurrentDevelop` | `EditorComparisonInputsTest` | Exposure of the analysis grade equals the root; white balance and Lens equal the current document; the snapshot has the current lineage and element. |
+| `AiMaskAnalysisImageKeyIgnoresGradingAndTracksDevelop` | `EditorComparisonInputsTest` | Equal states give equal keys; a Color Grade change keeps the key; a white balance change, another element id, or another image id changes it; the key has `am1-` and 32 hex digits. |
+| `RenderRequestIsTheWholeReferenceSourceFrameAt4096` | `EditorComparisonInputsTest` (`AiMaskAnalysisImageTest` suite) | The request uses `ReferenceSource`, the whole frame, Preview resampling, and max edge 4096. |
+| `ConversionRoundsToRgb8AndDropsAlpha` | `EditorComparisonInputsTest` (`AiMaskAnalysisImageTest` suite) | Known RGBA32F values give the expected RGB8 bytes, row-major. |
+| `ConversionRejectsHdrNonFiniteAndSizeErrors` | `EditorComparisonInputsTest` (`AiMaskAnalysisImageTest` suite) | ST 2084, HLG, NaN, a size mismatch, and a long edge of 4097 throw with the reason. |
 | `AiMaskAnalysisImageRendersTheAnalysisDocumentWithoutCropOrRotation` | `EditorComparisonServiceTest` | One job with one snapshot, the `ReferenceSource` request, max edge 4096; the completion has Completed, the key, and RGB8 pixels; nothing is committed. |
 | `AiMaskAnalysisKeyOnlyStartsNoJob` | `EditorComparisonServiceTest` | KeyOnly completes with the same key as KeyAndPixels and starts no job. |
 | `AiMaskAnalysisReportsBusyWhileTheComparisonRenders` | `EditorComparisonServiceTest` | Busy; the comparison job continues; a render failure reaches the completion as Failed with the port message. |
@@ -271,9 +274,9 @@ not taken as not taken.
 
 ```powershell
 Set-Location D:\Projects\pu-erh_lab
-cmd /c scripts\msvc_env.cmd --build --preset win_debug --parallel 4 --target GpuDagGeometryTest GpuDagCudaDocumentGeometryRequestTest EditorComparisonInputsTest AiMaskAnalysisImageTest EditorComparisonServiceTest MaskEditGeometryTest EditorSessionHistoryPortTest
+cmd /c scripts\msvc_env.cmd --build --preset win_debug --parallel 4 --target GpuDagGeometryTest GpuDagCudaDocumentGeometryRequestTest EditorComparisonInputsTest EditorComparisonServiceTest MaskEditGeometryTest EditorSessionHistoryPortTest AlbumBackendLib
 $env:PATH = "D:\Projects\pu-erh_lab\build\debug\vcpkg_installed\x64-windows\debug\bin;$env:PATH"
-ctest --test-dir build/debug -j 1 --output-on-failure -R "GpuDagGeometryTest|GpuDagCudaDocumentGeometryRequestTest|EditorComparisonInputsTest|AiMaskAnalysisImageTest|EditorComparisonServiceTest|MaskEditGeometryTest|EditorSessionHistoryPortTest"
+ctest --test-dir build/debug -j 1 --output-on-failure -R "GpuDagGeometryTest|GpuDagCudaDocumentGeometryRequestTest|EditorComparisonInputsTest|EditorComparisonServiceTest|MaskEditGeometryTest|EditorSessionHistoryPortTest"
 ```
 
 ---
@@ -300,6 +303,61 @@ SM4.1 about 1,150 lines, SM4.2 about 450 lines, this plan and the master plan ab
 
 ## 13. Completion record
 
-### 13.1 SM4 completion record
+### 13.1 SM4 completion record (2026-10-23)
 
-Not started.
+Implemented on `feature/ai-segmentation-sm4` on top of the plan commit `0b4dca93` (`main` at
+`99f4ad7a` with this plan). Changed lines: about 1,350 added (production about 680, tests about 660); SM4.2 is
+about 385 of them. Plan decisions S1 to S9 are implemented as written.
+
+Implementation notes:
+
+- `ReferenceSource` returns default `ImageGeometryParams` in `ImageParamsForRequest`: crop
+  `{0, 0, 1, 1}`, rotation 0, `CropFrame`. No other code branches on the value.
+- `PipelineDocument::RequireDevelopOfSameImage` holds the precondition checks that
+  `UseSensorSettingsFrom` and `UseDevelopSettingsFrom` share. The error text names Develop
+  settings instead of sensor settings.
+- The canonical text of the key also has the render quality, so a change of the resampling filter
+  of the analysis render changes the key.
+- The job completion converts the render result on the editor render worker, so the RGBA32F
+  download does not leave the worker.
+- The conversion tests and the analysis document tests are in the `EditorComparisonInputsTest`
+  binary, which already compiles the real history port. No separate test binary was added.
+
+Primary call chains:
+
+```text
+EditorSessionService::RenderAiMaskAnalysisImage(KeyAndPixels)          session owner
+  -> EditorSessionPipelinePort::CurrentPreview
+  -> EditorSessionHistoryPort::BuildAiMaskAnalysisDocument             history lock
+     -> BuildAiMaskAnalysisDocument -> BuildDocumentFromRoot -> ValidateProductDocument
+        -> IsHdrExportEncoding -> PipelineDocument::UseDevelopSettingsFrom
+        -> DevelopParamsModel::UseAllSettingsFrom -> Freeze -> PipelineGraphSnapshot::Preview
+  -> MakeAiMaskAnalysisImageKey
+  -> IEditorImageRenderPort::ScheduleImages(MakeAiMaskAnalysisRenderRequest)
+     -> RunImageJob -> PipelineExecutor::ApplyImage                    editor render worker
+        -> GraphCompiler::BindFrameGeometry -> ImageParamsForRequest(ReferenceSource)
+     -> completion -> ConvertAiMaskAnalysisImage -> on_complete(Completed)
+EditorInteractionController::maskEditViewMapping
+  -> MapItemToAiMaskPromptPoint -> MaskEditGeometry::MapItemToReference -> [0, 1] check
+  -> MapItemRectToAiMaskPromptBox -> four corners -> bounding box -> clip
+  -> AiMaskAnalysisToItemTransform -> MaskEditGeometry::MapReferenceToItem (three points)
+```
+
+Automated evidence (Windows, `win_debug`, RTX 3080 Laptop for the CUDA test):
+
+- `ctest -j 1` over `GpuDagGeometryTest`, `GpuDagCudaDocumentGeometryRequestTest`,
+  `EditorComparisonInputsTest`, `EditorComparisonServiceTest`, `MaskEditGeometryTest`, and
+  `EditorSessionHistoryPortTest`: 186 of 187 passed. The 16 new tests of section 8 passed.
+- The one failure, `EditorSessionHistoryPortTest.CheckoutAndPasteHashesAreUnchanged` (paste head
+  and chain hashes), also fails on the plan commit without the SM4 code (the same tree as
+  `0b4dca93`) after a rebuild of that target. SM4 does not cause it.
+- `AlbumBackendLib` builds with the production history port implementation.
+
+Not run: the full test suite (only the user starts it), the macOS build (SM4 has no
+platform-specific code; the Metal and OpenCL backends use the same `BindFrameGeometry`), and the
+QML application.
+
+### 13.2 Measurements
+
+Not taken. Section 9 needs a release build and a RAW photo in the running editor. SM9 adds the
+first caller in the application, so the measurement is taken with SM9.

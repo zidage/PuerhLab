@@ -8,8 +8,8 @@ people and sky head, and S3OD `s3od-synth` (section 8.2). Alcedo Studio does not
 or SAM3. SM3 is split into SM3.A, SM3.B, and SM3.C. SM3.A is complete on 2026-10-22
 ([phase plan](ai_segmentation_mask/phase_sm3a_segmentation_service_plan.md)); its macOS port check
 ran with the SM3.B macOS run. SM3.B is complete on Windows and macOS on 2026-10-22
-([phase plan](ai_segmentation_mask/phase_sm3b_embedding_cache_plan.md)). SM4 is planned
-([phase plan](ai_segmentation_mask/phase_sm4_analysis_render_plan.md)). SM2 runs after SM9
+([phase plan](ai_segmentation_mask/phase_sm3b_embedding_cache_plan.md)). SM4 is complete on Windows on
+2026-10-23 ([phase plan](ai_segmentation_mask/phase_sm4_analysis_render_plan.md)). SM2 runs after SM9
 (section 7).
 
 Target release: Alcedo Studio 0.3.4. The AI Segmentation Mask is the main feature of that release.
@@ -275,7 +275,7 @@ The project storage owns the R8 bytes. No owner keeps a copy of another owner's 
 | SM3.A | Segmentation service architecture: proto, Rust service with the Windows ONNX Runtime and macOS Core ML adapters, SAM 2.1 encode and decode, C++ client with a persistent channel, app session | proto, Rust service, `sidecar_client`, app | SM1 | 2400-2950 estimated, in two parts SM3.A.1 and SM3.A.2; actual about 4,500 | complete 2026-10-22; macOS port check passed with the SM3.B macOS run ([phase plan](ai_segmentation_mask/phase_sm3a_segmentation_service_plan.md)) |
 | SM3.B | Image embedding cache and first optimizations | Rust service, app session | SM3.A | 800-1400; actual about 1,800 code lines | complete 2026-10-22 on Windows and macOS ([phase plan](ai_segmentation_mask/phase_sm3b_embedding_cache_plan.md)) |
 | SM3.C | Task masks in the service: Subject (S3OD), Background, Sky and People (head) | Rust service, proto, C++ client | SM3.A | 1600-2050 in two parts SM3.C.1 and SM3.C.2; actual about 3,250 code lines | Windows verified 2026-10-23; macOS port check open ([phase plan](ai_segmentation_mask/phase_sm3c_task_masks_plan.md)) |
-| SM4 | Analysis render in ReferenceSpace, image key, and prompt coordinates | geometry, editor session, app, viewer geometry | none | 1600 in two parts SM4.1 and SM4.2 | planned ([phase plan](ai_segmentation_mask/phase_sm4_analysis_render_plan.md)) |
+| SM4 | Analysis render in ReferenceSpace, image key, and prompt coordinates | geometry, editor session, app, viewer geometry | none | 1600 in two parts SM4.1 and SM4.2; actual about 1,350 | complete 2026-10-23 on Windows; measurements with SM9 ([phase plan](ai_segmentation_mask/phase_sm4_analysis_render_plan.md)) |
 | SM5 | AI Mask source model, R8 persistence, history, and project format | `edit/mask`, history, storage | SM1 | over 2000, split before start | outline |
 | SM6 | Raster `MaskEvaluate` on CUDA, OpenCL, and Metal | `edit/runtime` | SM5 | 1000-1800 | outline |
 | SM7 | Commit: Feather and Edge, asset publication, misalignment notice | app layer, `edit/mask` | SM3.A, SM4, SM5 | 800-1500 | outline |
