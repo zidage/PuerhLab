@@ -88,6 +88,63 @@ struct SegmentationSessionResult {
   bool                   image_not_cached = false;
 };
 
+/// A task mask of the sidecar (SM3.C).
+enum class SegmentationTask : uint8_t {
+  kSubject    = 1,
+  kBackground = 2,
+  kSky        = 3,
+  kPeople     = 4,
+};
+
+/// The value kind of a task mask.
+enum class SegmentationTaskMaskKind : uint8_t {
+  /// No mask (the task found nothing or the call failed).
+  kNone   = 0,
+  /// Sky and People: `mask_r8` at the session image size, 255 inside and 0 outside. It is the
+  /// union of the member masks, each the bilinear upsampling of its decoder logits with
+  /// threshold 0.
+  kBinary = 1,
+  /// Subject and Background: `alpha_values` in [0, 1] on the image resized to a long edge of
+  /// 1024; inside where >= 0.5.
+  kAlpha  = 2,
+};
+
+/// One entry of the People list: the normalized box, clipped to the image, and the score. The
+/// list is sorted from left to right; `index` is the position in the list.
+struct SegmentationPerson {
+  uint32_t        index = 0;
+  SegmentationBox box;
+  float           score = 0.0F;
+};
+
+/// Result of a task mask. A task that finds nothing has `status.ok`, `found == false`, and the
+/// reason in `message`.
+struct SegmentationTaskResult {
+  SegmentationCallStatus          status;
+  bool                            found = false;
+  std::string                     message;
+  SegmentationTaskMaskKind        mask_kind   = SegmentationTaskMaskKind::kNone;
+  uint32_t                        mask_width  = 0;
+  uint32_t                        mask_height = 0;
+  /// kBinary: mask_width x mask_height values, row-major.
+  std::vector<uint8_t>            mask_r8;
+  /// kAlpha: mask_width x mask_height values, row-major.
+  std::vector<float>              alpha_values;
+  /// Sky and People: the presence of the head and its threshold.
+  float                           presence           = 0.0F;
+  float                           presence_threshold = 0.0F;
+  /// Sky: the number of sky regions in the union.
+  uint32_t                        region_count       = 0;
+  /// People: the full People list, also when the request selects some people.
+  std::vector<SegmentationPerson> people;
+  /// Subject and Background: the S3OD IoU score.
+  float                           subject_score = 0.0F;
+  /// Number of mask values inside.
+  uint32_t                        mask_area     = 0;
+  /// Time of the model runs of the request; 0 when the sidecar read stored results only.
+  int64_t                         model_ms      = 0;
+};
+
 struct SegmentationModelResidency {
   std::string role;
   std::string device;

@@ -17,6 +17,13 @@
 //! - `ALCEDO_SEGMENTATION_PORT_REFERENCE_DIR`: the output directory of the reference script;
 //! - `ALCEDO_SEGMENTATION_PORT_CHECK_DEVICE`: optional device value (`""` is the platform default).
 //!
+//! Task masks (SM3.C): when the reference has task masks, every photo also runs Sky, People (all
+//! people and each person alone), Subject, and Background. The Sky region count, the People list
+//! length, and the list boxes (within 1e-3 cell) must match; the Sky and People unions and each
+//! person mask must have an IoU of at least 0.999 at the photo size against the union of the
+//! reference masks; the Subject and Background alpha >= 0.5 must have an IoU of at least 0.998 on
+//! the S3OD grid. A key-only start of a cached photo must read the stored Subject result.
+//!
 //! The test returns without a check when one of the first two variables is not set.
 
 use std::collections::BTreeMap;
@@ -26,9 +33,9 @@ use std::time::Instant;
 
 use alcedo_mind::service::segmentation::engine::{
     IMAGE_EMBEDDING_CACHE_CAPACITY, RgbImageView, SegmentationEngine, SegmentationError,
-    StartSessionRequest,
+    SegmentationTask, StartSessionRequest, TaskMaskValues, TaskRequest, TaskResult,
 };
-use alcedo_mind::service::segmentation::model_set::LOGIT_SIZE;
+use alcedo_mind::service::segmentation::model_set::{HEAD_GRID, LOGIT_SIZE};
 use alcedo_mind::service::segmentation::platform_backend_factory;
 use alcedo_mind::service::segmentation::sam2::{
     PointLabel, PromptBox, PromptPoint, SegmentationPrompt,
@@ -36,6 +43,11 @@ use alcedo_mind::service::segmentation::sam2::{
 use serde_json::Value;
 
 const MIN_PHOTO_IOU: f64 = 0.999;
+/// Smallest IoU of the Subject and Background alpha >= 0.5 on the S3OD grid (the lab macOS
+/// acceptance criterion for S3OD).
+const MIN_SUBJECT_IOU: f64 = 0.998;
+/// Largest difference of a People list box corner, in head grid cells.
+const MAX_BOX_DIFFERENCE_CELLS: f32 = 1e-3;
 /// Number of decodes of one prompt on one session for the steady-state decode time.
 const REPEATED_DECODES: usize = 20;
 
@@ -208,6 +220,281 @@ fn decode_and_compare(
     (decode_us, point_count)
 }
 
+/// Times of the task requests of the whole check, in milliseconds.
+#[derive(Default)]
+struct TaskTimes {
+    /// The first Sky request of each photo: the head and the region decodes.
+    first_sky_ms: Vec<u64>,
+    /// The first People request of each photo: the person decodes (the head output is stored).
+    first_people_ms: Vec<u64>,
+    /// The first Subject request of each photo: S3OD with its pre- and postprocessing.
+    first_subject_ms: Vec<u64>,
+    /// Requests that read the stored results only, in microseconds.
+    stored_request_us: Vec<u64>,
+}
+
+fn run_task(
+    engine: &SegmentationEngine,
+    session_id: &str,
+    task: SegmentationTask,
+    person_indices: Vec<u32>,
+    label: &str,
+) -> TaskResult {
+    engine
+        .run_task(
+            session_id,
+            TaskRequest {
+                task,
+                person_indices,
+            },
+        )
+        .unwrap_or_else(|err| panic!("{label} {task:?}: {err}"))
+}
+
+/// Union at the photo size of the reference logits files @p files (the MVP union).
+fn reference_union(
+    files: &[&str],
+    reference_dir: &Path,
+    (width, height): (usize, usize),
+) -> Vec<bool> {
+    let mut union = vec![false; width * height];
+    for file in files {
+        let mask = mask_at_photo_size(&read_f32(&reference_dir.join(file)), width, height);
+        for (target, inside) in union.iter_mut().zip(mask) {
+            *target |= inside;
+        }
+    }
+    union
+}
+
+/// Compares an R8 union task mask with the union of the reference logits @p files at the photo
+/// size.
+fn compare_binary_union(
+    result: &TaskResult,
+    files: &[&str],
+    reference_dir: &Path,
+    size: (usize, usize),
+    label: &str,
+    comparison: &mut Comparison,
+) {
+    let Some(mask) = &result.mask else {
+        comparison
+            .failures
+            .push(format!("{label}: no mask, reference found"));
+        return;
+    };
+    let TaskMaskValues::Binary(values) = &mask.values else {
+        panic!("{label}: the mask must be an R8 mask");
+    };
+    assert_eq!(
+        (mask.width as usize, mask.height as usize),
+        size,
+        "{label}: the union mask has the photo size"
+    );
+    let inside: Vec<bool> = values.iter().map(|value| *value == 255).collect();
+    let photo_iou = iou(&inside, &reference_union(files, reference_dir, size));
+    comparison.compared += 1;
+    comparison.minimum_iou = comparison.minimum_iou.min(photo_iou);
+    println!("{label}: photo IoU {photo_iou:.6}");
+    if photo_iou < MIN_PHOTO_IOU {
+        comparison
+            .failures
+            .push(format!("{label}: photo IoU {photo_iou:.6}"));
+    }
+}
+
+/// Runs the four task masks on @p session_id and compares them with the task reference of
+/// @p photo (SM3.C plan, section 8).
+fn compare_tasks(
+    engine: &SegmentationEngine,
+    session_id: &str,
+    photo: &Value,
+    reference_dir: &Path,
+    size: (usize, usize),
+    comparison: &mut Comparison,
+    times: &mut TaskTimes,
+) {
+    let name = photo["name"].as_str().expect("name");
+    let tasks = &photo["tasks"];
+
+    // Sky.
+    let sky = run_task(engine, session_id, SegmentationTask::Sky, vec![], name);
+    times.first_sky_ms.push(sky.model_ms);
+    let reference_regions: Vec<&str> = tasks["sky"]["regions"]
+        .as_array()
+        .expect("sky regions")
+        .iter()
+        .map(|region| region["logits"].as_str().expect("logits"))
+        .collect();
+    println!(
+        "{name} sky: presence {:.4} (reference {:.4}), regions {} (reference {}), {} ms, {}",
+        sky.presence,
+        tasks["sky_presence"].as_f64().expect("sky presence"),
+        sky.region_count,
+        reference_regions.len(),
+        sky.model_ms,
+        sky.message
+    );
+    if sky.region_count as usize != reference_regions.len() {
+        comparison.failures.push(format!(
+            "{name} sky: {} regions, reference {}",
+            sky.region_count,
+            reference_regions.len()
+        ));
+    } else if reference_regions.is_empty() {
+        if sky.mask.is_some() {
+            comparison
+                .failures
+                .push(format!("{name} sky: a mask, reference not found"));
+        }
+    } else {
+        let label = format!("{name} sky union");
+        compare_binary_union(
+            &sky,
+            &reference_regions,
+            reference_dir,
+            size,
+            &label,
+            comparison,
+        );
+    }
+
+    // People.
+    let people = run_task(engine, session_id, SegmentationTask::People, vec![], name);
+    times.first_people_ms.push(people.model_ms);
+    let reference_people = tasks["people"]["people"].as_array().expect("people");
+    println!(
+        "{name} people: presence {:.4} (reference {:.4}), {} listed (reference {}), {} ms, {}",
+        people.presence,
+        tasks["person_presence"].as_f64().expect("person presence"),
+        people.people.len(),
+        reference_people.len(),
+        people.model_ms,
+        people.message
+    );
+    if people.people.len() != reference_people.len() {
+        comparison.failures.push(format!(
+            "{name} people: {} listed, reference {}",
+            people.people.len(),
+            reference_people.len()
+        ));
+    } else if reference_people.is_empty() {
+        if people.mask.is_some() {
+            comparison
+                .failures
+                .push(format!("{name} people: a mask, reference not found"));
+        }
+    } else {
+        for (index, (entry, reference)) in people.people.iter().zip(reference_people).enumerate() {
+            let cells: Vec<f32> = reference["box_cells"]
+                .as_array()
+                .expect("box cells")
+                .iter()
+                .map(|value| (value.as_f64().expect("cell") as f32).clamp(0.0, HEAD_GRID as f32))
+                .collect();
+            let grid = HEAD_GRID as f32;
+            let difference = [entry.x0, entry.y0, entry.x1, entry.y1]
+                .iter()
+                .zip(&cells)
+                .map(|(value, cell)| (value * grid - cell).abs())
+                .fold(0.0f32, f32::max);
+            if difference > MAX_BOX_DIFFERENCE_CELLS {
+                comparison.failures.push(format!(
+                    "{name} person {index}: box differs by {difference} cells"
+                ));
+            }
+            let started = Instant::now();
+            let one = run_task(
+                engine,
+                session_id,
+                SegmentationTask::People,
+                vec![index as u32],
+                name,
+            );
+            times
+                .stored_request_us
+                .push(started.elapsed().as_micros() as u64);
+            let label = format!("{name} person {index}");
+            compare_binary_union(
+                &one,
+                &[reference["logits"].as_str().expect("logits")],
+                reference_dir,
+                size,
+                &label,
+                comparison,
+            );
+        }
+        let files: Vec<&str> = reference_people
+            .iter()
+            .map(|person| person["logits"].as_str().expect("logits"))
+            .collect();
+        let label = format!("{name} people union");
+        compare_binary_union(&people, &files, reference_dir, size, &label, comparison);
+    }
+
+    // Subject and Background.
+    let subject_reference = &tasks["subject"];
+    let reference_alpha =
+        read_f32(&reference_dir.join(subject_reference["alpha"].as_str().expect("alpha")));
+    let reference_size = (
+        subject_reference["width"].as_u64().expect("width") as u32,
+        subject_reference["height"].as_u64().expect("height") as u32,
+    );
+    for task in [SegmentationTask::Subject, SegmentationTask::Background] {
+        let result = run_task(engine, session_id, task, vec![], name);
+        if task == SegmentationTask::Subject {
+            times.first_subject_ms.push(result.model_ms);
+        }
+        let label = format!("{name} {task:?}");
+        let reference_inside: Vec<bool> = reference_alpha
+            .iter()
+            .map(|value| match task {
+                SegmentationTask::Background => 1.0 - value >= 0.5,
+                _ => *value >= 0.5,
+            })
+            .collect();
+        let Some(mask) = &result.mask else {
+            if reference_inside.iter().any(|inside| *inside) {
+                comparison
+                    .failures
+                    .push(format!("{label}: not found, reference found"));
+            }
+            continue;
+        };
+        let TaskMaskValues::Alpha(values) = &mask.values else {
+            panic!("{label}: the mask must be an alpha mask");
+        };
+        if (mask.width, mask.height) != reference_size {
+            comparison.failures.push(format!(
+                "{label}: size {}x{}, reference {}x{}",
+                mask.width, mask.height, reference_size.0, reference_size.1
+            ));
+            continue;
+        }
+        let inside: Vec<bool> = values.iter().map(|value| *value >= 0.5).collect();
+        let grid_iou = iou(&inside, &reference_inside);
+        let max_difference = values
+            .iter()
+            .zip(&reference_alpha)
+            .map(|(value, reference)| match task {
+                SegmentationTask::Background => (value - (1.0 - reference)).abs(),
+                _ => (value - reference).abs(),
+            })
+            .fold(0.0f32, f32::max);
+        println!(
+            "{label}: grid IoU {grid_iou:.6}, max |alpha difference| {max_difference:.4}, score {:.4} (reference {:.4}), {} ms",
+            result.subject_score,
+            subject_reference["score"].as_f64().expect("score"),
+            result.model_ms
+        );
+        if grid_iou < MIN_SUBJECT_IOU {
+            comparison
+                .failures
+                .push(format!("{label}: grid IoU {grid_iou:.6}"));
+        }
+    }
+}
+
 fn photo_size(photo: &Value) -> (usize, usize) {
     (
         photo["width"].as_u64().expect("width") as usize,
@@ -257,6 +544,7 @@ fn segmentation_port_check_matches_reference_masks() {
     let mut encoder_ms = Vec::new();
     let mut decode_us: BTreeMap<usize, Vec<u64>> = BTreeMap::new();
     let mut first_decode_us = None;
+    let mut task_times = TaskTimes::default();
     for photo in photos {
         let name = photo["name"].as_str().expect("name");
         let size = photo_size(photo);
@@ -290,6 +578,17 @@ fn segmentation_port_check_matches_reference_masks() {
             );
             first_decode_us.get_or_insert(microseconds);
             decode_us.entry(point_count).or_default().push(microseconds);
+        }
+        if photo["tasks"].is_object() {
+            compare_tasks(
+                &engine,
+                &session.session_id,
+                photo,
+                &reference_dir,
+                size,
+                &mut comparison,
+                &mut task_times,
+            );
         }
         engine
             .end_session(&session.session_id)
@@ -336,6 +635,23 @@ fn segmentation_port_check_matches_reference_masks() {
             &label,
             &mut comparison,
         );
+        if photo["tasks"].is_object() {
+            let started = Instant::now();
+            let subject = run_task(
+                &engine,
+                &session.session_id,
+                SegmentationTask::Subject,
+                vec![],
+                name,
+            );
+            task_times
+                .stored_request_us
+                .push(started.elapsed().as_micros() as u64);
+            assert_eq!(
+                subject.model_ms, 0,
+                "{name}: the cached image must keep its Subject result"
+            );
+        }
         // The same prompt on the same features: the decoder session keeps the features bound.
         if repeated_decode_us.is_empty() {
             for _ in 0..REPEATED_DECODES {
@@ -373,6 +689,18 @@ fn segmentation_port_check_matches_reference_masks() {
         median(&mut repeated_decode_us),
         REPEATED_DECODES
     );
+    if !task_times.first_subject_ms.is_empty() {
+        println!(
+            "first Sky request ms p50 {} (first photo {}); first People request ms p50 {}; first Subject request ms p50 {} (first photo {}); stored-result request us p50 {} ({} requests)",
+            median(&mut task_times.first_sky_ms.clone()),
+            task_times.first_sky_ms[0],
+            median(&mut task_times.first_people_ms),
+            median(&mut task_times.first_subject_ms.clone()),
+            task_times.first_subject_ms[0],
+            median(&mut task_times.stored_request_us),
+            task_times.stored_request_us.len()
+        );
+    }
     engine.unload().expect("unload");
     assert!(
         comparison.failures.is_empty(),

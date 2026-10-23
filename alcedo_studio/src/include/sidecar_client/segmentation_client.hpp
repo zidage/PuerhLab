@@ -5,15 +5,17 @@
 #pragma once
 
 #include <chrono>
+#include <cstdint>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "sidecar_client/dto/segmentation.hpp"
 
 namespace alcedo::sidecar_client {
 
 /**
- * @brief Client of the sidecar `SegmentationService` (AI Mask, SM3.A and SM3.B).
+ * @brief Client of the sidecar `SegmentationService` (AI Mask, SM3.A, SM3.B, and SM3.C).
  *
  * Each call blocks until the sidecar answers or the timeout passes. A failed operation returns
  * `ok = false` with the real error of the sidecar or of the transport. The client keeps no
@@ -40,6 +42,11 @@ class SegmentationClient {
                       std::chrono::milliseconds timeout) -> SegmentationDecodeResult = 0;
   virtual auto EndSession(const std::string& session_id, std::chrono::milliseconds timeout)
       -> SegmentationCallStatus = 0;
+  /// Runs the task mask @p task on the session image (SM3.C). @p person_indices selects people of
+  /// the People list for kPeople (empty: all listed people); it must be empty for other tasks.
+  virtual auto RunTask(const std::string& session_id, SegmentationTask task,
+                       const std::vector<uint32_t>& person_indices,
+                       std::chrono::milliseconds    timeout) -> SegmentationTaskResult = 0;
 };
 
 /**

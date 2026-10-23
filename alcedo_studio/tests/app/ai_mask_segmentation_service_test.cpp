@@ -2,7 +2,7 @@
 //  SPDX-License-Identifier: GPL-3.0-only
 //  Additional permission under GPLv3 section 7 applies; see the LICENSE file.
 
-// SM3.A and SM3.B: the AI Mask tool lifecycle of AiMaskSegmentationService over a fake
+// SM3.A to SM3.C: the AI Mask tool lifecycle of AiMaskSegmentationService over a fake
 // segmentation client.
 
 #include "app/ai_mask_segmentation_service.hpp"
@@ -81,6 +81,16 @@ class FakeSegmentationClient final : public sidecar_client::SegmentationClient {
       -> SegmentationCallStatus override {
     log_->push_back("end " + session_id);
     return fail_end_ ? Failed("transport closed") : Ok();
+  }
+  auto RunTask(const std::string& session_id, SegmentationTask task,
+               const std::vector<uint32_t>& person_indices, std::chrono::milliseconds /*timeout*/)
+      -> SegmentationTaskResult override {
+    std::string entry = "task " + session_id + " " + std::to_string(static_cast<int>(task));
+    for (const auto index : person_indices) {
+      entry += " " + std::to_string(index);
+    }
+    log_->push_back(entry);
+    return SegmentationTaskResult{.status = Ok(), .found = true};
   }
 
   bool        fail_start_ = false;
@@ -233,6 +243,30 @@ TEST(AiMaskSegmentationServiceTest, StartCachedImageWithEmptyKeyFailsWithoutCall
 
   EXPECT_FALSE(under_test.service->StartCachedImage("").status.ok);
   EXPECT_TRUE(under_test.log->empty());
+}
+
+TEST(AiMaskSegmentationServiceTest, RunTaskWithoutSessionFailsWithoutCall) {
+  ServiceUnderTest under_test;
+
+  const auto result = under_test.service->RunTask(SegmentationTask::kSky);
+
+  EXPECT_FALSE(result.status.ok);
+  EXPECT_FALSE(result.found);
+  EXPECT_TRUE(under_test.log->empty());
+  ASSERT_TRUE(under_test.service->Close().ok);
+  EXPECT_FALSE(under_test.service->RunTask(SegmentationTask::kSky).status.ok);
+}
+
+TEST(AiMaskSegmentationServiceTest, RunTaskUsesCurrentSession) {
+  ServiceUnderTest under_test;
+  ASSERT_TRUE(under_test.service->StartImage(Image(8)).status.ok);
+  ASSERT_TRUE(under_test.service->StartImage(Image(16)).status.ok);
+
+  EXPECT_TRUE(under_test.service->RunTask(SegmentationTask::kPeople, {2, 0}).found);
+  EXPECT_TRUE(under_test.service->RunTask(SegmentationTask::kSubject).status.ok);
+
+  EXPECT_EQ(*under_test.log, (CallLog{"start s1 8 96", "end s1", "start s2 16 192",
+                                      "task s2 4 2 0", "task s2 1"}));
 }
 
 }  // namespace

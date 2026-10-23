@@ -4,10 +4,10 @@ package alcedo.ai;
 
 import "ai_common.proto";
 
-// Local AI Mask segmentation (master plan sections 9.2.1 and 9.2.2, SM3.A and SM3.B).
+// Local AI Mask segmentation (master plan section 9.2, SM3.A, SM3.B, and SM3.C).
 //
-// The sidecar loads the SAM 2.1 tiny encoder and decoder from a model directory that the host
-// names in LoadSegmentationModels. Windows runs ONNX Runtime with DirectML; macOS runs compiled
+// The sidecar loads the SAM 2.1 tiny encoder and decoder, the people and sky head, and S3OD from a
+// model directory that the host names in LoadSegmentationModels. Windows runs ONNX Runtime with DirectML; macOS runs compiled
 // Core ML models. A segmentation session holds the image embedding of one image. The host keeps
 // the selection (points, box, previous logits) and sends all of it with each decode request.
 //
@@ -15,13 +15,16 @@ import "ai_common.proto";
 // image key is an opaque host value that names the image content. Unload and a model change clear
 // the cache.
 //
+// The task masks Subject, Background, Sky, and People (SM3.C) run on the image of a session. The
+// sidecar computes each model result once per image and keeps it with the cached image.
+//
 // Each response carries an AiResponseHeader. The gRPC status is OK unless the transport fails;
 // a failed operation sets the header status, the error code, and the real error message.
 //
 // Coordinates are normalized to [0, 1] on each axis of the image of the session.
 
 service SegmentationService {
-  // Loads the encoder and the decoder now. A request with the loaded directory and device does
+  // Loads the four models now. A request with the loaded directory and device does
   // nothing. A request with another directory or device ends all sessions and loads again.
   rpc LoadSegmentationModels(LoadSegmentationModelsRequest) returns (LoadSegmentationModelsResponse);
   // Ends all sessions and unloads the models. Idempotent.
@@ -33,6 +36,9 @@ service SegmentationService {
   // Runs the decoder once on the embedding of a session.
   rpc DecodeSegmentationPrompt(DecodeSegmentationPromptRequest) returns (DecodeSegmentationPromptResponse);
   rpc EndSegmentationSession(EndSegmentationSessionRequest) returns (EndSegmentationSessionResponse);
+  // Runs a task mask on the image of a session. A task that finds nothing is a success with
+  // found = false and a message.
+  rpc RunSegmentationTask(RunSegmentationTaskRequest) returns (RunSegmentationTaskResponse);
 }
 
 message LoadSegmentationModelsRequest {
@@ -61,7 +67,7 @@ message GetSegmentationStatusRequest {
 }
 
 message SegmentationModelResidency {
-  string role = 1;    // "encoder" or "decoder"
+  string role = 1;    // "encoder", "decoder", "head", or "subject"
   string device = 2;  // device label, for example "directml:0" or "coreml-native:cpuonly"
   int64 load_ms = 3;
 }
@@ -148,4 +154,59 @@ message EndSegmentationSessionRequest {
 message EndSegmentationSessionResponse {
   AiResponseHeader header = 1;
   bool ended = 2;  // false: no such session
+}
+
+enum SegmentationTask {
+  SEGMENTATION_TASK_UNSPECIFIED = 0;
+  SEGMENTATION_TASK_SUBJECT = 1;
+  SEGMENTATION_TASK_BACKGROUND = 2;
+  SEGMENTATION_TASK_SKY = 3;
+  SEGMENTATION_TASK_PEOPLE = 4;
+}
+
+enum SegmentationTaskMaskKind {
+  SEGMENTATION_TASK_MASK_KIND_UNSPECIFIED = 0;
+  // Sky and People: mask_r8 at the session image size, 255 inside and 0 outside. It is the union
+  // of the member masks, each the bilinear upsampling of its decoder logits with threshold 0.
+  SEGMENTATION_TASK_MASK_KIND_BINARY = 1;
+  // Subject and Background: alpha_values in [0, 1] on the image resized to a long edge of 1024;
+  // inside where >= 0.5.
+  SEGMENTATION_TASK_MASK_KIND_ALPHA = 2;
+}
+
+message RunSegmentationTaskRequest {
+  AiRequestHeader header = 1;
+  string session_id = 2;
+  SegmentationTask task = 3;
+  // People only: indices into the People list. Empty selects all listed people.
+  repeated uint32 person_indices = 4;
+}
+
+// One entry of the People list, sorted from left to right by the box center.
+message SegmentationPerson {
+  uint32 index = 1;
+  SegmentationBox box = 2;  // normalized, clipped to the image
+  float score = 3;
+}
+
+message RunSegmentationTaskResponse {
+  AiResponseHeader header = 1;
+  bool found = 2;
+  // Why the task found nothing; empty when found is true.
+  string message = 3;
+  SegmentationTaskMaskKind mask_kind = 4;
+  uint32 mask_width = 5;
+  uint32 mask_height = 6;
+  // Row-major mask values: the field of mask_kind is set and the other is empty. Both are empty
+  // when found is false.
+  bytes mask_r8 = 7;
+  repeated float alpha_values = 15;
+  // Sky and People: the presence of the head and its threshold.
+  float presence = 8;
+  float presence_threshold = 9;
+  uint32 region_count = 10;  // Sky
+  repeated SegmentationPerson people = 11;  // People: the full list
+  float subject_score = 12;  // Subject and Background: the S3OD IoU score
+  uint32 mask_area = 13;     // number of mask values inside
+  int64 model_ms = 14;       // 0 when all results come from the stored image results
 }

@@ -87,6 +87,21 @@ auto AiMaskSegmentationService::Decode(const SegmentationPrompt& prompt)
   return client_->Decode(session_id_, prompt, timeouts_.decode);
 }
 
+auto AiMaskSegmentationService::RunTask(SegmentationTask             task,
+                                        const std::vector<uint32_t>& person_indices)
+    -> SegmentationTaskResult {
+  SegmentationTaskResult result;
+  if (closed_) {
+    result.status = LocalFailure(kClosedMessage);
+    return result;
+  }
+  if (session_id_.empty()) {
+    result.status = LocalFailure("no segmentation session: start an image first");
+    return result;
+  }
+  return client_->RunTask(session_id_, task, person_indices, timeouts_.task);
+}
+
 auto AiMaskSegmentationService::EndImage() -> SegmentationCallStatus {
   if (closed_) {
     return LocalFailure(kClosedMessage);

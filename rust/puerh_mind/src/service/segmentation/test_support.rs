@@ -8,11 +8,16 @@ use std::sync::{Arc, Mutex};
 use anyhow::{Result, bail};
 
 use super::backend::{
-    DecoderOutput, DecoderPrompt, ImageFeatures, SegmentationBackend, SegmentationBackendFactory,
-    SegmentationDecoder, SegmentationEncoder, SegmentationModelRole, UnsupportedDevice,
-    features_of,
+    DecoderOutput, DecoderPrompt, HeadOutput, ImageFeatures, SegmentationBackend,
+    SegmentationBackendFactory, SegmentationDecoder, SegmentationEncoder, SegmentationHead,
+    SegmentationModelRole, SubjectModel, SubjectOutput, UnsupportedDevice, features_of,
 };
-use super::model_set::{LOGIT_SIZE, MASK_LOGITS_SHAPE, MASK_SCORES_SHAPE, PIXEL_VALUES_SHAPE};
+use super::model_set::{
+    CENTER_LOGITS_SHAPE, CENTER_OFFSET_SHAPE, HEAD_THRESHOLDS_FILE, LOG_SIZE_SHAPE, LOGIT_SIZE,
+    MASK_LOGITS_SHAPE, MASK_SCORES_SHAPE, PIXEL_VALUES_SHAPE, PRESENCE_LOGITS_SHAPE,
+    SKY_LOGITS_SHAPE, SUBJECT_IMAGE_SIZE, SUBJECT_MASKS_SHAPE, SUBJECT_PIXEL_VALUES_SHAPE,
+    SUBJECT_SCORES_SHAPE,
+};
 use super::tensor::TensorF32;
 
 /// The features of the fake encoder: the number of the encoder run that made them.
@@ -46,6 +51,31 @@ pub struct FakeCalls {
     pub loads: AtomicUsize,
     pub encoder_runs: AtomicUsize,
     pub decoder_calls: Mutex<Vec<FakeDecoderCall>>,
+    pub head_runs: AtomicUsize,
+    /// The output of every fake head run after the warm-up; `None`: no sky and no person.
+    pub head_output: Mutex<Option<HeadOutput>>,
+    pub subject_runs: AtomicUsize,
+    /// Number of the next S3OD runs that fail.
+    pub subject_failures: AtomicUsize,
+    /// The alpha value of the selected fake S3OD mask (mask 1) on the whole input.
+    pub subject_alpha: Mutex<f32>,
+    /// When true, the fake decoder marks token 0 at the cell `plane - 1 - x`, where x is the first
+    /// decoder coordinate, so masks of different prompts differ.
+    pub mark_prompt_cell: std::sync::atomic::AtomicBool,
+}
+
+/// A head output without sky and without people: all logits -10.
+pub fn empty_head_output() -> HeadOutput {
+    let tensor = |shape: &[usize]| {
+        TensorF32::new(shape.to_vec(), vec![-10.0; shape.iter().product()]).expect("tensor")
+    };
+    HeadOutput {
+        sky_logits: tensor(&SKY_LOGITS_SHAPE),
+        center_logits: tensor(&CENTER_LOGITS_SHAPE),
+        center_offset: TensorF32::zeros(CENTER_OFFSET_SHAPE.to_vec()),
+        log_size: TensorF32::zeros(LOG_SIZE_SHAPE.to_vec()),
+        presence_logits: tensor(&PRESENCE_LOGITS_SHAPE),
+    }
 }
 
 pub struct FakeFactory {
@@ -115,6 +145,65 @@ impl SegmentationBackend for FakeBackend {
             calls: self.calls.clone(),
         }))
     }
+
+    fn load_head(&self, _directory: &Path) -> Result<Box<dyn SegmentationHead>> {
+        self.count_load(SegmentationModelRole::Head)?;
+        Ok(Box::new(FakeHead {
+            calls: self.calls.clone(),
+        }))
+    }
+
+    fn load_subject_model(&self, _directory: &Path) -> Result<Box<dyn SubjectModel>> {
+        self.count_load(SegmentationModelRole::Subject)?;
+        Ok(Box::new(FakeSubjectModel {
+            calls: self.calls.clone(),
+        }))
+    }
+}
+
+struct FakeHead {
+    calls: Arc<FakeCalls>,
+}
+
+impl SegmentationHead for FakeHead {
+    fn run(&mut self, features: &Arc<dyn ImageFeatures>) -> Result<HeadOutput> {
+        features_of::<FakeImageFeatures>(features.as_ref())?;
+        self.calls.head_runs.fetch_add(1, Ordering::SeqCst);
+        Ok(self
+            .calls
+            .head_output
+            .lock()
+            .expect("head output")
+            .clone()
+            .unwrap_or_else(empty_head_output))
+    }
+}
+
+struct FakeSubjectModel {
+    calls: Arc<FakeCalls>,
+}
+
+impl SubjectModel for FakeSubjectModel {
+    fn run(&mut self, pixel_values: &TensorF32) -> Result<SubjectOutput> {
+        pixel_values.expect_shape("pixel_values", &SUBJECT_PIXEL_VALUES_SHAPE)?;
+        self.calls.subject_runs.fetch_add(1, Ordering::SeqCst);
+        let failures = &self.calls.subject_failures;
+        if failures
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |left| {
+                left.checked_sub(1)
+            })
+            .is_ok()
+        {
+            bail!("fake S3OD run failed");
+        }
+        let plane = SUBJECT_IMAGE_SIZE * SUBJECT_IMAGE_SIZE;
+        let mut masks = vec![0.0f32; 3 * plane];
+        masks[plane..2 * plane].fill(*self.calls.subject_alpha.lock().expect("alpha"));
+        Ok(SubjectOutput {
+            masks: TensorF32::new(SUBJECT_MASKS_SHAPE.to_vec(), masks)?,
+            iou_scores: TensorF32::new(SUBJECT_SCORES_SHAPE.to_vec(), vec![0.2, 0.95, 0.4])?,
+        })
+    }
 }
 
 struct FakeEncoder {
@@ -157,6 +246,10 @@ impl SegmentationDecoder for FakeDecoder {
         for (token, area) in FAKE_TOKEN_AREAS.iter().enumerate() {
             logits[token * plane..token * plane + area].fill(4.0);
         }
+        if self.calls.mark_prompt_cell.load(Ordering::SeqCst) {
+            let x = prompt.point_coords.data()[0] as usize;
+            logits[plane - 1 - x] = 4.0;
+        }
         Ok(DecoderOutput {
             mask_logits: TensorF32::new(MASK_LOGITS_SHAPE.to_vec(), logits)?,
             iou_scores: TensorF32::new(MASK_SCORES_SHAPE.to_vec(), FAKE_TOKEN_SCORES.to_vec())?,
@@ -164,6 +257,24 @@ impl SegmentationDecoder for FakeDecoder {
     }
 }
 
+/// The thresholds of the lab head (`people_sky_head.json`, the fields that the engine reads).
+pub const FAKE_HEAD_THRESHOLDS: &str = r#"{"validation": {
+    "presence_best_f1_sky": {"threshold": 0.4231989085674286},
+    "presence_best_f1_person": {"threshold": 0.533202052116394},
+    "person_list_best_f1_nms": {"threshold": 0.3132133185863495}}}"#;
+
+/// A fake model directory with the head thresholds file. The file is written once per process
+/// and directory: the tests run in parallel, and a second write would truncate the file while
+/// another test reads it.
 pub fn model_directory(name: &str) -> PathBuf {
-    std::env::temp_dir().join(format!("alcedo-segmentation-fake-{name}"))
+    static WRITTEN: Mutex<Vec<String>> = Mutex::new(Vec::new());
+    let directory = std::env::temp_dir().join(format!("alcedo-segmentation-fake-{name}"));
+    let mut written = WRITTEN.lock().expect("written directories");
+    if !written.iter().any(|entry| entry == name) {
+        std::fs::create_dir_all(&directory).expect("create fake model directory");
+        std::fs::write(directory.join(HEAD_THRESHOLDS_FILE), FAKE_HEAD_THRESHOLDS)
+            .expect("write fake head thresholds");
+        written.push(name.to_string());
+    }
+    directory
 }

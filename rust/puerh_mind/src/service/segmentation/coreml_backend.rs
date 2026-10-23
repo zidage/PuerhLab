@@ -9,7 +9,9 @@
 //!
 //! The encoder keeps its output arrays as [`CoreMlImageFeatures`] (SM3.B decision B4). A Float16
 //! output is converted to Float32 once, at the encoder run. The decoder adds retained references
-//! to the same arrays to its input for each call, so a decode does not copy the features.
+//! to the same arrays to its input for each call, so a decode does not copy the features. The
+//! people and sky head adds the stored `image_embed` array to its input in the same way (SM3.C).
+//! The head and S3OD use `ComputeUnits::All` (lab U15; `CpuOnly` on the `cpu` device).
 
 use std::any::Any;
 use std::path::{Path, PathBuf};
@@ -19,13 +21,14 @@ use anyhow::{Result, anyhow, bail};
 use coreml::{ComputeUnits, DataType, FeatureProvider, Model, ModelConfiguration, MultiArray};
 
 use super::backend::{
-    DecoderOutput, DecoderPrompt, ImageFeatures, SegmentationBackend, SegmentationBackendFactory,
-    SegmentationDecoder, SegmentationEncoder, SegmentationModelRole, UnsupportedDevice,
-    features_of,
+    DecoderOutput, DecoderPrompt, HeadOutput, ImageFeatures, SegmentationBackend,
+    SegmentationBackendFactory, SegmentationDecoder, SegmentationEncoder, SegmentationHead,
+    SegmentationModelRole, SubjectModel, SubjectOutput, UnsupportedDevice, features_of,
 };
 use super::model_set::{
-    DECODER, ENCODER, HIGH_RES_FEATS_0_SHAPE, HIGH_RES_FEATS_1_SHAPE, IMAGE_EMBED_SHAPE, ModelSpec,
-    spec,
+    CENTER_LOGITS_SHAPE, CENTER_OFFSET_SHAPE, DECODER, ENCODER, HEAD, HIGH_RES_FEATS_0_SHAPE,
+    HIGH_RES_FEATS_1_SHAPE, IMAGE_EMBED_SHAPE, LOG_SIZE_SHAPE, ModelSpec, PRESENCE_LOGITS_SHAPE,
+    SKY_LOGITS_SHAPE, SUBJECT, SUBJECT_MASKS_SHAPE, SUBJECT_SCORES_SHAPE, spec,
 };
 use super::tensor::TensorF32;
 
@@ -53,7 +56,12 @@ impl CoreMlSegmentationDevice {
 
     fn compute_units(self, role: SegmentationModelRole) -> ComputeUnits {
         match (self, role) {
-            (Self::PerModel, SegmentationModelRole::Encoder) => ComputeUnits::All,
+            (
+                Self::PerModel,
+                SegmentationModelRole::Encoder
+                | SegmentationModelRole::Head
+                | SegmentationModelRole::Subject,
+            ) => ComputeUnits::All,
             (Self::PerModel, SegmentationModelRole::Decoder) => ComputeUnits::CpuOnly,
             (Self::CpuOnly, _) => ComputeUnits::CpuOnly,
         }
@@ -130,6 +138,28 @@ impl SegmentationBackend for CoreMlSegmentationBackend {
     fn load_decoder(&self, directory: &Path) -> Result<Box<dyn SegmentationDecoder>> {
         Ok(Box::new(CoreMlDecoder {
             model: self.load_model(directory, SegmentationModelRole::Decoder)?,
+        }))
+    }
+
+    fn load_head(&self, directory: &Path) -> Result<Box<dyn SegmentationHead>> {
+        let mut head = CoreMlHead {
+            model: self.load_model(directory, SegmentationModelRole::Head)?,
+        };
+        // The warm-up run (SM3.C plan, decision C10).
+        let mut zero = FeatureProvider::new();
+        insert_tensor(
+            &mut zero,
+            HEAD.inputs[0],
+            &TensorF32::zeros(IMAGE_EMBED_SHAPE.to_vec()),
+        )?;
+        head.predict(&zero)
+            .map_err(|e| anyhow!("failed to run the people and sky head at load: {e:#}"))?;
+        Ok(Box::new(head))
+    }
+
+    fn load_subject_model(&self, directory: &Path) -> Result<Box<dyn SubjectModel>> {
+        Ok(Box::new(CoreMlSubjectModel {
+            model: self.load_model(directory, SegmentationModelRole::Subject)?,
         }))
     }
 }
@@ -266,6 +296,100 @@ impl SegmentationDecoder for CoreMlDecoder {
     }
 }
 
+/// Reads the output @p name of @p outputs as a tensor and checks its shape against @p expected.
+/// @p model names the model in the errors.
+fn read_output(
+    outputs: &FeatureProvider,
+    model: &str,
+    name: &str,
+    expected: &[usize],
+) -> Result<TensorF32> {
+    let array = outputs.get_multi_array(name).ok_or_else(|| {
+        anyhow!(
+            "missing Core ML {model} output {name:?}; available outputs: {:?}",
+            outputs.keys()
+        )
+    })?;
+    let tensor = read_multi_array(name, &array)?;
+    tensor.expect_shape(&format!("Core ML {model} output {name}"), expected)?;
+    Ok(tensor)
+}
+
+struct CoreMlHead {
+    model: Model,
+}
+
+// See `CoreMlEncoder`: the engine calls the head under its own mutex.
+unsafe impl Send for CoreMlHead {}
+
+impl CoreMlHead {
+    fn predict(&mut self, inputs: &FeatureProvider) -> Result<HeadOutput> {
+        let outputs = self
+            .model
+            .predict(inputs)
+            .map_err(|e| anyhow!("failed to run the people and sky head: {e}"))?;
+        let read = |index: usize, expected: &[usize]| {
+            read_output(&outputs, "head", HEAD.coreml_outputs[index], expected)
+        };
+        Ok(HeadOutput {
+            sky_logits: read(0, &SKY_LOGITS_SHAPE)?,
+            center_logits: read(1, &CENTER_LOGITS_SHAPE)?,
+            center_offset: read(2, &CENTER_OFFSET_SHAPE)?,
+            log_size: read(3, &LOG_SIZE_SHAPE)?,
+            presence_logits: read(4, &PRESENCE_LOGITS_SHAPE)?,
+        })
+    }
+}
+
+impl SegmentationHead for CoreMlHead {
+    fn run(&mut self, features: &Arc<dyn ImageFeatures>) -> Result<HeadOutput> {
+        let features = features_of::<CoreMlImageFeatures>(features.as_ref())?;
+        let name = HEAD.inputs[0];
+        // A retained reference to the stored array: no copy of the features.
+        let array = features
+            .arrays
+            .get_multi_array(name)
+            .ok_or_else(|| anyhow!("the Core ML image features have no array {name}"))?;
+        let mut inputs = FeatureProvider::new();
+        inputs
+            .try_insert_multi_array(name, array)
+            .map_err(|e| anyhow!("failed to add Core ML input {name}: {e}"))?;
+        self.predict(&inputs)
+    }
+}
+
+struct CoreMlSubjectModel {
+    model: Model,
+}
+
+// See `CoreMlEncoder`: the engine calls S3OD under its own mutex.
+unsafe impl Send for CoreMlSubjectModel {}
+
+impl SubjectModel for CoreMlSubjectModel {
+    fn run(&mut self, pixel_values: &TensorF32) -> Result<SubjectOutput> {
+        let mut inputs = FeatureProvider::new();
+        insert_tensor(&mut inputs, SUBJECT.inputs[0], pixel_values)?;
+        let outputs = self
+            .model
+            .predict(&inputs)
+            .map_err(|e| anyhow!("failed to run S3OD: {e}"))?;
+        Ok(SubjectOutput {
+            masks: read_output(
+                &outputs,
+                "S3OD",
+                SUBJECT.coreml_outputs[0],
+                &SUBJECT_MASKS_SHAPE,
+            )?,
+            iou_scores: read_output(
+                &outputs,
+                "S3OD",
+                SUBJECT.coreml_outputs[1],
+                &SUBJECT_SCORES_SHAPE,
+            )?,
+        })
+    }
+}
+
 /// Copies a Float32 or Float16 multi-array into a row-major tensor. Follows the strides that
 /// Core ML reports, so a padded output array reads correctly.
 fn read_multi_array(name: &str, array: &MultiArray) -> Result<TensorF32> {
@@ -330,6 +454,9 @@ mod tests {
             device.compute_units_label(SegmentationModelRole::Decoder),
             "coreml-native:cpuonly"
         );
+        for role in [SegmentationModelRole::Head, SegmentationModelRole::Subject] {
+            assert_eq!(device.compute_units_label(role), "coreml-native:all");
+        }
         let cpu = CoreMlSegmentationDevice::parse("cpu").expect("cpu device");
         assert_eq!(
             cpu.compute_units_label(SegmentationModelRole::Encoder),

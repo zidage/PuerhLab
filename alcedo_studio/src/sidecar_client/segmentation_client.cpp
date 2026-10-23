@@ -13,6 +13,7 @@
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "ai_common.pb.h"
 #include "segmentation.grpc.pb.h"
@@ -56,6 +57,31 @@ auto FromHeader(const alcedo::ai::AiResponseHeader& header) -> SegmentationCallS
 auto ToProtoLabel(SegmentationPointLabel label) -> alcedo::ai::SegmentationPointLabel {
   return label == SegmentationPointLabel::kAdd ? alcedo::ai::SEGMENTATION_POINT_LABEL_ADD
                                                : alcedo::ai::SEGMENTATION_POINT_LABEL_SUBTRACT;
+}
+
+auto ToProtoTask(SegmentationTask task) -> alcedo::ai::SegmentationTask {
+  switch (task) {
+    case SegmentationTask::kSubject:
+      return alcedo::ai::SEGMENTATION_TASK_SUBJECT;
+    case SegmentationTask::kBackground:
+      return alcedo::ai::SEGMENTATION_TASK_BACKGROUND;
+    case SegmentationTask::kSky:
+      return alcedo::ai::SEGMENTATION_TASK_SKY;
+    case SegmentationTask::kPeople:
+      return alcedo::ai::SEGMENTATION_TASK_PEOPLE;
+  }
+  return alcedo::ai::SEGMENTATION_TASK_UNSPECIFIED;
+}
+
+auto FromProtoMaskKind(int kind) -> SegmentationTaskMaskKind {
+  switch (kind) {
+    case alcedo::ai::SEGMENTATION_TASK_MASK_KIND_BINARY:
+      return SegmentationTaskMaskKind::kBinary;
+    case alcedo::ai::SEGMENTATION_TASK_MASK_KIND_ALPHA:
+      return SegmentationTaskMaskKind::kAlpha;
+    default:
+      return SegmentationTaskMaskKind::kNone;
+  }
 }
 
 class GrpcSegmentationClient final : public SegmentationClient {
@@ -194,6 +220,49 @@ class GrpcSegmentationClient final : public SegmentationClient {
     alcedo::ai::EndSegmentationSessionResponse response;
     const auto status = stub_->EndSegmentationSession(&context, request, &response);
     return status.ok() ? FromHeader(response.header()) : TransportFailure(status);
+  }
+
+  auto RunTask(const std::string& session_id, SegmentationTask task,
+               const std::vector<uint32_t>& person_indices, std::chrono::milliseconds timeout)
+      -> SegmentationTaskResult override {
+    grpc::ClientContext context;
+    context.set_deadline(DeadlineFromNow(timeout));
+    alcedo::ai::RunSegmentationTaskRequest request;
+    FillHeader(request.mutable_header(), "segmentation.run_task", timeout);
+    request.set_session_id(session_id);
+    request.set_task(ToProtoTask(task));
+    request.mutable_person_indices()->Assign(person_indices.begin(), person_indices.end());
+    alcedo::ai::RunSegmentationTaskResponse response;
+    const auto             status = stub_->RunSegmentationTask(&context, request, &response);
+    SegmentationTaskResult result;
+    if (!status.ok()) {
+      result.status = TransportFailure(status);
+      return result;
+    }
+    result.status             = FromHeader(response.header());
+    result.found              = response.found();
+    result.message            = response.message();
+    result.mask_kind          = FromProtoMaskKind(response.mask_kind());
+    result.mask_width         = response.mask_width();
+    result.mask_height        = response.mask_height();
+    result.mask_r8            = {response.mask_r8().begin(), response.mask_r8().end()};
+    result.alpha_values       = {response.alpha_values().begin(), response.alpha_values().end()};
+    result.presence           = response.presence();
+    result.presence_threshold = response.presence_threshold();
+    result.region_count       = response.region_count();
+    result.subject_score      = response.subject_score();
+    result.mask_area          = response.mask_area();
+    result.model_ms           = response.model_ms();
+    result.people.reserve(static_cast<size_t>(response.people_size()));
+    for (const auto& person : response.people()) {
+      result.people.push_back(SegmentationPerson{.index = person.index(),
+                                                 .box   = {.x0 = person.box().x0(),
+                                                           .y0 = person.box().y0(),
+                                                           .x1 = person.box().x1(),
+                                                           .y1 = person.box().y1()},
+                                                 .score = person.score()});
+    }
+    return result;
   }
 
  private:

@@ -6,8 +6,10 @@
 
 #include <chrono>
 #include <filesystem>
+#include <cstdint>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "sidecar_client/dto/segmentation.hpp"
 #include "sidecar_client/segmentation_client.hpp"
@@ -20,11 +22,15 @@ struct AiMaskSegmentationTimeouts {
   std::chrono::milliseconds load{120000};
   std::chrono::milliseconds start{30000};
   std::chrono::milliseconds decode{10000};
+  /// The first Subject request runs S3OD (about 0.2 s on DirectML, 0.5 s on Core ML; the first
+  /// DirectML run of a process takes longer).
+  std::chrono::milliseconds task{30000};
   std::chrono::milliseconds control{5000};
 };
 
 /**
- * @brief One activation of the AI Mask tool over the sidecar segmentation service (SM3.A, SM3.B).
+ * @brief One activation of the AI Mask tool over the sidecar segmentation service (SM3.A to
+ * SM3.C).
  *
  * The service holds a sidecar lease, so the sidecar process keeps running while the tool is
  * open, and one segmentation client with its own persistent channel. It owns the identity of the
@@ -66,6 +72,11 @@ class AiMaskSegmentationService {
   /// Decodes @p prompt on the current session. Fails without a sidecar call when no session
   /// exists.
   auto               Decode(const SegmentationPrompt& prompt) -> SegmentationDecodeResult;
+  /// Runs the task mask @p task on the current session (SM3.C). @p person_indices selects people
+  /// of the People list for kPeople (empty: all listed people). Fails without a sidecar call when
+  /// no session exists.
+  auto               RunTask(SegmentationTask task, const std::vector<uint32_t>& person_indices = {})
+      -> SegmentationTaskResult;
   /// Ends the current session. Succeeds without a sidecar call when no session exists.
   auto               EndImage() -> SegmentationCallStatus;
   /// Ends the session, unloads the models, and releases the lease. Later calls fail without a

@@ -1,13 +1,16 @@
 //! Segmentation engine: the loaded model set, the segmentation sessions, and the image embedding
 //! cache.
 //!
-//! The engine owns the models that a load request loads, one image embedding per session, and the
-//! image embedding cache of the SM3.B plan (decisions B1, B2, B6). It runs the models only through
-//! the backend traits ([`super::backend`]), so it is the same on every platform. Load and unload
-//! take the write lock of the model set; start and decode hold its read lock for the whole model
-//! run, so an unload waits for running calls and then ends the sessions and clears the cache. The
-//! encoder and the decoder each have their own mutex: one call per model at a time. The engine
-//! never holds the session lock and the cache lock at the same time.
+//! The engine owns the models that a load request loads, one image entry per session
+//! ([`super::image_entry`]), and the image embedding cache of the SM3.B plan (decisions B1, B2,
+//! B6). It runs the models only through the backend traits ([`super::backend`]), so it is the same
+//! on every platform. Load and unload take the write lock of the model set; start, decode, and
+//! task requests hold its read lock for the whole model run, so an unload waits for running calls
+//! and then ends the sessions and clears the cache. Each model has its own mutex: one call per
+//! model at a time. The engine never holds the session lock and the cache lock at the same time.
+//!
+//! The task masks (SM3.C plan) run the people and sky head, the decoder, and S3OD with the rules
+//! of [`super::task_masks`] and keep their results in the image entry.
 
 use std::collections::HashMap;
 use std::fmt;
@@ -18,12 +21,14 @@ use std::time::Instant;
 use tracing::info;
 
 use super::backend::{
-    DecoderPrompt, ImageFeatures, SegmentationBackendFactory, SegmentationDecoder,
-    SegmentationEncoder, SegmentationModelRole,
+    DecoderPrompt, HeadOutput, ImageFeatures, SegmentationBackendFactory, SegmentationDecoder,
+    SegmentationEncoder, SegmentationHead, SegmentationModelRole, SubjectModel,
 };
 use super::image_embedding_cache::ImageEmbeddingCache;
-use super::model_set::{MASK_INPUT_SHAPE, MAX_IMAGE_EDGE, MODEL_SET_ID};
+use super::image_entry::{ImageEntry, PeopleResult, PersonMask, ResultSlot, SkyResult};
+use super::model_set::{HEAD_THRESHOLDS_FILE, MASK_INPUT_SHAPE, MAX_IMAGE_EDGE, MODEL_SET_ID};
 use super::sam2::{self, DecodedMasks, SegmentationPrompt};
+use super::task_masks::{self, HeadThresholds, SubjectAlpha};
 use super::tensor::TensorF32;
 
 /// Largest number of sessions at one time. The tool keeps one session; a few more cover a host
@@ -118,25 +123,87 @@ pub struct DecodeResult {
     pub decoder_ms: u64,
 }
 
+/// A task mask (SM3.C plan, section 2.1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SegmentationTask {
+    Subject,
+    Background,
+    Sky,
+    People,
+}
+
+/// A task request: the task and, for People, the selected indices of the People list (empty
+/// selects all listed people).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TaskRequest {
+    pub task: SegmentationTask,
+    pub person_indices: Vec<u32>,
+}
+
+/// The values of a task mask, row-major.
+#[derive(Debug, Clone, PartialEq)]
+pub enum TaskMaskValues {
+    /// Sky and People: the union mask at the session image size, R8, `MASK_INSIDE` (255) inside
+    /// and 0 outside (SM3.C plan, decision C5).
+    Binary(Vec<u8>),
+    /// Subject and Background: S3OD alpha in [0, 1] on the unpadded S3OD grid; inside where
+    /// >= 0.5.
+    Alpha(Vec<f32>),
+}
+
+/// The mask of a task result.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TaskMask {
+    pub width: u32,
+    pub height: u32,
+    pub values: TaskMaskValues,
+}
+
+/// One entry of the People list of a task result: the normalized box, clipped to the image, and
+/// the score.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PersonListEntry {
+    pub x0: f32,
+    pub y0: f32,
+    pub x1: f32,
+    pub y1: f32,
+    pub score: f32,
+}
+
+/// The result of a task request (SM3.C plan, section 2.2). `mask` is `None` exactly when the task
+/// finds nothing; `message` then says why.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct TaskResult {
+    pub mask: Option<TaskMask>,
+    pub message: String,
+    pub presence: f32,
+    pub presence_threshold: f32,
+    pub region_count: u32,
+    pub people: Vec<PersonListEntry>,
+    pub subject_score: f32,
+    pub mask_area: u32,
+    /// Time of the model runs of this request; 0 when all results came from the image entry.
+    pub model_ms: u64,
+}
+
 struct LoadedModelSet {
     directory: PathBuf,
     device: String,
     backend: String,
     models: Vec<ModelResidency>,
+    thresholds: HeadThresholds,
     encoder: Mutex<Box<dyn SegmentationEncoder>>,
     decoder: Mutex<Box<dyn SegmentationDecoder>>,
+    head: Mutex<Box<dyn SegmentationHead>>,
+    subject: Mutex<Box<dyn SubjectModel>>,
 }
-
-/// The encoder outputs of one image in the native form of the backend. The sessions and the cache
-/// entry of one image share one value.
-type ImageEmbedding = Arc<dyn ImageFeatures>;
 
 /// See the module documentation.
 pub struct SegmentationEngine {
     factory: Arc<dyn SegmentationBackendFactory>,
     models: RwLock<Option<LoadedModelSet>>,
-    sessions: Mutex<HashMap<String, ImageEmbedding>>,
-    cache: Mutex<ImageEmbeddingCache<ImageEmbedding>>,
+    sessions: Mutex<HashMap<String, Arc<ImageEntry>>>,
+    cache: Mutex<ImageEmbeddingCache<Arc<ImageEntry>>>,
 }
 
 fn poisoned(what: &str) -> SegmentationError {
@@ -153,6 +220,60 @@ fn inference(err: anyhow::Error) -> SegmentationError {
 
 fn elapsed_ms(started: Instant) -> u64 {
     started.elapsed().as_millis() as u64
+}
+
+/// The value of @p slot, computed by @p compute when the slot is empty. The slot mutex stays
+/// locked during the computation, so a second request on the same image waits for the first
+/// result. A failure stores nothing. The flag is true when this call computed the value.
+fn result_of<T>(
+    slot: &ResultSlot<T>,
+    compute: impl FnOnce() -> Result<T, SegmentationError>,
+) -> Result<(Arc<T>, bool), SegmentationError> {
+    let mut stored = slot.lock().map_err(|_| poisoned("image entry"))?;
+    if let Some(value) = stored.as_ref() {
+        return Ok((value.clone(), false));
+    }
+    let value = Arc::new(compute()?);
+    *stored = Some(value.clone());
+    Ok((value, true))
+}
+
+/// Reads the head thresholds of the model directory (SM3.C plan, decision C6).
+fn read_head_thresholds(directory: &Path) -> Result<HeadThresholds, SegmentationError> {
+    let path = directory.join(HEAD_THRESHOLDS_FILE);
+    let text = std::fs::read_to_string(&path).map_err(|err| {
+        SegmentationError::ModelNotReady(format!(
+            "segmentation head thresholds {} cannot be read: {err}",
+            path.display()
+        ))
+    })?;
+    task_masks::head_thresholds_from_json(&text)
+        .map_err(|err| SegmentationError::ModelNotReady(format!("{}: {err:#}", path.display())))
+}
+
+/// The union of the SAM 2.1 masks @p members at the image size of @p entry, with its area.
+fn union_mask<'a>(
+    entry: &ImageEntry,
+    members: impl IntoIterator<Item = &'a [f32]>,
+) -> (TaskMask, u32) {
+    let union = task_masks::union_mask(members, entry.width, entry.height);
+    let area = task_masks::mask_area(&union);
+    (
+        TaskMask {
+            width: entry.width as u32,
+            height: entry.height as u32,
+            values: TaskMaskValues::Binary(union),
+        },
+        area,
+    )
+}
+
+fn alpha_mask(alpha: &SubjectAlpha, values: Vec<f32>) -> TaskMask {
+    TaskMask {
+        width: alpha.width as u32,
+        height: alpha.height as u32,
+        values: TaskMaskValues::Alpha(values),
+    }
 }
 
 /// Checks the image and the key of @p request before any model work.
@@ -209,7 +330,8 @@ impl SegmentationEngine {
         Ok(())
     }
 
-    /// Loads the encoder and the decoder from @p directory on @p device.
+    /// Loads the encoder, the decoder, the people and sky head, S3OD, and the head thresholds from
+    /// @p directory on @p device (SM3.C plan, decision C6).
     ///
     /// The same directory and device again keep the loaded models, the sessions, and the cache.
     /// Another directory or device ends all sessions, clears the cache, and unloads the old models
@@ -252,19 +374,34 @@ impl SegmentationEngine {
             );
             residency
         };
+        let thresholds = read_head_thresholds(directory)?;
         let started = Instant::now();
         let encoder = backend.load_encoder(directory).map_err(not_ready)?;
         let encoder_residency = residency(SegmentationModelRole::Encoder, started);
         let started = Instant::now();
         let decoder = backend.load_decoder(directory).map_err(not_ready)?;
         let decoder_residency = residency(SegmentationModelRole::Decoder, started);
+        let started = Instant::now();
+        let head = backend.load_head(directory).map_err(not_ready)?;
+        let head_residency = residency(SegmentationModelRole::Head, started);
+        let started = Instant::now();
+        let subject = backend.load_subject_model(directory).map_err(not_ready)?;
+        let subject_residency = residency(SegmentationModelRole::Subject, started);
         *models = Some(LoadedModelSet {
             directory: directory.to_path_buf(),
             device: device_label,
             backend: backend.backend_name().to_string(),
-            models: vec![encoder_residency, decoder_residency],
+            models: vec![
+                encoder_residency,
+                decoder_residency,
+                head_residency,
+                subject_residency,
+            ],
+            thresholds,
             encoder: Mutex::new(encoder),
             decoder: Mutex::new(decoder),
+            head: Mutex::new(head),
+            subject: Mutex::new(subject),
         });
         Ok(())
     }
@@ -318,21 +455,35 @@ impl SegmentationEngine {
         Ok(())
     }
 
-    fn insert_session(&self, embedding: ImageEmbedding) -> Result<String, SegmentationError> {
+    fn insert_session(&self, entry: Arc<ImageEntry>) -> Result<String, SegmentationError> {
         let session_id = uuid::Uuid::new_v4().to_string();
         self.sessions
             .lock()
             .map_err(|_| poisoned("session"))?
-            .insert(session_id.clone(), embedding);
+            .insert(session_id.clone(), entry);
         Ok(session_id)
+    }
+
+    fn session_entry(&self, session_id: &str) -> Result<Arc<ImageEntry>, SegmentationError> {
+        self.sessions
+            .lock()
+            .map_err(|_| poisoned("session"))?
+            .get(session_id)
+            .cloned()
+            .ok_or_else(|| {
+                SegmentationError::SessionNotFound(format!(
+                    "segmentation session {session_id:?} does not exist"
+                ))
+            })
     }
 
     /// Starts a session (SM3.B plan section 2.1).
     ///
-    /// A cached image key starts the session with the cached embedding and does not run the
-    /// encoder. Otherwise the encoder runs once on the pixels, and a non-empty key stores the
-    /// embedding in the cache. A request without pixels and with an unknown key fails with
-    /// `ImageNotCached`. No session is kept after a failure.
+    /// A cached image key starts the session with the cached image entry and does not run the
+    /// encoder. Otherwise the encoder runs once on the pixels, the S3OD input image is made from
+    /// them (SM3.C plan, decision C8), and a non-empty key stores the new image entry in the
+    /// cache. A request without pixels and with an unknown key fails with `ImageNotCached`. No
+    /// session is kept after a failure.
     pub fn start_session(
         &self,
         request: StartSessionRequest<'_>,
@@ -345,8 +496,8 @@ impl SegmentationEngine {
         let key = request.image_key;
         if !key.is_empty() {
             let cached = self.cache.lock().map_err(|_| poisoned("cache"))?.get(key);
-            if let Some(embedding) = cached {
-                let session_id = self.insert_session(embedding)?;
+            if let Some(entry) = cached {
+                let session_id = self.insert_session(entry)?;
                 info!("started segmentation session {session_id} from the cached image {key:?}");
                 return Ok(StartedSession {
                     session_id,
@@ -363,24 +514,34 @@ impl SegmentationEngine {
 
         let started = Instant::now();
         let (width, height) = (image.width, image.height);
-        let pixels = sam2::preprocess_image(image.rgb8, width as usize, height as usize)
-            .map_err(|err| SegmentationError::InvalidInput(format!("{err:#}")))?;
-        let embedding = loaded
+        let invalid = |err: anyhow::Error| SegmentationError::InvalidInput(format!("{err:#}"));
+        let pixels =
+            sam2::preprocess_image(image.rgb8, width as usize, height as usize).map_err(invalid)?;
+        let subject_input =
+            task_masks::subject_input_image(image.rgb8, width as usize, height as usize)
+                .map_err(invalid)?;
+        let features = loaded
             .encoder
             .lock()
             .map_err(|_| poisoned("encoder"))?
             .encode(&pixels)
             .map_err(inference)?;
         let encoder_ms = elapsed_ms(started);
+        let entry = Arc::new(ImageEntry::new(
+            width as usize,
+            height as usize,
+            features,
+            subject_input,
+        ));
 
         self.check_session_capacity()?;
         if !key.is_empty() {
             self.cache
                 .lock()
                 .map_err(|_| poisoned("cache"))?
-                .insert(key.to_string(), embedding.clone());
+                .insert(key.to_string(), entry.clone());
         }
-        let session_id = self.insert_session(embedding)?;
+        let session_id = self.insert_session(entry)?;
         info!("started segmentation session {session_id} ({width}x{height}) in {encoder_ms} ms");
         Ok(StartedSession {
             session_id,
@@ -399,19 +560,22 @@ impl SegmentationEngine {
         sam2::validate_prompt(&prompt).map_err(SegmentationError::InvalidInput)?;
         let models = self.models.read().map_err(|_| poisoned("model set"))?;
         let loaded = models.as_ref().ok_or_else(not_loaded)?;
-        let embedding = self
-            .sessions
-            .lock()
-            .map_err(|_| poisoned("session"))?
-            .get(session_id)
-            .cloned()
-            .ok_or_else(|| {
-                SegmentationError::SessionNotFound(format!(
-                    "segmentation session {session_id:?} does not exist"
-                ))
-            })?;
+        let entry = self.session_entry(session_id)?;
 
         let started = Instant::now();
+        let masks = Self::decode_features(loaded, &entry.features, prompt)?;
+        Ok(DecodeResult {
+            masks,
+            decoder_ms: elapsed_ms(started),
+        })
+    }
+
+    /// Runs the decoder once with the valid @p prompt on @p features and selects the masks.
+    fn decode_features(
+        loaded: &LoadedModelSet,
+        features: &Arc<dyn ImageFeatures>,
+        prompt: SegmentationPrompt,
+    ) -> Result<DecodedMasks, SegmentationError> {
         let is_click = prompt.is_click();
         let (coords, labels) = sam2::model_prompt(&prompt);
         let point_count = labels.len();
@@ -432,14 +596,270 @@ impl SegmentationEngine {
             .decoder
             .lock()
             .map_err(|_| poisoned("decoder"))?
-            .decode(&embedding, &decoder_prompt)
+            .decode(features, &decoder_prompt)
             .map_err(inference)?;
-        let masks = sam2::select_masks(&output.mask_logits, &output.iou_scores, is_click)
-            .map_err(inference)?;
-        Ok(DecodeResult {
-            masks,
-            decoder_ms: elapsed_ms(started),
-        })
+        sam2::select_masks(&output.mask_logits, &output.iou_scores, is_click).map_err(inference)
+    }
+
+    /// Runs the decoder once with @p prompt (several points or a box) on @p features and returns
+    /// the logits of the selected mask.
+    fn decode_single_mask(
+        loaded: &LoadedModelSet,
+        features: &Arc<dyn ImageFeatures>,
+        prompt: SegmentationPrompt,
+    ) -> Result<Vec<f32>, SegmentationError> {
+        let mut masks = Self::decode_features(loaded, features, prompt)?;
+        let selected = masks.selected_index;
+        Ok(masks.masks.swap_remove(selected).logits)
+    }
+
+    /// Runs the task mask @p request on the image of @p session_id (SM3.C plan, section 2).
+    ///
+    /// The head outputs, the Sky and People results, and the Subject alpha are computed once per
+    /// image entry; later requests read them from the entry. A task that finds nothing is a
+    /// successful result without a mask.
+    pub fn run_task(
+        &self,
+        session_id: &str,
+        request: TaskRequest,
+    ) -> Result<TaskResult, SegmentationError> {
+        if request.task != SegmentationTask::People && !request.person_indices.is_empty() {
+            return Err(SegmentationError::InvalidInput(
+                "person indices are only valid for the People task".to_string(),
+            ));
+        }
+        let models = self.models.read().map_err(|_| poisoned("model set"))?;
+        let loaded = models.as_ref().ok_or_else(not_loaded)?;
+        let entry = self.session_entry(session_id)?;
+        let started = Instant::now();
+        let (mut result, computed) = match request.task {
+            SegmentationTask::Sky => Self::sky_task(loaded, &entry)?,
+            SegmentationTask::People => Self::people_task(loaded, &entry, &request.person_indices)?,
+            SegmentationTask::Subject | SegmentationTask::Background => {
+                Self::subject_task(loaded, &entry, request.task)?
+            }
+        };
+        if computed {
+            result.model_ms = elapsed_ms(started);
+        }
+        Ok(result)
+    }
+
+    /// The head outputs of @p entry, computed once.
+    fn head_outputs(
+        loaded: &LoadedModelSet,
+        entry: &ImageEntry,
+    ) -> Result<Arc<HeadOutput>, SegmentationError> {
+        let (head, _) = result_of(&entry.head, || {
+            loaded
+                .head
+                .lock()
+                .map_err(|_| poisoned("head"))?
+                .run(&entry.features)
+                .map_err(inference)
+        })?;
+        Ok(head)
+    }
+
+    fn sky_task(
+        loaded: &LoadedModelSet,
+        entry: &ImageEntry,
+    ) -> Result<(TaskResult, bool), SegmentationError> {
+        let (sky, computed) = result_of(&entry.sky, || {
+            let head = Self::head_outputs(loaded, entry)?;
+            Self::compute_sky(loaded, entry, &head)
+        })?;
+        let mut result = TaskResult {
+            presence: sky.presence,
+            presence_threshold: sky.presence_threshold,
+            region_count: sky.region_logits.len() as u32,
+            message: sky.message.clone(),
+            ..Default::default()
+        };
+        if !sky.region_logits.is_empty() {
+            let (mask, area) = union_mask(entry, sky.region_logits.iter().map(Vec::as_slice));
+            result.mask_area = area;
+            result.mask = Some(mask);
+        }
+        Ok((result, computed))
+    }
+
+    /// Sky rule of the SM3.C plan, section 2.3.
+    fn compute_sky(
+        loaded: &LoadedModelSet,
+        entry: &ImageEntry,
+        head: &HeadOutput,
+    ) -> Result<SkyResult, SegmentationError> {
+        let (presence, _) = task_masks::presences(head);
+        let threshold = loaded.thresholds.sky_presence;
+        let mut sky = SkyResult {
+            presence,
+            presence_threshold: threshold,
+            region_logits: Vec::new(),
+            message: String::new(),
+        };
+        if presence < threshold {
+            sky.message =
+                format!("No sky found: sky presence {presence:.3} is below {threshold:.3}.");
+            return Ok(sky);
+        }
+        let probability = task_masks::sky_probability(head);
+        let regions = task_masks::sky_regions(&probability);
+        if regions.is_empty() {
+            sky.message = format!(
+                "No sky found: presence {presence:.3}, but no region of at least {} cells with sky probability >= {}.",
+                task_masks::SKY_POINTS_PER_REGION,
+                task_masks::SKY_CELL_PROBABILITY
+            );
+            return Ok(sky);
+        }
+        for region in &regions {
+            let prompt = SegmentationPrompt {
+                points: task_masks::region_points(&probability, region),
+                ..Default::default()
+            };
+            sky.region_logits
+                .push(Self::decode_single_mask(loaded, &entry.features, prompt)?);
+        }
+        Ok(sky)
+    }
+
+    fn people_task(
+        loaded: &LoadedModelSet,
+        entry: &ImageEntry,
+        person_indices: &[u32],
+    ) -> Result<(TaskResult, bool), SegmentationError> {
+        let (people, computed) = result_of(&entry.people, || {
+            let head = Self::head_outputs(loaded, entry)?;
+            Self::compute_people(loaded, entry, &head)
+        })?;
+        if let Some(index) = person_indices
+            .iter()
+            .find(|index| **index as usize >= people.people.len())
+        {
+            return Err(SegmentationError::InvalidInput(format!(
+                "person index {index} is outside the People list of {} people",
+                people.people.len()
+            )));
+        }
+        let mut result = TaskResult {
+            presence: people.presence,
+            presence_threshold: people.presence_threshold,
+            message: people.message.clone(),
+            people: people
+                .people
+                .iter()
+                .map(|person| {
+                    let prompt_box = person.person.prompt_box();
+                    PersonListEntry {
+                        x0: prompt_box.x0,
+                        y0: prompt_box.y0,
+                        x1: prompt_box.x1,
+                        y1: prompt_box.y1,
+                        score: person.person.score,
+                    }
+                })
+                .collect(),
+            ..Default::default()
+        };
+        if !people.people.is_empty() {
+            let selected = people
+                .people
+                .iter()
+                .enumerate()
+                .filter(|(index, _)| {
+                    person_indices.is_empty() || person_indices.contains(&(*index as u32))
+                })
+                .map(|(_, person)| person.logits.as_slice());
+            let (mask, area) = union_mask(entry, selected);
+            result.mask_area = area;
+            result.mask = Some(mask);
+        }
+        Ok((result, computed))
+    }
+
+    /// People rule of the SM3.C plan, section 2.4: one decoder call per listed person.
+    fn compute_people(
+        loaded: &LoadedModelSet,
+        entry: &ImageEntry,
+        head: &HeadOutput,
+    ) -> Result<PeopleResult, SegmentationError> {
+        let (_, presence) = task_masks::presences(head);
+        let threshold = loaded.thresholds.person_presence;
+        let mut people = PeopleResult {
+            presence,
+            presence_threshold: threshold,
+            people: Vec::new(),
+            message: String::new(),
+        };
+        if presence < threshold {
+            people.message =
+                format!("No people found: person presence {presence:.3} is below {threshold:.3}.");
+            return Ok(people);
+        }
+        let boxes = task_masks::decode_people(head);
+        let listed = task_masks::people_list(&boxes, loaded.thresholds.people_list, true);
+        if listed.is_empty() {
+            people.message = format!(
+                "No people found: presence {presence:.3}, but the head found no person box."
+            );
+            return Ok(people);
+        }
+        for person in listed {
+            let prompt = SegmentationPrompt {
+                prompt_box: Some(person.prompt_box()),
+                ..Default::default()
+            };
+            let logits = Self::decode_single_mask(loaded, &entry.features, prompt)?;
+            people.people.push(PersonMask { person, logits });
+        }
+        Ok(people)
+    }
+
+    /// Subject and Background rules of the SM3.C plan, section 2.5 and decisions C1 and C9.
+    fn subject_task(
+        loaded: &LoadedModelSet,
+        entry: &ImageEntry,
+        task: SegmentationTask,
+    ) -> Result<(TaskResult, bool), SegmentationError> {
+        let (alpha, computed) = result_of(&entry.subject, || {
+            let pixel_values =
+                task_masks::subject_pixel_values(&entry.subject_input).map_err(inference)?;
+            let output = loaded
+                .subject
+                .lock()
+                .map_err(|_| poisoned("subject model"))?
+                .run(&pixel_values)
+                .map_err(inference)?;
+            task_masks::select_subject_alpha(&output, &entry.subject_input).map_err(inference)
+        })?;
+        let mut result = TaskResult {
+            subject_score: alpha.score,
+            ..Default::default()
+        };
+        if task_masks::alpha_area(&alpha.values) == 0 {
+            result.message = format!(
+                "No subject found: no Subject alpha value reaches {} (S3OD score {:.3}).",
+                task_masks::ALPHA_INSIDE,
+                alpha.score
+            );
+            return Ok((result, computed));
+        }
+        let values: Vec<f32> = match task {
+            SegmentationTask::Background => alpha.values.iter().map(|value| 1.0 - value).collect(),
+            _ => alpha.values.clone(),
+        };
+        let area = task_masks::alpha_area(&values);
+        if area == 0 {
+            result.message = format!(
+                "No background found: the subject covers the whole image (S3OD score {:.3}).",
+                alpha.score
+            );
+            return Ok((result, computed));
+        }
+        result.mask_area = area;
+        result.mask = Some(alpha_mask(&alpha, values));
+        Ok((result, computed))
     }
 
     /// Ends @p session_id. Returns false when the session does not exist. The cache entry of the
@@ -458,9 +878,14 @@ impl SegmentationEngine {
 mod tests {
     use std::sync::atomic::Ordering;
 
-    use super::super::model_set::LOGIT_SIZE;
+    use super::super::model_set::{
+        CENTER_LOGITS_SHAPE, CENTER_OFFSET_SHAPE, HEAD_GRID, LOG_SIZE_SHAPE, LOGIT_SIZE,
+        PRESENCE_LOGITS_SHAPE, SKY_LOGITS_SHAPE,
+    };
     use super::super::sam2::{PointLabel, PromptBox, PromptPoint};
-    use super::super::test_support::{FAKE_TOKEN_AREAS, FakeCalls, FakeFactory, model_directory};
+    use super::super::test_support::{
+        FAKE_TOKEN_AREAS, FakeCalls, FakeFactory, empty_head_output, model_directory,
+    };
     use super::*;
 
     fn engine_with(factory: FakeFactory) -> (SegmentationEngine, Arc<FakeCalls>) {
@@ -568,7 +993,14 @@ mod tests {
         assert!(status.loaded);
         assert_eq!(status.session_count, 1);
         assert_eq!(status.cached_image_count, 0);
-        assert_eq!(status.models.len(), 2);
+        assert_eq!(
+            status
+                .models
+                .iter()
+                .map(|model| model.role)
+                .collect::<Vec<_>>(),
+            SegmentationModelRole::ALL.to_vec()
+        );
         assert_eq!(status.model_set_id, MODEL_SET_ID);
 
         engine
@@ -773,7 +1205,7 @@ mod tests {
         engine
             .load(&model_directory("a"), "fake")
             .expect("same load");
-        assert_eq!(calls.loads.load(Ordering::SeqCst), 2);
+        assert_eq!(calls.loads.load(Ordering::SeqCst), 4);
         assert_eq!(engine.status().expect("status").session_count, 1);
     }
 
@@ -784,12 +1216,12 @@ mod tests {
         engine
             .load(&model_directory("b"), "fake")
             .expect("other directory");
-        assert_eq!(calls.loads.load(Ordering::SeqCst), 4);
+        assert_eq!(calls.loads.load(Ordering::SeqCst), 8);
         assert_eq!(engine.status().expect("status").session_count, 0);
         engine
             .load(&model_directory("b"), "fake:other")
             .expect("other device");
-        assert_eq!(calls.loads.load(Ordering::SeqCst), 6);
+        assert_eq!(calls.loads.load(Ordering::SeqCst), 12);
     }
 
     #[test]
@@ -892,5 +1324,321 @@ mod tests {
             engine.decode("missing", SegmentationPrompt::default()),
             Err(SegmentationError::InvalidInput(_))
         ));
+    }
+
+    fn task(task: SegmentationTask) -> TaskRequest {
+        TaskRequest {
+            task,
+            person_indices: Vec::new(),
+        }
+    }
+
+    fn people(indices: &[u32]) -> TaskRequest {
+        TaskRequest {
+            task: SegmentationTask::People,
+            person_indices: indices.to_vec(),
+        }
+    }
+
+    /// A head output with the sky and person presence logits, a sky region of 4 cells, and person
+    /// centers at the given (row, column) cells with their center logits; each box is 4 x 8 cells.
+    fn head_output(presence: [f32; 2], persons: &[(usize, usize, f32)]) -> HeadOutput {
+        let plane = HEAD_GRID * HEAD_GRID;
+        let mut head = empty_head_output();
+        let mut sky = vec![-10.0f32; plane];
+        sky[..4].fill(5.0);
+        head.sky_logits = TensorF32::new(SKY_LOGITS_SHAPE.to_vec(), sky).unwrap();
+        let mut center = vec![-10.0f32; plane];
+        let mut log_size = vec![0.0f32; 2 * plane];
+        for &(row, column, logit) in persons {
+            let cell = row * HEAD_GRID + column;
+            center[cell] = logit;
+            log_size[cell] = 4f32.ln();
+            log_size[plane + cell] = 8f32.ln();
+        }
+        head.center_logits = TensorF32::new(CENTER_LOGITS_SHAPE.to_vec(), center).unwrap();
+        head.center_offset = TensorF32::zeros(CENTER_OFFSET_SHAPE.to_vec());
+        head.log_size = TensorF32::new(LOG_SIZE_SHAPE.to_vec(), log_size).unwrap();
+        head.presence_logits =
+            TensorF32::new(PRESENCE_LOGITS_SHAPE.to_vec(), presence.to_vec()).unwrap();
+        head
+    }
+
+    fn set_head(calls: &FakeCalls, head: HeadOutput) {
+        *calls.head_output.lock().expect("head output") = Some(head);
+    }
+
+    #[test]
+    fn load_reports_four_models_and_fails_without_thresholds() {
+        let (engine, _calls) = loaded_engine();
+        assert_eq!(engine.status().expect("status").models.len(), 4);
+
+        let empty = std::env::temp_dir().join(format!(
+            "alcedo-segmentation-no-thresholds-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&empty).expect("create directory");
+        let err = engine.load(&empty, "fake").expect_err("no thresholds");
+        assert!(
+            matches!(&err, SegmentationError::ModelNotReady(message) if message.contains(HEAD_THRESHOLDS_FILE)),
+            "{err}"
+        );
+        assert!(!engine.status().expect("status").loaded);
+        std::fs::remove_dir_all(&empty).expect("remove directory");
+
+        for role in [SegmentationModelRole::Head, SegmentationModelRole::Subject] {
+            let mut factory = FakeFactory::new();
+            factory.failing_role = Some(role);
+            let (engine, _calls) = engine_with(factory);
+            assert!(matches!(
+                engine.load(&model_directory("a"), "fake"),
+                Err(SegmentationError::ModelNotReady(_))
+            ));
+            assert!(!engine.status().expect("status").loaded);
+        }
+    }
+
+    #[test]
+    fn run_task_sky_unions_regions_and_reports_not_found() {
+        let (engine, calls) = loaded_engine();
+        let session = start(&engine).expect("start");
+        let result = engine
+            .run_task(&session.session_id, task(SegmentationTask::Sky))
+            .expect("sky without presence");
+        assert!(result.mask.is_none());
+        assert!(
+            result.message.starts_with("No sky found: sky presence"),
+            "{}",
+            result.message
+        );
+        assert_eq!(calls.decoder_calls.lock().expect("calls").len(), 0);
+
+        let session = start(&engine).expect("second image");
+        set_head(&calls, head_output([5.0, -5.0], &[]));
+        let result = engine
+            .run_task(&session.session_id, task(SegmentationTask::Sky))
+            .expect("sky");
+        let mask = result.mask.expect("sky mask");
+        // The union mask has the size of the 64 x 48 session image.
+        assert_eq!((mask.width, mask.height), (64, 48));
+        let TaskMaskValues::Binary(values) = &mask.values else {
+            panic!("the sky mask must be an R8 mask");
+        };
+        assert_eq!(values.len(), 64 * 48);
+        assert_eq!(result.region_count, 1);
+        assert_eq!(result.mask_area, task_masks::mask_area(values));
+        assert!(result.mask_area > 0);
+        assert!(result.model_ms <= 1000);
+        let decoder_calls = calls.decoder_calls.lock().expect("calls");
+        assert_eq!(decoder_calls.len(), 1);
+        assert_eq!(decoder_calls[0].prompt.point_count(), 3);
+        assert_eq!(decoder_calls[0].prompt.has_mask_input.data(), &[0.0]);
+    }
+
+    #[test]
+    fn run_task_computes_head_and_people_once_per_entry() {
+        let (engine, calls) = loaded_engine();
+        set_head(
+            &calls,
+            head_output([-5.0, 5.0], &[(10, 40, 3.0), (10, 10, 2.0), (40, 20, 1.0)]),
+        );
+        let session = start_keyed(&engine, "photo-a").expect("start");
+        let first = engine
+            .run_task(&session.session_id, people(&[]))
+            .expect("people");
+        assert_eq!(first.people.len(), 3);
+        // Left to right: the centers at the columns 10, 20, and 40.
+        let centers: Vec<f32> = first.people.iter().map(|p| (p.x0 + p.x1) / 2.0).collect();
+        assert_eq!(centers, vec![10.0 / 64.0, 20.0 / 64.0, 40.0 / 64.0]);
+        assert_eq!(calls.head_runs.load(Ordering::SeqCst), 1);
+        assert_eq!(calls.decoder_calls.lock().expect("calls").len(), 3);
+        assert!(first.mask.is_some());
+
+        let second = engine
+            .run_task(&session.session_id, people(&[2]))
+            .expect("people selection");
+        assert_eq!(second.model_ms, 0);
+        assert_eq!(second.people, first.people);
+        // Sky on the same image reads the stored head outputs.
+        engine
+            .run_task(&session.session_id, task(SegmentationTask::Sky))
+            .expect("sky");
+        assert_eq!(calls.head_runs.load(Ordering::SeqCst), 1);
+        // A key-only start of the same image shares the image entry.
+        engine.end_session(&session.session_id).expect("end");
+        let cached = start_key_only(&engine, "photo-a").expect("cached start");
+        engine
+            .run_task(&cached.session_id, people(&[0, 1]))
+            .expect("cached people");
+        assert_eq!(calls.head_runs.load(Ordering::SeqCst), 1);
+        // The 3 person decodes only: the sky presence is below its threshold.
+        assert_eq!(calls.decoder_calls.lock().expect("calls").len(), 3);
+    }
+
+    #[test]
+    fn run_task_people_selection_unions_selected_masks() {
+        let (engine, calls) = loaded_engine();
+        calls.mark_prompt_cell.store(true, Ordering::SeqCst);
+        set_head(
+            &calls,
+            head_output([-5.0, 5.0], &[(10, 10, 3.0), (10, 40, 3.0)]),
+        );
+        // A 256 x 256 image: each union mask pixel reads exactly one logit cell.
+        let pixels = gray_image(256, 256);
+        let session = engine
+            .start_session(StartSessionRequest {
+                image: Some(RgbImageView {
+                    width: 256,
+                    height: 256,
+                    rgb8: &pixels,
+                }),
+                image_key: "",
+            })
+            .expect("start");
+        let plane = LOGIT_SIZE * LOGIT_SIZE;
+        // Person 0: box x0 = 8 cells = 128 model px; person 1: box x0 = 38 cells = 608 model px.
+        let (cell_0, cell_1) = (plane - 1 - 128, plane - 1 - 608);
+        let binary = |result: &TaskResult| match &result.mask.as_ref().expect("mask").values {
+            TaskMaskValues::Binary(values) => values.clone(),
+            TaskMaskValues::Alpha(_) => panic!("the People mask must be an R8 mask"),
+        };
+        let inside = task_masks::MASK_INSIDE;
+        let one = engine
+            .run_task(&session.session_id, people(&[0]))
+            .expect("person 0");
+        let values = binary(&one);
+        assert!(values[cell_0] == inside && values[cell_1] == 0);
+        let both = engine
+            .run_task(&session.session_id, people(&[1, 0, 1]))
+            .expect("people 0 and 1");
+        let values = binary(&both);
+        assert!(values[cell_0] == inside && values[cell_1] == inside);
+        assert_eq!(both.mask_area as usize, FAKE_TOKEN_AREAS[0] + 2);
+        let all = engine
+            .run_task(&session.session_id, people(&[]))
+            .expect("all people");
+        assert_eq!(all.mask_area, both.mask_area);
+    }
+
+    #[test]
+    fn run_task_people_keeps_best_box_below_list_threshold() {
+        let (engine, calls) = loaded_engine();
+        // sigmoid(-0.8) = 0.310 is below the list threshold 0.3132.
+        set_head(
+            &calls,
+            head_output([-5.0, 5.0], &[(10, 10, -0.8), (40, 40, -1.5)]),
+        );
+        let session = start(&engine).expect("start");
+        let result = engine
+            .run_task(&session.session_id, people(&[]))
+            .expect("people");
+        assert_eq!(result.people.len(), 1);
+        assert!((result.people[0].score - task_masks::sigmoid(-0.8)).abs() < 1e-6);
+        assert!(result.mask.is_some());
+    }
+
+    #[test]
+    fn run_task_rejects_invalid_task_and_index() {
+        let (engine, calls) = loaded_engine();
+        set_head(
+            &calls,
+            head_output([-5.0, 5.0], &[(10, 10, 3.0), (10, 40, 3.0)]),
+        );
+        let session = start(&engine).expect("start");
+        assert!(matches!(
+            engine.run_task(
+                &session.session_id,
+                TaskRequest {
+                    task: SegmentationTask::Sky,
+                    person_indices: vec![0],
+                }
+            ),
+            Err(SegmentationError::InvalidInput(_))
+        ));
+        assert_eq!(calls.head_runs.load(Ordering::SeqCst), 0);
+        assert!(matches!(
+            engine.run_task(&session.session_id, people(&[5])),
+            Err(SegmentationError::InvalidInput(message)) if message.contains("2 people")
+        ));
+        assert!(matches!(
+            engine.run_task("missing", task(SegmentationTask::Subject)),
+            Err(SegmentationError::SessionNotFound(_))
+        ));
+        engine.unload().expect("unload");
+        assert!(matches!(
+            engine.run_task(&session.session_id, task(SegmentationTask::Subject)),
+            Err(SegmentationError::ModelNotReady(_))
+        ));
+    }
+
+    #[test]
+    fn cached_start_runs_subject_without_pixels() {
+        let (engine, calls) = loaded_engine();
+        *calls.subject_alpha.lock().expect("alpha") = 0.8;
+        let first = start_keyed(&engine, "photo-a").expect("start");
+        engine.end_session(&first.session_id).expect("end");
+        let cached = start_key_only(&engine, "photo-a").expect("cached start");
+        let subject = engine
+            .run_task(&cached.session_id, task(SegmentationTask::Subject))
+            .expect("subject");
+        let mask = subject.mask.expect("subject mask");
+        // The 64 x 48 image resized to a long edge of 1024: 1024 x 768.
+        assert_eq!((mask.width, mask.height), (1024, 768));
+        let TaskMaskValues::Alpha(values) = &mask.values else {
+            panic!("the Subject mask must be an alpha mask");
+        };
+        assert!(values.iter().all(|value| *value == 0.8));
+        assert_eq!(subject.subject_score, 0.95);
+        assert_eq!(subject.mask_area, 1024 * 768);
+        // Background 0.2 everywhere: the subject covers the whole image.
+        let background = engine
+            .run_task(&cached.session_id, task(SegmentationTask::Background))
+            .expect("background");
+        assert!(background.mask.is_none());
+        assert!(
+            background.message.starts_with("No background found"),
+            "{}",
+            background.message
+        );
+        assert_eq!(calls.subject_runs.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn subject_not_found_when_no_alpha_reaches_half() {
+        let (engine, calls) = loaded_engine();
+        *calls.subject_alpha.lock().expect("alpha") = 0.49;
+        let session = start(&engine).expect("start");
+        for request in [SegmentationTask::Subject, SegmentationTask::Background] {
+            let result = engine
+                .run_task(&session.session_id, task(request))
+                .expect("task");
+            assert!(result.mask.is_none());
+            assert!(
+                result.message.starts_with("No subject found"),
+                "{}",
+                result.message
+            );
+            assert_eq!(result.subject_score, 0.95);
+            assert_eq!(result.mask_area, 0);
+        }
+    }
+
+    #[test]
+    fn subject_failure_keeps_no_alpha() {
+        let (engine, calls) = loaded_engine();
+        *calls.subject_alpha.lock().expect("alpha") = 0.3;
+        calls.subject_failures.store(1, Ordering::SeqCst);
+        let session = start(&engine).expect("start");
+        assert!(matches!(
+            engine.run_task(&session.session_id, task(SegmentationTask::Subject)),
+            Err(SegmentationError::Inference(message)) if message.contains("fake S3OD run failed")
+        ));
+        let background = engine
+            .run_task(&session.session_id, task(SegmentationTask::Background))
+            .expect("background after the failure");
+        assert_eq!(calls.subject_runs.load(Ordering::SeqCst), 2);
+        // Subject alpha 0.3 everywhere: no subject, so no background either (C9).
+        assert!(background.mask.is_none());
+        assert!(background.message.starts_with("No subject found"));
     }
 }
