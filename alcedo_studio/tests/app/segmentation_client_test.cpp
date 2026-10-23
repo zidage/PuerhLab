@@ -2,7 +2,7 @@
 //  SPDX-License-Identifier: GPL-3.0-only
 //  Additional permission under GPLv3 section 7 applies; see the LICENSE file.
 
-// SM3.A and SM3.B: the gRPC segmentation client against an in-process SegmentationService.
+// SM3.A to SM3.C: the gRPC segmentation client against an in-process SegmentationService.
 
 #include "sidecar_client/segmentation_client.hpp"
 
@@ -116,6 +116,45 @@ class RecordingSegmentationService final : public alcedo::ai::SegmentationServic
     return grpc::Status::OK;
   }
 
+  auto RunSegmentationTask(grpc::ServerContext*                          context,
+                           const alcedo::ai::RunSegmentationTaskRequest* request,
+                           alcedo::ai::RunSegmentationTaskResponse*      response)
+      -> grpc::Status override {
+    Record(context);
+    {
+      std::lock_guard lock(mutex_);
+      task_request_ = *request;
+    }
+    SetOkHeader(response->mutable_header());
+    // Sky: not found. People: a list of two and the union of the selection.
+    if (request->task() == alcedo::ai::SEGMENTATION_TASK_SKY) {
+      response->set_message("No sky found: sky presence 0.312 is below 0.423.");
+      response->set_presence(0.312F);
+      response->set_presence_threshold(0.423F);
+      return grpc::Status::OK;
+    }
+    response->set_found(true);
+    response->set_mask_kind(alcedo::ai::SEGMENTATION_TASK_MASK_KIND_BINARY);
+    response->set_mask_width(8);
+    response->set_mask_height(4);
+    std::string mask(8 * 4, '\0');
+    mask[9] = static_cast<char>(255);
+    response->set_mask_r8(mask);
+    response->set_presence(0.99F);
+    response->set_mask_area(1);
+    response->set_model_ms(21);
+    for (uint32_t index : {0U, 1U}) {
+      auto* person = response->add_people();
+      person->set_index(index);
+      person->mutable_box()->set_x0(0.1F + 0.5F * static_cast<float>(index));
+      person->mutable_box()->set_y0(0.2F);
+      person->mutable_box()->set_x1(0.3F + 0.5F * static_cast<float>(index));
+      person->mutable_box()->set_y1(0.9F);
+      person->set_score(0.8F - 0.1F * static_cast<float>(index));
+    }
+    return grpc::Status::OK;
+  }
+
   [[nodiscard]] auto Peers() -> std::set<std::string> {
     std::lock_guard lock(mutex_);
     return peers_;
@@ -136,6 +175,10 @@ class RecordingSegmentationService final : public alcedo::ai::SegmentationServic
     std::lock_guard lock(mutex_);
     return decode_request_;
   }
+  [[nodiscard]] auto TaskRequest() -> alcedo::ai::RunSegmentationTaskRequest {
+    std::lock_guard lock(mutex_);
+    return task_request_;
+  }
 
  private:
   void Record(grpc::ServerContext* context) {
@@ -150,6 +193,7 @@ class RecordingSegmentationService final : public alcedo::ai::SegmentationServic
   size_t                                      received_pixel_bytes_ = 0;
   std::string                                 received_image_key_;
   alcedo::ai::DecodeSegmentationPromptRequest decode_request_;
+  alcedo::ai::RunSegmentationTaskRequest      task_request_;
 };
 
 class SegmentationClientTest : public ::testing::Test {
@@ -282,6 +326,49 @@ TEST_F(SegmentationClientTest, DecodeRequestCarriesPromptAndMaskInput) {
   EXPECT_EQ(result.selected_index, 2U);
   EXPECT_EQ(result.logit_size, 256U);
   EXPECT_EQ(result.decoder_ms, 12);
+}
+
+TEST_F(SegmentationClientTest, RunTaskCarriesTaskAndSelection) {
+  const auto result = client_->RunTask("session-1", SegmentationTask::kPeople, {1, 0}, kTimeout);
+
+  ASSERT_TRUE(result.status.ok) << result.status.error;
+  const auto request = service_.TaskRequest();
+  EXPECT_EQ(request.session_id(), "session-1");
+  EXPECT_EQ(request.task(), alcedo::ai::SEGMENTATION_TASK_PEOPLE);
+  ASSERT_EQ(request.person_indices_size(), 2);
+  EXPECT_EQ(request.person_indices(0), 1U);
+  EXPECT_EQ(request.person_indices(1), 0U);
+
+  EXPECT_TRUE(result.found);
+  EXPECT_TRUE(result.message.empty());
+  EXPECT_EQ(result.mask_kind, SegmentationTaskMaskKind::kBinary);
+  EXPECT_EQ(result.mask_width, 8U);
+  EXPECT_EQ(result.mask_height, 4U);
+  ASSERT_EQ(result.mask_r8.size(), 8U * 4U);
+  EXPECT_EQ(result.mask_r8[9], 255);
+  EXPECT_EQ(result.mask_r8[8], 0);
+  EXPECT_TRUE(result.alpha_values.empty());
+  EXPECT_EQ(result.mask_area, 1U);
+  EXPECT_EQ(result.model_ms, 21);
+  ASSERT_EQ(result.people.size(), 2U);
+  EXPECT_EQ(result.people[1].index, 1U);
+  EXPECT_FLOAT_EQ(result.people[1].box.x0, 0.6F);
+  EXPECT_FLOAT_EQ(result.people[1].box.y1, 0.9F);
+  EXPECT_FLOAT_EQ(result.people[1].score, 0.7F);
+}
+
+TEST_F(SegmentationClientTest, RunTaskNotFoundIsSuccessWithMessage) {
+  const auto result = client_->RunTask("session-1", SegmentationTask::kSky, {}, kTimeout);
+
+  ASSERT_TRUE(result.status.ok) << result.status.error;
+  EXPECT_EQ(service_.TaskRequest().task(), alcedo::ai::SEGMENTATION_TASK_SKY);
+  EXPECT_EQ(service_.TaskRequest().person_indices_size(), 0);
+  EXPECT_FALSE(result.found);
+  EXPECT_EQ(result.message, "No sky found: sky presence 0.312 is below 0.423.");
+  EXPECT_EQ(result.mask_kind, SegmentationTaskMaskKind::kNone);
+  EXPECT_TRUE(result.mask_r8.empty());
+  EXPECT_TRUE(result.alpha_values.empty());
+  EXPECT_FLOAT_EQ(result.presence_threshold, 0.423F);
 }
 
 }  // namespace

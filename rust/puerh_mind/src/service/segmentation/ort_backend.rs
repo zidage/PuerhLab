@@ -8,7 +8,9 @@
 //! always keeps for node placement.
 //!
 //! The encoder keeps its three output values as [`OrtImageFeatures`] (SM3.B decision B4); the
-//! decoder ([`super::ort_decoder`]) binds them without a host copy.
+//! decoder ([`super::ort_decoder`]) binds them without a host copy, and the people and sky head
+//! reads `image_embed` from them (SM3.C). S3OD reads its own input image (SM3.C plan, section
+//! 2.5).
 
 use std::any::Any;
 use std::path::{Path, PathBuf};
@@ -18,18 +20,21 @@ use anyhow::{Context, Result, anyhow, bail};
 use ort::{
     ep,
     session::{
-        Session,
+        Session, SessionOutputs,
         builder::{GraphOptimizationLevel, SessionBuilder},
     },
     value::{DynValue, Tensor, TensorRef},
 };
 
 use super::backend::{
-    ImageFeatures, SegmentationBackend, SegmentationBackendFactory, SegmentationDecoder,
-    SegmentationEncoder, SegmentationModelRole, UnsupportedDevice,
+    HeadOutput, ImageFeatures, SegmentationBackend, SegmentationBackendFactory,
+    SegmentationDecoder, SegmentationEncoder, SegmentationHead, SegmentationModelRole,
+    SubjectModel, SubjectOutput, UnsupportedDevice, features_of,
 };
 use super::model_set::{
-    DECODER, ENCODER, HIGH_RES_FEATS_0_SHAPE, HIGH_RES_FEATS_1_SHAPE, IMAGE_EMBED_SHAPE, ModelSpec,
+    CENTER_LOGITS_SHAPE, CENTER_OFFSET_SHAPE, DECODER, ENCODER, HEAD, HIGH_RES_FEATS_0_SHAPE,
+    HIGH_RES_FEATS_1_SHAPE, IMAGE_EMBED_SHAPE, LOG_SIZE_SHAPE, ModelSpec, PRESENCE_LOGITS_SHAPE,
+    SKY_LOGITS_SHAPE, SUBJECT, SUBJECT_MASKS_SHAPE, SUBJECT_SCORES_SHAPE,
 };
 use super::ort_decoder::OrtDecoder;
 use super::tensor::TensorF32;
@@ -236,6 +241,49 @@ impl SegmentationBackend for OrtSegmentationBackend {
             self.device,
         )?))
     }
+
+    fn load_head(&self, directory: &Path) -> Result<Box<dyn SegmentationHead>> {
+        let mut head = OrtHead {
+            session: load_session(directory, &HEAD, self.device)?,
+        };
+        // The warm-up run (SM3.C plan, decision C10).
+        let zero_features: Arc<dyn ImageFeatures> = Arc::new(OrtImageFeatures::zeros()?);
+        head.run(&zero_features)
+            .context("failed to run the people and sky head at load")?;
+        Ok(Box::new(head))
+    }
+
+    fn load_subject_model(&self, directory: &Path) -> Result<Box<dyn SubjectModel>> {
+        Ok(Box::new(OrtSubjectModel {
+            session: load_session(directory, &SUBJECT, self.device)?,
+        }))
+    }
+}
+
+/// Copies the float32 output @p name of @p outputs into a tensor and checks its shape against
+/// @p expected. @p model names the model in the errors.
+pub(super) fn read_output(
+    outputs: &SessionOutputs<'_>,
+    model: &str,
+    name: &str,
+    expected: &[usize],
+) -> Result<TensorF32> {
+    let value = outputs
+        .get(name)
+        .with_context(|| format!("missing {model} output {name}"))?;
+    let (shape, data) = value
+        .try_extract_tensor::<f32>()
+        .map_err(|e| anyhow!("{model} output {name} is not a float32 tensor: {e}"))?;
+    let shape = shape
+        .iter()
+        .map(|&dim| {
+            usize::try_from(dim)
+                .map_err(|_| anyhow!("{model} output {name} has a negative dimension"))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let tensor = TensorF32::new(shape, data.to_vec())?;
+    tensor.expect_shape(&format!("{model} output {name}"), expected)?;
+    Ok(tensor)
 }
 
 /// The expected shapes of the encoder outputs, in the output order of the specification.
@@ -273,6 +321,11 @@ impl OrtImageFeatures {
     /// The values with their decoder input names.
     pub(super) fn named_values(&self) -> impl Iterator<Item = (&'static str, &DynValue)> {
         ENCODER.onnx_outputs.iter().copied().zip(self.values.iter())
+    }
+
+    /// The `image_embed` value, the input of the people and sky head.
+    fn image_embed(&self) -> &DynValue {
+        &self.values[0]
     }
 }
 
@@ -314,6 +367,60 @@ impl SegmentationEncoder for OrtEncoder {
         };
         let values = [take(0)?, take(1)?, take(2)?];
         Ok(Arc::new(OrtImageFeatures { values }))
+    }
+}
+
+struct OrtHead {
+    session: Session,
+}
+
+impl SegmentationHead for OrtHead {
+    fn run(&mut self, features: &Arc<dyn ImageFeatures>) -> Result<HeadOutput> {
+        let features = features_of::<OrtImageFeatures>(features.as_ref())?;
+        let outputs = self
+            .session
+            .run(vec![(HEAD.inputs[0], features.image_embed())])
+            .map_err(|e| anyhow!("failed to run the people and sky head: {e}"))?;
+        let read = |index: usize, expected: &[usize]| {
+            read_output(&outputs, "head", HEAD.onnx_outputs[index], expected)
+        };
+        Ok(HeadOutput {
+            sky_logits: read(0, &SKY_LOGITS_SHAPE)?,
+            center_logits: read(1, &CENTER_LOGITS_SHAPE)?,
+            center_offset: read(2, &CENTER_OFFSET_SHAPE)?,
+            log_size: read(3, &LOG_SIZE_SHAPE)?,
+            presence_logits: read(4, &PRESENCE_LOGITS_SHAPE)?,
+        })
+    }
+}
+
+struct OrtSubjectModel {
+    session: Session,
+}
+
+impl SubjectModel for OrtSubjectModel {
+    fn run(&mut self, pixel_values: &TensorF32) -> Result<SubjectOutput> {
+        let input_name = SUBJECT.inputs[0];
+        let view = TensorRef::from_array_view((pixel_values.shape(), pixel_values.data()))
+            .map_err(|e| anyhow!("failed to bind input {input_name}: {e}"))?;
+        let outputs = self
+            .session
+            .run(vec![(input_name, view)])
+            .map_err(|e| anyhow!("failed to run S3OD: {e}"))?;
+        Ok(SubjectOutput {
+            masks: read_output(
+                &outputs,
+                "S3OD",
+                SUBJECT.onnx_outputs[0],
+                &SUBJECT_MASKS_SHAPE,
+            )?,
+            iou_scores: read_output(
+                &outputs,
+                "S3OD",
+                SUBJECT.onnx_outputs[1],
+                &SUBJECT_SCORES_SHAPE,
+            )?,
+        })
     }
 }
 
@@ -376,6 +483,16 @@ mod tests {
             .err()
             .expect("missing decoder file");
         assert!(err.to_string().contains("point_decoder.onnx"), "{err}");
+        let err = backend
+            .load_head(&directory)
+            .err()
+            .expect("missing head file");
+        assert!(err.to_string().contains("people_sky_head.onnx"), "{err}");
+        let err = backend
+            .load_subject_model(&directory)
+            .err()
+            .expect("missing S3OD file");
+        assert!(err.to_string().contains("subject_masks.onnx"), "{err}");
         std::fs::remove_dir_all(&directory).expect("remove directory");
     }
 }

@@ -1,4 +1,4 @@
-//! `SegmentationService` server (master plan sections 9.2.1 and 9.2.2, SM3.A and SM3.B).
+//! `SegmentationService` server (master plan section 9.2, SM3.A, SM3.B, and SM3.C).
 //!
 //! Converts the proto messages to engine values, runs the engine on the blocking thread pool, and
 //! reports each outcome in the `AiResponseHeader`: the gRPC status stays OK, and a failed
@@ -16,13 +16,16 @@ use crate::proto::alcedo::ai::{
     DecodeSegmentationPromptRequest, DecodeSegmentationPromptResponse,
     EndSegmentationSessionRequest, EndSegmentationSessionResponse, GetSegmentationStatusRequest,
     GetSegmentationStatusResponse, LoadSegmentationModelsRequest, LoadSegmentationModelsResponse,
-    SegmentationMaskLevel, SegmentationModelResidency, SegmentationPointLabel,
+    RunSegmentationTaskRequest, RunSegmentationTaskResponse, SegmentationBox,
+    SegmentationMaskLevel, SegmentationModelResidency, SegmentationPerson, SegmentationPointLabel,
+    SegmentationTask as ProtoSegmentationTask, SegmentationTaskMaskKind,
     StartSegmentationSessionRequest, StartSegmentationSessionResponse,
     UnloadSegmentationModelsRequest, UnloadSegmentationModelsResponse,
     segmentation_service_server::SegmentationService,
 };
 use crate::service::segmentation::engine::{
-    RgbImageView, SegmentationEngine, SegmentationError, StartSessionRequest,
+    RgbImageView, SegmentationEngine, SegmentationError, SegmentationTask, StartSessionRequest,
+    TaskMaskValues, TaskRequest,
 };
 use crate::service::segmentation::model_set::LOGIT_SIZE;
 use crate::service::segmentation::sam2::{PointLabel, PromptBox, PromptPoint, SegmentationPrompt};
@@ -155,6 +158,28 @@ fn prompt_from_request(
             mask_input: request.mask_input,
         },
     ))
+}
+
+/// Converts a task request to an engine task request. Rejects an unspecified or unknown task.
+fn task_from_request(
+    request: &RunSegmentationTaskRequest,
+) -> Result<TaskRequest, SegmentationError> {
+    let task = match ProtoSegmentationTask::try_from(request.task) {
+        Ok(ProtoSegmentationTask::Subject) => SegmentationTask::Subject,
+        Ok(ProtoSegmentationTask::Background) => SegmentationTask::Background,
+        Ok(ProtoSegmentationTask::Sky) => SegmentationTask::Sky,
+        Ok(ProtoSegmentationTask::People) => SegmentationTask::People,
+        Ok(ProtoSegmentationTask::Unspecified) | Err(_) => {
+            return Err(SegmentationError::InvalidInput(format!(
+                "segmentation task {} is not a task mask",
+                request.task
+            )));
+        }
+    };
+    Ok(TaskRequest {
+        task,
+        person_indices: request.person_indices.clone(),
+    })
 }
 
 #[tonic::async_trait]
@@ -335,6 +360,72 @@ impl SegmentationService for SegmentationServiceImpl {
             ),
             ended: result.unwrap_or(false),
         }))
+    }
+
+    async fn run_segmentation_task(
+        &self,
+        request: Request<RunSegmentationTaskRequest>,
+    ) -> Result<Response<RunSegmentationTaskResponse>, Status> {
+        let started = Instant::now();
+        let mut request = request.into_inner();
+        let header = header_of(request.header.take());
+        let result = match task_from_request(&request) {
+            Ok(task) => {
+                let session_id = std::mem::take(&mut request.session_id);
+                self.run_blocking(move |engine| engine.run_task(&session_id, task))
+                    .await
+            }
+            Err(err) => Err(err),
+        };
+        let mut response = RunSegmentationTaskResponse {
+            header: response_header(
+                &header,
+                "segmentation.run_task",
+                started,
+                result.as_ref().err(),
+            ),
+            ..Default::default()
+        };
+        if let Ok(result) = result {
+            response.message = result.message;
+            response.presence = result.presence;
+            response.presence_threshold = result.presence_threshold;
+            response.region_count = result.region_count;
+            response.subject_score = result.subject_score;
+            response.mask_area = result.mask_area;
+            response.model_ms = result.model_ms as i64;
+            response.people = result
+                .people
+                .into_iter()
+                .enumerate()
+                .map(|(index, person)| SegmentationPerson {
+                    index: index as u32,
+                    r#box: Some(SegmentationBox {
+                        x0: person.x0,
+                        y0: person.y0,
+                        x1: person.x1,
+                        y1: person.y1,
+                    }),
+                    score: person.score,
+                })
+                .collect();
+            if let Some(mask) = result.mask {
+                response.found = true;
+                response.mask_width = mask.width;
+                response.mask_height = mask.height;
+                match mask.values {
+                    TaskMaskValues::Binary(values) => {
+                        response.mask_kind = SegmentationTaskMaskKind::Binary as i32;
+                        response.mask_r8 = values;
+                    }
+                    TaskMaskValues::Alpha(values) => {
+                        response.mask_kind = SegmentationTaskMaskKind::Alpha as i32;
+                        response.alpha_values = values;
+                    }
+                }
+            }
+        }
+        Ok(Response::new(response))
     }
 }
 
@@ -578,5 +669,121 @@ mod tests {
             .into_inner();
         assert_eq!(status.cached_image_count, 1);
         assert_eq!(status.session_count, 2);
+    }
+
+    async fn run_task(
+        service: &SegmentationServiceImpl,
+        session_id: &str,
+        task: ProtoSegmentationTask,
+        person_indices: Vec<u32>,
+    ) -> RunSegmentationTaskResponse {
+        service
+            .run_segmentation_task(Request::new(RunSegmentationTaskRequest {
+                header: None,
+                session_id: session_id.to_string(),
+                task: task as i32,
+                person_indices,
+            }))
+            .await
+            .expect("transport ok")
+            .into_inner()
+    }
+
+    #[tokio::test]
+    async fn server_maps_task_result_and_not_found() {
+        let service = loaded_service().await;
+        let session = start_with_key(&service, "", true).await;
+
+        // The fake head finds no sky: a successful result without a mask.
+        let sky = run_task(
+            &service,
+            &session.session_id,
+            ProtoSegmentationTask::Sky,
+            vec![],
+        )
+        .await;
+        assert_eq!(
+            header_status(&sky.header).0,
+            AiResponseStatus::AiStatusOk as i32
+        );
+        assert!(!sky.found);
+        assert!(sky.message.starts_with("No sky found"), "{}", sky.message);
+        assert!(sky.mask_r8.is_empty() && sky.alpha_values.is_empty());
+        assert!(sky.presence_threshold > 0.42 && sky.presence_threshold < 0.43);
+
+        let unspecified = run_task(
+            &service,
+            &session.session_id,
+            ProtoSegmentationTask::Unspecified,
+            vec![],
+        )
+        .await;
+        assert_eq!(
+            header_status(&unspecified.header),
+            (
+                AiResponseStatus::AiStatusInvalidArgument as i32,
+                AiErrorCode::AiErrorInvalidInput as i32
+            )
+        );
+        let missing = run_task(&service, "missing", ProtoSegmentationTask::People, vec![]).await;
+        assert_eq!(
+            header_status(&missing.header).1,
+            AiErrorCode::AiErrorSessionNotFound as i32
+        );
+    }
+
+    #[tokio::test]
+    async fn server_maps_people_list_and_binary_mask() {
+        use crate::service::segmentation::model_set::{CENTER_LOGITS_SHAPE, HEAD_GRID};
+        use crate::service::segmentation::tensor::TensorF32;
+        use crate::service::segmentation::test_support::empty_head_output;
+
+        let factory = FakeFactory::new();
+        let calls = factory.calls.clone();
+        let mut head = empty_head_output();
+        head.presence_logits = TensorF32::new(vec![1, 2], vec![-5.0, 5.0]).expect("presence");
+        let mut center = vec![-10.0f32; HEAD_GRID * HEAD_GRID];
+        center[20 * HEAD_GRID + 32] = 3.0;
+        head.center_logits = TensorF32::new(CENTER_LOGITS_SHAPE.to_vec(), center).expect("center");
+        *calls.head_output.lock().expect("head output") = Some(head);
+        let service =
+            SegmentationServiceImpl::new(Arc::new(SegmentationEngine::new(Arc::new(factory))));
+        service
+            .load_segmentation_models(Request::new(LoadSegmentationModelsRequest {
+                header: None,
+                model_directory: model_directory("server").display().to_string(),
+                device: "fake".to_string(),
+            }))
+            .await
+            .expect("transport ok");
+        let session = start_with_key(&service, "", true).await;
+        let people = run_task(
+            &service,
+            &session.session_id,
+            ProtoSegmentationTask::People,
+            vec![0],
+        )
+        .await;
+        assert_eq!(
+            header_status(&people.header).0,
+            AiResponseStatus::AiStatusOk as i32
+        );
+        assert!(people.found);
+        assert!(people.message.is_empty());
+        assert_eq!(people.mask_kind, SegmentationTaskMaskKind::Binary as i32);
+        // The union mask has the size of the 8 x 4 session image.
+        assert_eq!((people.mask_width, people.mask_height), (8, 4));
+        assert_eq!(people.mask_r8.len(), 8 * 4);
+        assert!(people.alpha_values.is_empty());
+        assert_eq!(people.people.len(), 1);
+        let person = &people.people[0];
+        assert_eq!(person.index, 0);
+        // A 1 x 1 cell box (log size 0) centered on the cell (20, 32).
+        let prompt_box = person.r#box.expect("box");
+        assert_eq!(
+            (prompt_box.x0, prompt_box.y0, prompt_box.x1, prompt_box.y1),
+            (31.5 / 64.0, 19.5 / 64.0, 32.5 / 64.0, 20.5 / 64.0)
+        );
+        assert!(people.model_ms >= 0);
     }
 }

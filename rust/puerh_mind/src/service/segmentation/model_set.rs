@@ -1,4 +1,4 @@
-//! Files, tensor names, and tensor shapes of the AI Mask model set (master plan section 8.17.1).
+//! Files, tensor names, and tensor shapes of the AI Mask model set (master plan section 8.2.1).
 
 use super::backend::SegmentationModelRole;
 
@@ -22,6 +22,31 @@ pub const HIGH_RES_FEATS_1_SHAPE: [usize; 4] = [1, 64, 128, 128];
 pub const MASK_INPUT_SHAPE: [usize; 4] = [1, 1, LOGIT_SIZE, LOGIT_SIZE];
 pub const MASK_LOGITS_SHAPE: [usize; 4] = [1, MASK_TOKEN_COUNT, LOGIT_SIZE, LOGIT_SIZE];
 pub const MASK_SCORES_SHAPE: [usize; 2] = [1, MASK_TOKEN_COUNT];
+
+/// Side of the square cell grid of the people and sky head (the `image_embed` grid).
+pub const HEAD_GRID: usize = 64;
+/// Model-input pixels per head grid cell.
+pub const HEAD_CELL_MODEL_PIXELS: usize = IMAGE_SIZE / HEAD_GRID;
+pub const SKY_LOGITS_SHAPE: [usize; 4] = [1, 1, HEAD_GRID, HEAD_GRID];
+pub const CENTER_LOGITS_SHAPE: [usize; 4] = [1, 1, HEAD_GRID, HEAD_GRID];
+pub const CENTER_OFFSET_SHAPE: [usize; 4] = [1, 2, HEAD_GRID, HEAD_GRID];
+pub const LOG_SIZE_SHAPE: [usize; 4] = [1, 2, HEAD_GRID, HEAD_GRID];
+pub const PRESENCE_LOGITS_SHAPE: [usize; 2] = [1, 2];
+/// File of the head thresholds (best F1 on the COCO validation set) in the model directory.
+pub const HEAD_THRESHOLDS_FILE: &str = "people_sky_head.json";
+
+/// Side of the square S3OD input.
+pub const SUBJECT_IMAGE_SIZE: usize = 1024;
+/// Number of S3OD masks and IoU scores.
+pub const SUBJECT_MASK_COUNT: usize = 3;
+pub const SUBJECT_PIXEL_VALUES_SHAPE: [usize; 4] = [1, 3, SUBJECT_IMAGE_SIZE, SUBJECT_IMAGE_SIZE];
+pub const SUBJECT_MASKS_SHAPE: [usize; 4] = [
+    1,
+    SUBJECT_MASK_COUNT,
+    SUBJECT_IMAGE_SIZE,
+    SUBJECT_IMAGE_SIZE,
+];
+pub const SUBJECT_SCORES_SHAPE: [usize; 2] = [1, SUBJECT_MASK_COUNT];
 
 /// File and tensor names of one model. ONNX and Core ML models have the same input names; the
 /// decoder output names differ.
@@ -61,9 +86,43 @@ pub const DECODER: ModelSpec = ModelSpec {
     coreml_outputs: &["masks", "iou_predictions"],
 };
 
+/// People and sky head: reads `image_embed`, the first encoder output.
+pub const HEAD: ModelSpec = ModelSpec {
+    role: SegmentationModelRole::Head,
+    onnx_file: "people_sky_head.onnx",
+    coreml_directory: "people_sky_head.mlmodelc",
+    inputs: &["image_embed"],
+    onnx_outputs: &[
+        "sky_logits",
+        "center_logits",
+        "center_offset",
+        "log_size",
+        "presence_logits",
+    ],
+    coreml_outputs: &[
+        "sky_logits",
+        "center_logits",
+        "center_offset",
+        "log_size",
+        "presence_logits",
+    ],
+};
+
+/// S3OD `s3od-synth`: the Subject model.
+pub const SUBJECT: ModelSpec = ModelSpec {
+    role: SegmentationModelRole::Subject,
+    onnx_file: "subject_masks.onnx",
+    coreml_directory: "s3od.mlmodelc",
+    inputs: &["pixel_values"],
+    onnx_outputs: &["masks", "iou_scores"],
+    coreml_outputs: &["masks", "iou_scores"],
+};
+
 pub fn spec(role: SegmentationModelRole) -> &'static ModelSpec {
     match role {
         SegmentationModelRole::Encoder => &ENCODER,
         SegmentationModelRole::Decoder => &DECODER,
+        SegmentationModelRole::Head => &HEAD,
+        SegmentationModelRole::Subject => &SUBJECT,
     }
 }

@@ -24,15 +24,22 @@ pub enum SegmentationModelRole {
     Encoder,
     /// SAM 2.1 tiny prompt encoder and mask decoder.
     Decoder,
+    /// People and sky head on `image_embed` (Sky and People localization).
+    Head,
+    /// S3OD `s3od-synth` (Subject and Background).
+    Subject,
 }
 
 impl SegmentationModelRole {
-    pub const ALL: [SegmentationModelRole; 2] = [Self::Encoder, Self::Decoder];
+    pub const ALL: [SegmentationModelRole; 4] =
+        [Self::Encoder, Self::Decoder, Self::Head, Self::Subject];
 
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Encoder => "encoder",
             Self::Decoder => "decoder",
+            Self::Head => "head",
+            Self::Subject => "subject",
         }
     }
 }
@@ -102,6 +109,44 @@ pub trait SegmentationDecoder: Send {
     ) -> Result<DecoderOutput>;
 }
 
+/// The outputs of one head run, in the shapes of the model specification.
+#[derive(Debug, Clone, PartialEq)]
+pub struct HeadOutput {
+    /// [1, 1, 64, 64].
+    pub sky_logits: TensorF32,
+    /// [1, 1, 64, 64].
+    pub center_logits: TensorF32,
+    /// [1, 2, 64, 64]: x offset, then y offset, in cells.
+    pub center_offset: TensorF32,
+    /// [1, 2, 64, 64]: natural logarithm of the box width, then height, in cells.
+    pub log_size: TensorF32,
+    /// [1, 2]: sky, then person.
+    pub presence_logits: TensorF32,
+}
+
+/// A loaded people and sky head.
+pub trait SegmentationHead: Send {
+    /// Runs the head once on the `image_embed` of @p features (made by the encoder of the same
+    /// backend). The adapter checks the output shapes.
+    fn run(&mut self, features: &Arc<dyn ImageFeatures>) -> Result<HeadOutput>;
+}
+
+/// The outputs of one S3OD run, both after the sigmoid.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SubjectOutput {
+    /// [1, 3, 1024, 1024].
+    pub masks: TensorF32,
+    /// [1, 3].
+    pub iou_scores: TensorF32,
+}
+
+/// A loaded Subject model.
+pub trait SubjectModel: Send {
+    /// Runs S3OD once on @p pixel_values (shape [1, 3, 1024, 1024]). The adapter checks the output
+    /// shapes.
+    fn run(&mut self, pixel_values: &TensorF32) -> Result<SubjectOutput>;
+}
+
 /// The models of one platform and one device.
 pub trait SegmentationBackend: Send + Sync {
     /// Short name of the runtime and device class, for example `onnxruntime-directml`.
@@ -113,6 +158,11 @@ pub trait SegmentationBackend: Send + Sync {
     fn load_encoder(&self, directory: &Path) -> Result<Box<dyn SegmentationEncoder>>;
     /// Loads the decoder from @p directory, with the same error rules as the encoder.
     fn load_decoder(&self, directory: &Path) -> Result<Box<dyn SegmentationDecoder>>;
+    /// Loads the people and sky head from @p directory and runs it once, with the same error
+    /// rules as the encoder.
+    fn load_head(&self, directory: &Path) -> Result<Box<dyn SegmentationHead>>;
+    /// Loads S3OD from @p directory, with the same error rules as the encoder.
+    fn load_subject_model(&self, directory: &Path) -> Result<Box<dyn SubjectModel>>;
 }
 
 /// A device value that the platform does not support.

@@ -23,13 +23,25 @@ the selected box logits as `mask_input`.
 
 Output (--out): `manifest.json` and little-endian float32 files (`*.f32`) of the mask input and
 the logits of every returned mask.
+
+Task masks (SM3.C), when --lab-dir, --head-onnx, --head-json, and --subject-onnx are given: the
+script runs the people and sky head on the encoder output and S3OD on the photo with the functions
+of the lab repository (`alcedo-ai-mask-lab`, the code of the MVP `mask_pipeline.py`):
+`evaluate_quality_photos.sky_regions` and `region_points` (Sky), `head_model.decode_people` with
+an overlap limit of 0.5 (People), and `s3od_graphs.letterbox`, `select_mask`, and `unpad`
+(Subject). It writes the logits of each Sky region and of each listed person, and the Subject
+alpha. The People list follows the SM3.C plan: the boxes with a score of at least the list
+threshold, else the best box when the person presence passed (decision C2), sorted from left to
+right by the box center (C3). The Rust test makes the unions itself.
 """
 
 from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -115,6 +127,94 @@ def prompts_for(entry: dict) -> list[dict]:
     return prompts
 
 
+class TaskReference:
+    """The task masks of the SM3.C plan with the functions of the lab repository."""
+
+    def __init__(self, lab_dir: Path, head_onnx: Path, head_json: Path, subject_onnx: Path,
+                 decode) -> None:
+        scripts = lab_dir / "scripts"
+        for directory in (scripts / "poc" / "people_sky_head",
+                          scripts / "poc" / "sam_feature_localization"):
+            sys.path.insert(0, str(directory))
+        import evaluate_quality_photos as quality
+        import head_model
+
+        # s3od_graphs by its file path: its directory has another `compare_onnx_outputs.py`.
+        spec = importlib.util.spec_from_file_location(
+            "s3od_graphs", scripts / "ai_models" / "s3od" / "s3od_graphs.py")
+        self.s3od = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.s3od)
+        self.quality = quality
+        self.head_model = head_model
+        self.decode = decode
+        validation = json.loads(head_json.read_text())["validation"]
+        self.thresholds = {
+            "sky_presence": float(validation["presence_best_f1_sky"]["threshold"]),
+            "person_presence": float(validation["presence_best_f1_person"]["threshold"]),
+            "people_list": float(validation["person_list_best_f1_nms"]["threshold"]),
+        }
+        self.head = ort.InferenceSession(str(head_onnx), providers=["CPUExecutionProvider"])
+        self.subject = ort.InferenceSession(str(subject_onnx),
+                                            providers=["CPUExecutionProvider"])
+        self.sha256 = {"head": file_sha256(head_onnx), "head_json": file_sha256(head_json),
+                       "subject": file_sha256(subject_onnx)}
+
+    def run(self, rgb8: np.ndarray, image_embed: np.ndarray, out: Path, stem: str) -> dict:
+        sigmoid = self.quality.sigmoid
+        outputs = dict(zip(self.head_model.OUTPUT_NAMES,
+                           self.head.run(None, {"image_embed": image_embed})))
+        presence = sigmoid(outputs["presence_logits"][0])
+        record = {"sky_presence": float(presence[0]), "person_presence": float(presence[1])}
+
+        # Sky (MVP select_sky).
+        sky = {"found": False, "regions": []}
+        if presence[0] >= self.thresholds["sky_presence"]:
+            probability = sigmoid(outputs["sky_logits"][0, 0])
+            regions = self.quality.sky_regions(probability, self.quality.SKY_POINTS_PER_REGION)
+            for index, region in enumerate(regions):
+                points = self.quality.region_points(probability, region)
+                logits = self.decode(np.array([points], np.float32),
+                                     np.array([[1.0] * len(points)], np.float32))
+                logits_file = f"{stem}_sky{index}.f32"
+                (out / logits_file).write_bytes(logits.astype("<f4").tobytes())
+                sky["regions"].append({"points": points, "logits": logits_file})
+            sky["found"] = bool(regions)
+        record["sky"] = sky
+
+        # People (MVP select_people with the SM3.C list rules C2 and C3).
+        torch_outputs = {key: torch.from_numpy(value) for key, value in outputs.items()}
+        decoded = self.head_model.decode_people(torch_outputs, nms_iou=0.5)[0]
+        boxes = [{"box_cells": [float(v) for v in box], "score": float(score)}
+                 for box, score in zip(decoded["boxes"].tolist(), decoded["scores"].tolist())]
+        people = {"found": False, "all_boxes": boxes, "people": []}
+        if presence[1] >= self.thresholds["person_presence"]:
+            listed = [box for box in boxes if box["score"] >= self.thresholds["people_list"]]
+            if not listed and boxes:
+                listed = [boxes[0]]
+            listed.sort(key=lambda box: ((box["box_cells"][0] + box["box_cells"][2]) / 2,
+                                         -box["score"]))
+            for index, box in enumerate(listed):
+                model_box = [min(max(v, 0.0), 64.0) * 16.0 for v in box["box_cells"]]
+                logits = self.decode(np.array([[model_box[:2], model_box[2:]]], np.float32),
+                                     np.array([[2.0, 3.0]], np.float32))
+                logits_file = f"{stem}_person{index}.f32"
+                (out / logits_file).write_bytes(logits.astype("<f4").tobytes())
+                people["people"].append({**box, "logits": logits_file})
+            people["found"] = bool(listed)
+        record["people"] = people
+
+        # Subject (MVP select_subject with S3OD).
+        pixels, info = self.s3od.letterbox(rgb8, self.s3od.IMAGE_SIZE)
+        masks, iou_scores = self.subject.run(None, {"pixel_values": pixels})
+        alpha, index = self.s3od.select_mask(masks, iou_scores)
+        alpha = np.ascontiguousarray(self.s3od.unpad(alpha[None], info)[0], np.float32)
+        alpha_file = f"{stem}_subject_alpha.f32"
+        (out / alpha_file).write_bytes(alpha.astype("<f4").tobytes())
+        record["subject"] = {"width": int(alpha.shape[1]), "height": int(alpha.shape[0]),
+                             "score": float(iou_scores[0, index]), "alpha": alpha_file}
+        return record
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--onnx-dir", type=Path, required=True,
@@ -122,7 +222,14 @@ def main() -> None:
     parser.add_argument("--photos", type=Path, required=True)
     parser.add_argument("--prompts", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--lab-dir", type=Path, help="alcedo-ai-mask-lab checkout (task masks)")
+    parser.add_argument("--head-onnx", type=Path)
+    parser.add_argument("--head-json", type=Path)
+    parser.add_argument("--subject-onnx", type=Path)
     args = parser.parse_args()
+    task_arguments = (args.lab_dir, args.head_onnx, args.head_json, args.subject_onnx)
+    if any(task_arguments) and not all(task_arguments):
+        parser.error("the task masks need --lab-dir, --head-onnx, --head-json, and --subject-onnx")
 
     encoder_path = args.onnx_dir / "point_encoder.onnx"
     decoder_path = args.onnx_dir / "point_decoder.onnx"
@@ -134,6 +241,25 @@ def main() -> None:
     manifest = {"onnxruntime": ort.__version__, "torch": torch.__version__,
                 "encoder_sha256": file_sha256(encoder_path),
                 "decoder_sha256": file_sha256(decoder_path), "photos": []}
+    features: list = []
+
+    def decode_single(coords: np.ndarray, labels: np.ndarray) -> np.ndarray:
+        """One decoder run without a mask input on the current photo; the selected single mask."""
+        image_embed, feats_0, feats_1 = features
+        logits, scores, _ = decoder.run(None, {
+            "image_embed": image_embed, "high_res_feats_0": feats_0, "high_res_feats_1": feats_1,
+            "point_coords": coords, "point_labels": labels,
+            "mask_input": np.zeros((1, 1, LOGIT_SIZE, LOGIT_SIZE), np.float32),
+            "has_mask_input": np.array([0.0], np.float32)})
+        levels, selected = select_masks(logits[0], scores[0], False)
+        return levels[selected]["logits"]
+
+    tasks = None
+    if all(task_arguments):
+        tasks = TaskReference(args.lab_dir, args.head_onnx, args.head_json, args.subject_onnx,
+                              decode_single)
+        manifest["task_sha256"] = tasks.sha256
+        manifest["task_thresholds"] = tasks.thresholds
     for photo_path in sorted(args.photos.iterdir()):
         entry = entries.get(photo_path.name)
         if entry is None:
@@ -143,6 +269,7 @@ def main() -> None:
         height, width = rgb8.shape[:2]
         (args.out / f"{stem}.rgb").write_bytes(rgb8.tobytes())
         image_embed, feats_0, feats_1 = encoder.run(None, {"pixel_values": preprocess(rgb8)})
+        features[:] = [image_embed, feats_0, feats_1]
         selected_by_name: dict[str, np.ndarray] = {}
         photo = {"name": stem, "width": int(width), "height": int(height),
                  "pixels": f"{stem}.rgb", "prompts": []}
@@ -170,6 +297,8 @@ def main() -> None:
                 record["masks"].append({"token": item["token"], "score": item["score"],
                                         "area": item["area"], "logits": logits_file})
             photo["prompts"].append(record)
+        if tasks is not None:
+            photo["tasks"] = tasks.run(rgb8, image_embed, args.out, stem)
         manifest["photos"].append(photo)
         print(f"{stem}: {width}x{height}, {len(photo['prompts'])} prompts")
     (args.out / "manifest.json").write_text(json.dumps(manifest, indent=1))
