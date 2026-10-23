@@ -70,4 +70,43 @@ TEST(GpuDagGeometry, RotatedUncroppedSourceRequestIgnoresCropAndKeepsRotation) {
   EXPECT_EQ(cropped.ToJson(), cropped_json_before);
 }
 
+TEST(GpuDagGeometry, ReferenceSourceRequestIgnoresCropAndRotation) {
+  auto document = CreateDefaultPipelineDocument();
+  document.Geometry().SetCropRect({0.2f, 0.1f, 0.5f, 0.6f});
+  document.Geometry().SetRotationDegrees(7.0f);
+  const auto    json_before = document.ToJson();
+
+  // The AI Mask analysis request: the whole frame at a long edge of at most 4096.
+  ExecutionPlan plan;
+  plan.source.develop_output_extent = {6000, 4000};
+  plan.source.full_reference_extent = {6000, 4000};
+  RenderRequest request;
+  request.resolution.max_edge = 4096;
+  request.document_geometry   = DocumentGeometryUse::ReferenceSource;
+  GraphCompiler::BindFrameGeometry(plan, document, request);
+  const auto& geometry = plan.geometry;
+
+  // EditSpace is ReferenceSpace: no crop and no rotation reach the frame.
+  EXPECT_EQ(geometry.edit_extent, (Extent2D{6000, 4000}));
+  ExpectSameMatrix(geometry.reference_to_edit, Matrix3x3::Identity());
+  EXPECT_EQ(geometry.render_extent, (Extent2D{4096, 2731}));
+  EXPECT_TRUE(CoversFullEditSpace(geometry));
+
+  // render_to_reference is a pure scale, so normalized render coordinates are normalized
+  // ReferenceSpace coordinates.
+  EXPECT_FLOAT_EQ(geometry.render_to_reference.m[1], 0.0f);
+  EXPECT_FLOAT_EQ(geometry.render_to_reference.m[2], 0.0f);
+  EXPECT_FLOAT_EQ(geometry.render_to_reference.m[3], 0.0f);
+  EXPECT_FLOAT_EQ(geometry.render_to_reference.m[5], 0.0f);
+  for (const auto& uv : {Vector2{0.0f, 0.0f}, Vector2{0.25f, 0.75f}, Vector2{1.0f, 1.0f}}) {
+    const auto reference =
+        TransformPoint(geometry.render_to_reference,
+                       Vector2{uv.x * static_cast<float>(geometry.render_extent.width),
+                               uv.y * static_cast<float>(geometry.render_extent.height)});
+    EXPECT_NEAR(reference.x / 6000.0f, uv.x, 1.0e-6f);
+    EXPECT_NEAR(reference.y / 4000.0f, uv.y, 1.0e-6f);
+  }
+  EXPECT_EQ(document.ToJson(), json_before);
+}
+
 }  // namespace alcedo

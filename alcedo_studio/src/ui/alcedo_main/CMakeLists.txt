@@ -19,6 +19,7 @@ def_library(EditorViewerLogic
         "${ALCEDO_UI_ROOT}/edit_viewer/edit_viewer_overlay_geometry.cpp"
         "${ALCEDO_UI_ROOT}/edit_viewer/viewport_mapper.cpp"
         "${ALCEDO_UI_ROOT}/edit_viewer/mask_edit_geometry.cpp"
+        "${ALCEDO_UI_ROOT}/edit_viewer/ai_mask_prompt_geometry.cpp"
         "${ALCEDO_UI_ROOT}/edit_viewer/mask_overlay_geometry.cpp"
         "${ALCEDO_UI_ROOT}/edit_viewer/mask_overlay_layout.cpp"
         "${ALCEDO_UI_ROOT}/edit_viewer/overlay_cursor.cpp"
@@ -29,6 +30,7 @@ def_library(EditorViewerLogic
         "${ALCEDO_INCLUDE_ROOT}/ui/edit_viewer/viewer_state.hpp"
         "${ALCEDO_INCLUDE_ROOT}/ui/edit_viewer/viewport_mapper.hpp"
         "${ALCEDO_INCLUDE_ROOT}/ui/edit_viewer/mask_edit_geometry.hpp"
+        "${ALCEDO_INCLUDE_ROOT}/ui/edit_viewer/ai_mask_prompt_geometry.hpp"
         "${ALCEDO_INCLUDE_ROOT}/ui/edit_viewer/mask_overlay_geometry.hpp"
         "${ALCEDO_INCLUDE_ROOT}/ui/edit_viewer/mask_overlay_layout.hpp"
         "${ALCEDO_INCLUDE_ROOT}/ui/edit_viewer/overlay_cursor.hpp"
@@ -276,6 +278,7 @@ target_link_libraries(AlbumBackendLib
         PipelineMgmtService
         AdjustmentTransferService
         AdjustmentTransferCatalog
+        AiMaskAnalysisImage
         EditorComparisonInputs
         EditorSessionService
         EditorMaskCreationController

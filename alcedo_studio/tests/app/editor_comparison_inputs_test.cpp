@@ -13,6 +13,7 @@
 #include <string>
 #include <string_view>
 
+#include "app/ai_mask_analysis_image.hpp"
 #include "app/editor_pipeline_command_service.hpp"
 #include "app/editor_session_ports.hpp"
 #include "app/pipeline_document_history.hpp"
@@ -569,6 +570,112 @@ TEST(EditorComparisonSensorSettingsTest, DocumentOfAnotherImageRejectsSensorSett
   EXPECT_EQ(DocumentRevisionFingerprint(other), before);
   EXPECT_EQ(CanonicalPipelineDocumentJson(other), json);
   EXPECT_EQ(other.Develop()->Params().DemosaicMethod(), "default");
+}
+
+// SM4 plan S1: the AI Mask analysis document has the import root look and the current Develop.
+TEST(AiMaskAnalysisDevelopTest, UseAllSettingsTakesWhiteBalanceAndSensorSettings) {
+  DevelopParamsModel current;
+  current.ApplyRawDecodeUpdate(
+      {.demosaic_method = "neural_engine", .highlights_reconstruct = false});
+  current.ApplyLensCalibrationUpdate({.lens_enabled = true, .apply_tca = false});
+  current.ApplyColorTemperatureUpdate(
+      {.wb_mode = "custom", .custom_cct = 5000.0f, .custom_tint = 7.0f});
+
+  DevelopParamsModel root;
+  root.ApplyColorTemperatureUpdate({.wb_mode = "custom", .custom_cct = 3900.0f});
+  root.UseAllSettingsFrom(current);
+  EXPECT_EQ(root.Params(), current.Params());
+  EXPECT_EQ(root.FieldsRevision(DirtyFieldMask{DevelopDirty::All}),
+            current.FieldsRevision(DirtyFieldMask{DevelopDirty::All}));
+  EXPECT_EQ(root.Revision(), current.Revision());
+  EXPECT_FLOAT_EQ(root.Params().custom_cct, 5000.0f) << "the white balance is taken too";
+
+  const auto before = root.Params();
+  EXPECT_THROW(root.UseAllSettingsFrom(root), std::invalid_argument);
+  EXPECT_EQ(root.Params(), before);
+}
+
+TEST_F(EditorComparisonInputsTest, AiMaskAnalysisDocumentHasTheRootLookAndTheCurrentDevelop) {
+  std::string error;
+  ASSERT_TRUE(CommitPanelField(history_, handle_, "raw_decode",
+                               R"({"raw":{"highlights_reconstruct":false}})", &error))
+      << error;
+  ASSERT_TRUE(CommitPanelField(history_, handle_, "lens_calib",
+                               R"({"lens_calib":{"enabled":true,"apply_tca":false}})", &error))
+      << error;
+  ASSERT_TRUE(CommitPanelField(history_, handle_, "color_temp",
+                               R"({"wb_mode":"custom","custom_cct":4100.0,"custom_tint":12.0})",
+                               &error))
+      << error;
+  ASSERT_TRUE(
+      CommitPanelField(history_, handle_, "crop_rotate", R"({"rotation_degrees":7.0})", &error))
+      << error;
+  ASSERT_TRUE(CommitGradeField(history_, handle_, "exposure", R"({"exposure":0.75})", &error))
+      << error;
+  const auto                                   captured = Working();
+  const auto                                   before   = ReadHeldState();
+
+  std::shared_ptr<const PipelineGraphSnapshot> analysis;
+  ASSERT_TRUE(history_.BuildAiMaskAnalysisDocument(handle_, captured, &analysis, &error)) << error;
+  ASSERT_NE(analysis, nullptr);
+  ExpectHeldStateUnchanged(before);
+
+  EditorComparisonInputPair pair;
+  ASSERT_TRUE(Build(captured, EditorComparisonSource::Root(), EditorComparisonSource::Current(),
+                    &pair, &error))
+      << error;
+  EXPECT_FLOAT_EQ(ExposureEv(analysis->Document()), ExposureEv(pair.a.snapshot->Document()))
+      << "the analysis document keeps the root Color Grade";
+  EXPECT_FLOAT_EQ(ExposureEv(captured->Document()), 0.75f);
+  EXPECT_EQ(DevelopPayloadOf(*analysis), DevelopPayloadOf(*captured))
+      << "every Develop field, including the white balance, is the current one";
+  EXPECT_FLOAT_EQ(DevelopPayloadOf(*analysis).custom_cct, 4100.0f);
+  for (const auto field : {DevelopDirty::Demosaic, DevelopDirty::Highlights, DevelopDirty::Lens,
+                           DevelopDirty::WhiteBalance}) {
+    EXPECT_EQ(DevelopStamp(*analysis, field), DevelopStamp(*captured, field));
+  }
+  EXPECT_FLOAT_EQ(RotationDegrees(analysis->Document()), 0.0f);
+  EXPECT_EQ(analysis->ElementId(), captured->ElementId());
+  EXPECT_EQ(analysis->Lineage(), captured->Lineage())
+      << "the editor executor keeps its binding for the analysis render";
+}
+
+TEST_F(EditorComparisonInputsTest, AiMaskAnalysisImageKeyIgnoresGradingAndTracksDevelop) {
+  const auto key_of_working = [this]() {
+    std::shared_ptr<const PipelineGraphSnapshot> analysis;
+    std::string                                  error;
+    EXPECT_TRUE(history_.BuildAiMaskAnalysisDocument(handle_, Working(), &analysis, &error))
+        << error;
+    return analysis == nullptr ? std::string{}
+                               : MakeAiMaskAnalysisImageKey(kElementId, 7, analysis->Document());
+  };
+  const auto first = key_of_working();
+  ASSERT_EQ(first.size(), 36u);
+  EXPECT_EQ(first.rfind(kAiMaskAnalysisImageKeyPrefix, 0), 0u);
+  for (const char c : first.substr(4)) {
+    EXPECT_TRUE((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) << first;
+  }
+  EXPECT_EQ(key_of_working(), first) << "equal states give equal keys";
+
+  std::string error;
+  ASSERT_TRUE(CommitGradeField(history_, handle_, "exposure", R"({"exposure":1.25})", &error))
+      << error;
+  ASSERT_TRUE(
+      CommitPanelField(history_, handle_, "crop_rotate", R"({"rotation_degrees":4.0})", &error))
+      << error;
+  EXPECT_EQ(key_of_working(), first) << "grading, crop, and rotation do not change the key";
+
+  ASSERT_TRUE(CommitPanelField(history_, handle_, "color_temp",
+                               R"({"wb_mode":"custom","custom_cct":6100.0,"custom_tint":3.0})",
+                               &error))
+      << error;
+  const auto white_balance = key_of_working();
+  EXPECT_NE(white_balance, first) << "a Develop change changes the key";
+
+  std::shared_ptr<const PipelineGraphSnapshot> analysis;
+  ASSERT_TRUE(history_.BuildAiMaskAnalysisDocument(handle_, Working(), &analysis, &error)) << error;
+  EXPECT_NE(MakeAiMaskAnalysisImageKey(kElementId + 1, 7, analysis->Document()), white_balance);
+  EXPECT_NE(MakeAiMaskAnalysisImageKey(kElementId, 8, analysis->Document()), white_balance);
 }
 
 }  // namespace

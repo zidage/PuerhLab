@@ -290,6 +290,29 @@ class IEditorHistoryPort {
     return false;
   }
 
+  /**
+   * @brief Build the frozen AI Mask analysis document of the held image without changing its
+   *        history (BuildAiMaskAnalysisDocument).
+   *
+   * Replays the immutable root and gives it every Develop setting of @p captured_current. Moves
+   * no head, writes no commit, WAL record, or checkpoint, and does not touch the working document,
+   * its dirty state, or the published previews. Session owner thread.
+   *
+   * @param captured_current Preview of the working values. It must belong to the held image and to
+   *        the lineage of its working document.
+   * @return true with @p analysis set; false with @p error set and @p analysis unchanged. Default
+   *         ports reject.
+   */
+  virtual auto BuildAiMaskAnalysisDocument(
+      const EditorHistoryGuardHandle& /*guard*/,
+      const std::shared_ptr<const PipelineGraphSnapshot>& /*captured_current*/,
+      std::shared_ptr<const PipelineGraphSnapshot>* /*analysis*/, std::string* error) -> bool {
+    if (error != nullptr) {
+      *error = "The AI Mask analysis document is not supported by this history port";
+    }
+    return false;
+  }
+
   /// Read only the active Version identity. This avoids constructing the
   /// Versions/commits projection when a consumer only needs a layout key or
   /// stale-session check.

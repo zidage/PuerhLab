@@ -8,6 +8,7 @@
 #include <optional>
 #include <utility>
 
+#include "app/ai_mask_analysis_image.hpp"
 #include "app/editor_comparison_inputs.hpp"
 #include "app/editor_session_types.hpp"
 #include "app/pipeline_service.hpp"
@@ -298,6 +299,39 @@ auto EditorSessionHistoryPort::BuildComparisonInputs(
                                                    guard.element_id, a, b, error);
   if (!built.has_value()) return false;
   *pair = std::move(*built);
+  return true;
+}
+
+auto EditorSessionHistoryPort::BuildAiMaskAnalysisDocument(
+    const alcedo::EditorHistoryGuardHandle&                     guard,
+    const std::shared_ptr<const alcedo::PipelineGraphSnapshot>& captured_current,
+    std::shared_ptr<const alcedo::PipelineGraphSnapshot>* analysis, std::string* error) -> bool {
+  if (analysis == nullptr) {
+    if (error) *error = "The AI Mask analysis document requires output storage";
+    return false;
+  }
+  if (!guard.valid) {
+    if (error) *error = "Editor history guard is invalid";
+    return false;
+  }
+  std::scoped_lock lock(mutex_);
+  auto             state = state_->EnsureWorkingState(guard.element_id, error);
+  if (!state) return false;
+  if (!state->graph || !state->root || !state->document) {
+    if (error) *error = "Editor history root is unavailable for the AI Mask analysis document";
+    return false;
+  }
+  if (captured_current && captured_current->Lineage() != state->document->Lineage()) {
+    if (error) *error = "The captured working state belongs to an earlier load of this history";
+    return false;
+  }
+  try {
+    *analysis = alcedo::BuildAiMaskAnalysisDocument(*state->graph, *state->root, captured_current,
+                                                    guard.element_id);
+  } catch (const std::exception& ex) {
+    if (error) *error = ex.what();
+    return false;
+  }
   return true;
 }
 

@@ -256,6 +256,18 @@ class DevelopParamsModel final
    */
   void               UseSensorSettingsFrom(const DevelopParamsModel& current);
 
+  /**
+   * @brief Take every field, with its stamp, from @p current, including the white balance.
+   *
+   * Afterwards this Model equals @p current, so a renderer that applied @p current reuses its
+   * sensor result. Runs under both Model locks.
+   *
+   * Used for the AI Mask analysis document, which renders the import root look with the current
+   * Develop settings. Never call it on a Model of the working document.
+   * @throws std::invalid_argument when @p current is this Model; this Model is unchanged.
+   */
+  void               UseAllSettingsFrom(const DevelopParamsModel& current);
+
   /// Current DNG profile reference, read under the Model lock.
   [[nodiscard]] auto DngProfile() const -> DngColorProfileRef;
 

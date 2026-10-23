@@ -8,7 +8,8 @@ people and sky head, and S3OD `s3od-synth` (section 8.2). Alcedo Studio does not
 or SAM3. SM3 is split into SM3.A, SM3.B, and SM3.C. SM3.A is complete on 2026-10-22
 ([phase plan](ai_segmentation_mask/phase_sm3a_segmentation_service_plan.md)); its macOS port check
 ran with the SM3.B macOS run. SM3.B is complete on Windows and macOS on 2026-10-22
-([phase plan](ai_segmentation_mask/phase_sm3b_embedding_cache_plan.md)). SM2 runs after SM9
+([phase plan](ai_segmentation_mask/phase_sm3b_embedding_cache_plan.md)). SM4 is complete on Windows on
+2026-10-23 ([phase plan](ai_segmentation_mask/phase_sm4_analysis_render_plan.md)). SM2 runs after SM9
 (section 7).
 
 Target release: Alcedo Studio 0.3.4. The AI Segmentation Mask is the main feature of that release.
@@ -199,7 +200,7 @@ Related plans:
 
 | Area | Current owner and path | Current behavior | Required change |
 | --- | --- | --- | --- |
-| Pointer mapping | `ui/edit_viewer/mask_edit_geometry.cpp:284-318` | `MaskEditGeometry::MapItemToReference` maps an item point to ReferenceSpace pixels and normalized ReferenceSpace. It handles a region-of-interest frame. | Reuse for prompts (SM9). |
+| Pointer mapping | `ui/edit_viewer/mask_edit_geometry.cpp:284-318` | `MaskEditGeometry::MapItemToReference` maps an item point to ReferenceSpace pixels and normalized ReferenceSpace. It handles a region-of-interest frame. | SM4 maps its result to prompt coordinates of the analysis image (SM4 plan S6 to S8); SM9 calls it. |
 | Frame geometry | `include/edit/geometry/resolved_render_geometry.hpp:32-50` | `ResolvedRenderGeometry` carries the decoded, reference, edit, and render transforms. | No change. |
 | Pass order | `graph_compiler.cpp:417-508` | Develop runs Lens, then `GeometryResample`, then color conversion. Mask passes run per Color Grade at `render_extent`. | No change. Crop and rotation stay upstream. |
 
@@ -207,8 +208,8 @@ Related plans:
 
 | Area | Current owner and path | Current behavior | Required change |
 | --- | --- | --- | --- |
-| Document geometry use | `include/edit/geometry/render_request.hpp`, `graph_compiler.cpp:72-87` | `DocumentGeometryUse` has `ApplyCropAndRotation` and `RotatedUncroppedSource`. `RotatedUncroppedSource` keeps the document rotation and frames the bounding box of the rotated source. Only the Geometry panel uses it. | The analysis render needs the unrotated, uncropped source. SM4 adds that mode or proves an equivalent existing path. |
-| Host readback | `renderer/pipeline_scheduler.cpp:182-198`, `include/edit/runtime/frame_presenter.hpp:34` | `require_host_output` downloads the final display output. Only THUMBNAIL and FULL_RES_EXPORT renders set it. | Use it for the analysis render (SM4). |
+| Document geometry use | `include/edit/geometry/render_request.hpp`, `graph_compiler.cpp:72-87` | `DocumentGeometryUse` has `ApplyCropAndRotation` and `RotatedUncroppedSource`. `RotatedUncroppedSource` keeps the document rotation and frames the bounding box of the rotated source. Only the Geometry panel uses it. | SM4 adds `ReferenceSource` (no crop, no rotation). |
+| Host readback | `editor_image_render_port.hpp`, `EditorSessionRenderSchedulerPort::ScheduleImages` | The editor image render port renders documents of the held image to host RGBA32F on the editor executor. The comparison and `render.preview` use it. | SM4 renders the analysis document through it. |
 
 ### 5.4 Sidecar and model download
 
@@ -274,7 +275,7 @@ The project storage owns the R8 bytes. No owner keeps a copy of another owner's 
 | SM3.A | Segmentation service architecture: proto, Rust service with the Windows ONNX Runtime and macOS Core ML adapters, SAM 2.1 encode and decode, C++ client with a persistent channel, app session | proto, Rust service, `sidecar_client`, app | SM1 | 2400-2950 estimated, in two parts SM3.A.1 and SM3.A.2; actual about 4,500 | complete 2026-10-22; macOS port check passed with the SM3.B macOS run ([phase plan](ai_segmentation_mask/phase_sm3a_segmentation_service_plan.md)) |
 | SM3.B | Image embedding cache and first optimizations | Rust service, app session | SM3.A | 800-1400; actual about 1,800 code lines | complete 2026-10-22 on Windows and macOS ([phase plan](ai_segmentation_mask/phase_sm3b_embedding_cache_plan.md)) |
 | SM3.C | Task masks in the service: Subject (S3OD), Background, Sky and People (head) | Rust service, proto, C++ client | SM3.A | 1600-2050 in two parts SM3.C.1 and SM3.C.2; actual about 3,250 code lines | Windows verified 2026-10-23; macOS port check open ([phase plan](ai_segmentation_mask/phase_sm3c_task_masks_plan.md)) |
-| SM4 | Analysis render in ReferenceSpace | geometry, scheduler, app service | none | 600-1200 | outline |
+| SM4 | Analysis render in ReferenceSpace, image key, and prompt coordinates | geometry, editor session, app, viewer geometry | none | 1600 in two parts SM4.1 and SM4.2; actual about 1,350 | complete 2026-10-23 on Windows; measurements with SM9 ([phase plan](ai_segmentation_mask/phase_sm4_analysis_render_plan.md)) |
 | SM5 | AI Mask source model, R8 persistence, history, and project format | `edit/mask`, history, storage | SM1 | over 2000, split before start | outline |
 | SM6 | Raster `MaskEvaluate` on CUDA, OpenCL, and Metal | `edit/runtime` | SM5 | 1000-1800 | outline |
 | SM7 | Commit: Feather and Edge, asset publication, misalignment notice | app layer, `edit/mask` | SM3.A, SM4, SM5 | 800-1500 | outline |
@@ -518,18 +519,24 @@ Open decisions: none (closed by C1 to C4 of the SM3.C plan).
 
 ### 9.3 SM4 — Analysis render in ReferenceSpace
 
+Detailed plan: [SM4 Analysis render in ReferenceSpace](ai_segmentation_mask/phase_sm4_analysis_render_plan.md).
+The user closed the open decisions on 2026-10-23: the analysis document is the import root
+document (its Default Color Grade and DRT) with every Develop field of the working document (S1),
+and the image key names only the analysis render content, without a model set identity (S5; the
+sidecar clears its cache on a model change, B2). The user added a requirement: prompt coordinates
+come from the viewport after crop and rotation and must map back to the analysis image (S6 to S8).
+
 Scope:
 
-- Add a render mode that applies no crop and no rotation, or prove that an existing mode gives the
-  same frame. `RotatedUncroppedSource` keeps the rotation (section 5.3).
-- Render the whole frame at the model input size, and a ReferenceSpace rectangle at up to 4096 on
-  the long edge for edge refinement.
-- Read the result back to the host with `require_host_output`.
+- Add `DocumentGeometryUse::ReferenceSource`: no crop and no rotation, so EditSpace is
+  ReferenceSpace. `RotatedUncroppedSource` keeps the rotation (section 5.3).
+- Render the analysis document on the editor executor at a long edge of at most 4096 and read it
+  back as RGB8. The edge refinement rectangle of the outline is dropped (U3).
+- Make the image key of the SM3.B embedding cache.
+- Map viewport points and boxes to normalized analysis image coordinates, and analysis image
+  coordinates back to the viewport.
 
-Open decisions: which pipeline stages the analysis render applies (for example Develop and the
-default display transform without Color Grade nodes), and the content of the image key of the
-SM3.B embedding cache (the key names the analysis render content and the model set; SM3.B plan,
-decision B1).
+Open decisions: none (closed by S1 and S5 of the SM4 plan).
 
 ### 9.4 SM5 — AI Mask source model, R8 persistence, history, and project format
 

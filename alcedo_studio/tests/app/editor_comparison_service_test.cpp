@@ -16,12 +16,14 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <opencv2/core.hpp>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 
+#include "app/ai_mask_analysis_image.hpp"
 #include "app/editor_action_policy.hpp"
 #include "app/editor_image_render_port.hpp"
 #include "app/editor_pipeline_command_service.hpp"
@@ -30,6 +32,7 @@
 #include "edit/graph/develop_node_model.hpp"
 #include "edit/graph/pipeline_document.hpp"
 #include "edit/history/commit_graph.hpp"
+#include "image/image_buffer.hpp"
 #include "json.hpp"
 #include "support/editor_history_port_test_reads.hpp"
 #include "support/editor_lease_test_support.hpp"
@@ -105,6 +108,16 @@ class ControllableImageRenderPort final : public IEditorImageRenderPort {
     if (status == EditorImageRenderStatus::Completed) {
       result.images.resize(jobs.back().request.snapshots.size());
     }
+    auto completion = std::move(jobs.back().completion);
+    completion(std::move(result));
+  }
+
+  /// Runs the completion of the last accepted job as Completed with @p images.
+  void CompleteLastWithImages(std::vector<RenderedPipelineImage> images) {
+    ASSERT_FALSE(jobs.empty());
+    EditorImageRenderResult result;
+    result.status   = EditorImageRenderStatus::Completed;
+    result.images   = std::move(images);
     auto completion = std::move(jobs.back().completion);
     completion(std::move(result));
   }
@@ -671,6 +684,130 @@ TEST_F(EditorComparisonServiceTest,
   ASSERT_TRUE(outcome->has_value());
   EXPECT_EQ((*outcome)->status, EditorPreviewImagesStatus::Failed);
   EXPECT_EQ((*outcome)->message, "device lost");
+}
+
+// SM4: the AI Mask analysis image renders the import root look with the current Develop settings,
+// without crop and rotation, and converts it to RGB8.
+TEST_F(EditorComparisonServiceTest,
+       AiMaskAnalysisImageRendersTheAnalysisDocumentWithoutCropOrRotation) {
+  OpenInteractive();
+  ASSERT_EQ(service_
+                ->EnqueueAdjustmentInput(test::WithColorGradeTarget(
+                    test::PatchFromJson("exposure", R"({"exposure":1.5})", true)))
+                .kind,
+            EditorSessionResultKind::Accepted);
+  Drain();
+  ASSERT_TRUE(CommitPanelField("crop_rotate", R"({"rotation_degrees":7.0})"));
+  const auto commits_before = Graph()->CommitCount();
+
+  auto       key_only       = std::make_shared<std::optional<EditorAiMaskAnalysisResult>>();
+  (void)service_->RenderAiMaskAnalysisImage(
+      EditorAiMaskAnalysisContent::KeyOnly,
+      [key_only](EditorAiMaskAnalysisResult result) { *key_only = std::move(result); });
+  Drain();
+  ASSERT_TRUE(key_only->has_value());
+  ASSERT_EQ((*key_only)->status, EditorAiMaskAnalysisStatus::Completed) << (*key_only)->message;
+
+  auto       outcome  = std::make_shared<std::optional<EditorAiMaskAnalysisResult>>();
+  const auto accepted = service_->RenderAiMaskAnalysisImage(
+      EditorAiMaskAnalysisContent::KeyAndPixels,
+      [outcome](EditorAiMaskAnalysisResult result) { *outcome = std::move(result); });
+  ASSERT_NE(accepted.kind, EditorSessionResultKind::Rejected) << accepted.message;
+  Drain();
+
+  ASSERT_EQ(images_->jobs.size(), 1u) << LastMessage();
+  const auto& request = images_->jobs.front().request;
+  ASSERT_EQ(request.snapshots.size(), 1u);
+  EXPECT_FLOAT_EQ(ExposureEv(request.snapshots[0]->Document()), ExposureEv(lease_.root_->document))
+      << "the analysis document has the root look, not the working grade";
+  EXPECT_FLOAT_EQ(ExposureEv(Working()->Document()), 1.5f);
+  EXPECT_EQ(DevelopPayloadOf(*request.snapshots[0]), DevelopPayloadOf(*Working()));
+  EXPECT_EQ(request.geometry.document_geometry, DocumentGeometryUse::ReferenceSource);
+  EXPECT_EQ(request.geometry.resolution.max_edge, kAiMaskAnalysisMaxLongEdge);
+  EXPECT_TRUE(request.geometry.view.visible_rect_in_edit_space.IsFullFrame());
+  EXPECT_EQ(request.element_id, kElementId);
+  EXPECT_EQ(request.image_id, kImageId);
+  EXPECT_FALSE(outcome->has_value()) << "nothing is reported before the job ends";
+
+  RenderedPipelineImage rendered;
+  rendered.pixels =
+      std::make_shared<ImageBuffer>(cv::Mat(4, 8, CV_32FC4, cv::Scalar(0.5f, 0.25f, 1.0f, 1.0f)));
+  rendered.geometry.render_extent         = {8, 4};
+  rendered.geometry.full_reference_extent = {16, 8};
+  images_->CompleteLastWithImages({std::move(rendered)});
+  ASSERT_TRUE(outcome->has_value());
+  ASSERT_EQ((*outcome)->status, EditorAiMaskAnalysisStatus::Completed) << (*outcome)->message;
+  EXPECT_EQ((*outcome)->image_key, (*key_only)->image_key);
+  EXPECT_EQ((*outcome)->image.width, 8u);
+  EXPECT_EQ((*outcome)->image.height, 4u);
+  ASSERT_EQ((*outcome)->image.pixels.size(), 8u * 4u * 3u);
+  EXPECT_EQ((*outcome)->image.pixels[0], 128);
+  EXPECT_EQ((*outcome)->image.pixels[1], 64);
+  EXPECT_EQ((*outcome)->image.pixels[2], 255);
+  EXPECT_EQ((*outcome)->full_reference_extent, (Extent2D{16, 8}));
+  EXPECT_EQ(Graph()->CommitCount(), commits_before) << "the analysis image commits nothing";
+}
+
+TEST_F(EditorComparisonServiceTest, AiMaskAnalysisKeyOnlyStartsNoJob) {
+  auto       outcome = std::make_shared<std::optional<EditorAiMaskAnalysisResult>>();
+  const auto record  = [outcome](EditorAiMaskAnalysisResult result) {
+    *outcome = std::move(result);
+  };
+  (void)service_->RenderAiMaskAnalysisImage(EditorAiMaskAnalysisContent::KeyOnly, record);
+  Drain();
+  ASSERT_TRUE(outcome->has_value());
+  EXPECT_EQ((*outcome)->status, EditorAiMaskAnalysisStatus::Rejected) << "no image is open yet";
+
+  OpenInteractive();
+  outcome->reset();
+  (void)service_->RenderAiMaskAnalysisImage(EditorAiMaskAnalysisContent::KeyOnly, record);
+  Drain();
+  ASSERT_TRUE(outcome->has_value());
+  ASSERT_EQ((*outcome)->status, EditorAiMaskAnalysisStatus::Completed) << (*outcome)->message;
+  EXPECT_EQ((*outcome)->image_key.rfind(kAiMaskAnalysisImageKeyPrefix, 0), 0u);
+  EXPECT_TRUE((*outcome)->image.pixels.empty());
+  EXPECT_EQ((*outcome)->image.width, 0u);
+  EXPECT_TRUE(images_->jobs.empty()) << "a key needs no render";
+}
+
+TEST_F(EditorComparisonServiceTest, AiMaskAnalysisReportsBusyWhileTheComparisonRenders) {
+  OpenInteractive();
+  OpenComparison();
+  ASSERT_EQ(images_->jobs.size(), 1u);
+
+  auto       outcome = std::make_shared<std::optional<EditorAiMaskAnalysisResult>>();
+  const auto record  = [outcome](EditorAiMaskAnalysisResult result) {
+    *outcome = std::move(result);
+  };
+  (void)service_->RenderAiMaskAnalysisImage(EditorAiMaskAnalysisContent::KeyAndPixels, record);
+  Drain();
+  ASSERT_TRUE(outcome->has_value());
+  EXPECT_EQ((*outcome)->status, EditorAiMaskAnalysisStatus::Busy);
+  EXPECT_EQ(images_->jobs.size(), 1u) << "no second job was started";
+  EXPECT_TRUE(images_->cancelled.empty()) << "the comparison job was not cancelled";
+
+  images_->CompleteLast(EditorImageRenderStatus::Completed);
+  Drain();
+  outcome->reset();
+  (void)service_->RenderAiMaskAnalysisImage(EditorAiMaskAnalysisContent::KeyAndPixels, record);
+  Drain();
+  ASSERT_EQ(images_->jobs.size(), 2u) << "the port is free again";
+  images_->CompleteLast(EditorImageRenderStatus::Failed, "device lost");
+  ASSERT_TRUE(outcome->has_value());
+  EXPECT_EQ((*outcome)->status, EditorAiMaskAnalysisStatus::Failed);
+  EXPECT_EQ((*outcome)->message, "device lost");
+  EXPECT_TRUE((*outcome)->image_key.empty());
+
+  // A completed render without host pixels is a conversion failure, not an empty image.
+  outcome->reset();
+  (void)service_->RenderAiMaskAnalysisImage(EditorAiMaskAnalysisContent::KeyAndPixels, record);
+  Drain();
+  ASSERT_EQ(images_->jobs.size(), 3u);
+  images_->CompleteLast(EditorImageRenderStatus::Completed);
+  ASSERT_TRUE(outcome->has_value());
+  EXPECT_EQ((*outcome)->status, EditorAiMaskAnalysisStatus::Failed);
+  EXPECT_NE((*outcome)->message.find("no host pixels"), std::string::npos) << (*outcome)->message;
+  EXPECT_TRUE((*outcome)->image.pixels.empty());
 }
 
 }  // namespace

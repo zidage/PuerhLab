@@ -204,6 +204,7 @@ target_include_directories(EditorSessionHistoryPortTest
   PUBLIC ${ALCEDO_INCLUDE_DIR} ${ALCEDO_TEST_DIR} ${ALCEDO_TEST_ROOT}/edit/graph)
 target_link_libraries(EditorSessionHistoryPortTest
   AdjustmentTransferService
+  AiMaskAnalysisImage
   EditorComparisonInputs
   EditorWorkingDocument
   EditorSessionEditController
@@ -237,10 +238,12 @@ alcedo_register_test_target(EditorSessionHistoryPortTest ui)
 # adapter link rule as EditorSessionHistoryPortTest.
 add_executable(EditorComparisonInputsTest
     ${ALCEDO_TEST_ROOT}/app/editor_comparison_inputs_test.cpp
+    ${ALCEDO_TEST_ROOT}/app/ai_mask_analysis_image_test.cpp
     ${ALCEDO_EDITOR_HISTORY_PORT_SOURCES})
 target_include_directories(EditorComparisonInputsTest
   PUBLIC ${ALCEDO_INCLUDE_DIR} ${ALCEDO_TEST_DIR} ${ALCEDO_TEST_ROOT}/edit/graph)
 target_link_libraries(EditorComparisonInputsTest
+  AiMaskAnalysisImage
   EditorComparisonInputs
   AdjustmentTransferService
   EditorWorkingDocument
@@ -278,6 +281,7 @@ target_include_directories(EditorComparisonServiceTest
 target_link_libraries(EditorComparisonServiceTest
   EditorSessionService
   EditorComparisonService
+  AiMaskAnalysisImage
   EditorComparisonInputs
   AdjustmentTransferService
   EditorWorkingDocument
@@ -315,6 +319,7 @@ target_include_directories(EditorHistoryMoveDuringInputTest
 target_link_libraries(EditorHistoryMoveDuringInputTest
   EditorSessionService
   EditorComparisonService
+  AiMaskAnalysisImage
   EditorComparisonInputs
   AdjustmentTransferService
   EditorWorkingDocument
@@ -1686,6 +1691,7 @@ alcedo_register_test_target(EditorRawDecodePanelQmlTest ui)
 
 add_executable(MaskEditGeometryTest
     ${ALCEDO_TEST_ROOT}/ui/mask_edit_geometry_test.cpp
+    ${ALCEDO_TEST_ROOT}/ui/ai_mask_prompt_geometry_test.cpp
 )
 target_include_directories(MaskEditGeometryTest
     PUBLIC ${ALCEDO_INCLUDE_DIR}

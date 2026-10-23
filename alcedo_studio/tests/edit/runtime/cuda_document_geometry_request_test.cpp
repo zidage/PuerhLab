@@ -206,6 +206,38 @@ TEST_F(CudaDocumentGeometryRequestFixture,
   EXPECT_EQ(document_->ToJson(), document_before);
 }
 
+TEST_F(CudaDocumentGeometryRequestFixture,
+       ReferenceSourceFrameMatchesTheUncroppedUnrotatedDocument) {
+  const auto document_before = document_->ToJson();
+  const auto cropped         = Render();
+  ASSERT_FALSE(cropped.empty());
+
+  // The AI Mask analysis frame of the cropped, rotated document reuses its sensor result.
+  RenderRequest analysis;
+  analysis.document_geometry = DocumentGeometryUse::ReferenceSource;
+  renderer_->ResetStats();
+  const auto pixels = Render(analysis);
+  ASSERT_FALSE(pixels.empty());
+  const auto stats = renderer_->Stats();
+  EXPECT_EQ(stats.pass.sensor_develop_execute, 0U);
+  EXPECT_EQ(stats.pass.sensor_develop_skip, 1U);
+  EXPECT_EQ(stats.pass.source_h2d_count, 0U);
+
+  // Reference: the same source without crop and rotation, in its own lineage.
+  auto identity = std::make_shared<PipelineDocument>(CreateDefaultPipelineDocument());
+  gpu_dag_test::EnsureTestCameraProfile(*identity);
+  CudaProductRenderer identity_renderer(ExecutorRole::Interactive, MakeUnpacker());
+  const auto          expected =
+      Render(identity_renderer, *test::FreezeInNewLineage(*identity), RenderRequest{});
+  ASSERT_FALSE(expected.empty());
+  // The whole ReferenceSpace frame: the size of the uncropped source, larger than the crop.
+  EXPECT_EQ(pixels.size(), expected.size());
+  EXPECT_GT(pixels.cols, cropped.cols);
+  EXPECT_GT(pixels.rows, cropped.rows);
+  EXPECT_LE(MaxRgbDifference(pixels, expected), kPixelTolerance);
+  EXPECT_EQ(document_->ToJson(), document_before);
+}
+
 TEST_F(CudaDocumentGeometryRequestFixture, RotatedFullFrameCropHasNoBorderCorners) {
   auto rotated = std::make_shared<PipelineDocument>(CreateDefaultPipelineDocument());
   gpu_dag_test::EnsureTestCameraProfile(*rotated);

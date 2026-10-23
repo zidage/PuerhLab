@@ -400,6 +400,15 @@ def_library(EditorComparisonInputs
     PUBLIC_DEPS PipelineMgmtService EditGraph PipelineHistory
 )
 
+# The analysis image of the AI Mask tool: the import root look with the current Develop settings,
+# rendered without crop and rotation, its image key, and its RGB8 conversion (AI Mask SM4).
+def_library(AiMaskAnalysisImage
+    SOURCES
+        "${ALCEDO_APP_ROOT}/ai_mask_analysis_image.cpp"
+        "${ALCEDO_INCLUDE_ROOT}/app/ai_mask_analysis_image.hpp"
+    PUBLIC_DEPS PipelineMgmtService EditGraph PipelineHistory xxHash ${ALCEDO_OPENCV_CORE_DEPS}
+)
+
 # The open editor comparison: captured working values, selected sources, and the image job of the
 # selected pair. A collaborator of the session facade; reads history and renders only through ports.
 def_library(EditorComparisonService
@@ -637,6 +646,7 @@ def_library(EditorSessionService
                  EditorSessionNavigationController EditorSessionRenderController
                  EditorSessionEditController EditorSessionCommandQueue EditorActionPolicy
                  EditorSerialFrameAdmission EditorMaskCreationController EditorComparisonService
+                 AiMaskAnalysisImage
 )
 
 # Facade consumers (tests/UI) include session headers that pull metal_image.hpp

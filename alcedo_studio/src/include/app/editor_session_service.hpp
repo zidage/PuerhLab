@@ -32,6 +32,7 @@
 #include "app/editor_session_render_controller.hpp"
 #include "app/editor_session_request_ids.hpp"
 #include "app/editor_session_types.hpp"
+#include "sidecar_client/dto/segmentation.hpp"
 
 namespace alcedo {
 
@@ -86,6 +87,44 @@ struct EditorPreviewImagesResult {
 
 /// Receives the outcome of RenderPreviewImages, once, on the session owner or the render worker.
 using EditorPreviewImagesCompletion = std::function<void(EditorPreviewImagesResult result)>;
+
+/// What one AI Mask analysis request produces (SM4 plan section 2).
+enum class EditorAiMaskAnalysisContent : std::uint8_t {
+  /// Only the image key. No render runs.
+  KeyOnly,
+  /// The image key and the RGB8 analysis image.
+  KeyAndPixels,
+};
+
+/// Terminal state of one AI Mask analysis request.
+enum class EditorAiMaskAnalysisStatus : std::uint8_t {
+  /// The requested content is in the result.
+  Completed,
+  /// The image render port runs another job (for example the comparison); nothing was started.
+  Busy,
+  /// The session cannot render the open image now; the message says why.
+  Rejected,
+  /// The analysis document, the render, or the conversion failed; the message has the real error.
+  Failed,
+};
+
+/// The analysis image of the open image: the whole source without crop and rotation, with the
+/// import root look and the current Develop settings. Normalized coordinates of @ref image are
+/// normalized ReferenceSpace coordinates.
+struct EditorAiMaskAnalysisResult {
+  EditorAiMaskAnalysisStatus status = EditorAiMaskAnalysisStatus::Failed;
+  std::string                message;
+  /// Image key of the sidecar embedding cache; set when Completed.
+  std::string                image_key;
+  /// RGB8 pixels; set only when Completed with KeyAndPixels.
+  SegmentationRgb8Image      image;
+  /// ReferenceSpace size of the render; set only when Completed with KeyAndPixels.
+  Extent2D                   full_reference_extent{};
+};
+
+/// Receives the outcome of RenderAiMaskAnalysisImage, once, on the session owner or the render
+/// worker.
+using EditorAiMaskAnalysisCompletion = std::function<void(EditorAiMaskAnalysisResult result)>;
 
 /// Narrow backend surface for EditorSessionController tests. Production uses
 /// EditorSessionService; tests may inject a recording fake.
@@ -534,6 +573,25 @@ class IEditorSessionBackend {
     result.message = "Preview images are not supported by this backend";
     return result;
   }
+  /**
+   * @brief Give the image key of the AI Mask analysis image of the open image, and with
+   *        @p content also its RGB8 pixels.
+   *
+   * The analysis document is the import root with the current Develop settings; the render uses
+   * the image render port without crop and rotation, at a long edge of at most 4096. Presents
+   * nothing and writes nothing.
+   * @return Rejected only when the command queue refuses the command. Every other outcome,
+   *         including a refusal on the owner, reaches @p on_complete exactly once.
+   */
+  virtual auto RenderAiMaskAnalysisImage(EditorAiMaskAnalysisContent /*content*/,
+                                         EditorAiMaskAnalysisCompletion /*on_complete*/)
+      -> EditorSessionResult {
+    EditorSessionResult result;
+    result.kind    = EditorSessionResultKind::Rejected;
+    result.state   = state();
+    result.message = "The AI Mask analysis image is not supported by this backend";
+    return result;
+  }
   /// Published state of the open comparison; Inactive when none is open. Any thread.
   [[nodiscard]] virtual auto comparison_state() const -> EditorComparisonState { return {}; }
   /// Move the Ready pair @p pair_id (A, B) out of the backend; empty when it is not Ready.
@@ -804,6 +862,9 @@ class EditorSessionService final : public IEditorSessionBackend {
       -> EditorSessionResult override;
   auto RenderPreviewImages(RenderRequest geometry, EditorPreviewImageSet images,
                            EditorPreviewImagesCompletion on_complete)
+      -> EditorSessionResult override;
+  auto RenderAiMaskAnalysisImage(EditorAiMaskAnalysisContent    content,
+                                 EditorAiMaskAnalysisCompletion on_complete)
       -> EditorSessionResult override;
   [[nodiscard]] auto comparison_state() const -> EditorComparisonState override {
     return comparison_.state();
