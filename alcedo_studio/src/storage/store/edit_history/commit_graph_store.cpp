@@ -508,6 +508,50 @@ auto CommitGraphStore::DeleteUnreachableCommitsForProject() -> std::size_t {
   return total;
 }
 
+void CommitGraphStore::VisitStoredHistoryJsonContaining(
+    std::string_view text, const std::function<void(const nlohmann::json&)>& visit) {
+  constexpr const char* kSql =
+      "SELECT edit_payload::VARCHAR FROM EditCommit "
+      "WHERE contains(edit_payload::VARCHAR, $1) "
+      "UNION ALL SELECT serialized_pipeline_state::VARCHAR FROM ImageEditState "
+      "WHERE serialized_pipeline_state IS NOT NULL "
+      "AND contains(serialized_pipeline_state::VARCHAR, $1) "
+      "UNION ALL SELECT serialized_pipeline_state::VARCHAR FROM PipelineRoot "
+      "WHERE contains(serialized_pipeline_state::VARCHAR, $1);";
+  duckdb_prepared_statement statement = nullptr;
+  if (duckdb_prepare(conn_, kSql, &statement) != DuckDBSuccess) {
+    const char*       error   = duckdb_prepare_error(statement);
+    const std::string message = error ? error : "CommitGraphStore history JSON prepare failed";
+    duckdb_destroy_prepare(&statement);
+    throw std::runtime_error(message);
+  }
+  duckdb_bind_varchar_length(statement, 1, text.data(), static_cast<idx_t>(text.size()));
+  duckdb_result result;
+  if (duckdb_execute_prepared(statement, &result) != DuckDBSuccess) {
+    const char*       error   = duckdb_result_error(&result);
+    const std::string message = error ? error : "CommitGraphStore history JSON query failed";
+    duckdb_destroy_result(&result);
+    duckdb_destroy_prepare(&statement);
+    throw std::runtime_error(message);
+  }
+  duckdb_destroy_prepare(&statement);
+  try {
+    const auto rows = duckdb_row_count(&result);
+    for (idx_t row = 0; row < rows; ++row) {
+      char*             raw     = duckdb_value_varchar(&result, 0, row);
+      const std::string encoded = raw ? raw : "";
+      if (raw) {
+        duckdb_free(raw);
+      }
+      visit(nlohmann::json::parse(encoded));
+    }
+  } catch (...) {
+    duckdb_destroy_result(&result);
+    throw;
+  }
+  duckdb_destroy_result(&result);
+}
+
 void CommitGraphStore::DeleteGraphForElement(sl_element_id_t element_id) {
   const auto state = GetImageEditState(element_id);
   if (!state.has_value()) {

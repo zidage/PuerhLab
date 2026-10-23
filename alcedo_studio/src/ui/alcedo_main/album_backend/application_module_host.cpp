@@ -311,16 +311,12 @@ ApplicationModuleHost::ApplicationModuleHost(QObject* parent, LifecycleObserver 
           if (!project_) {
             return std::filesystem::path{};
           }
-          auto root = project_->handler().db_path().parent_path();
-          if (root.empty()) {
-            root = project_->handler().workspace_dir();
-          }
-          if (root.empty()) {
+          const auto directory = project_->handler().editor_journal_directory();
+          if (directory.empty()) {
             return std::filesystem::path{};
           }
-          return root / "editor-journal" /
-                 ("image-" + std::to_string(static_cast<std::uint64_t>(element_id)) +
-                  ".mini-git.wal");
+          return directory / ("image-" + std::to_string(static_cast<std::uint64_t>(element_id)) +
+                              ".mini-git.wal");
         };
     auto refresh_focused_thumbnail =
         [this, library = QPointer<LibraryModule>(library_.get())](sl_element_id_t element_id) {

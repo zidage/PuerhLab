@@ -51,6 +51,7 @@ set(STORAGE_SRCS
     "${ALCEDO_SRC_ROOT}/storage/store/sleeve/album_query.cpp"
     "${ALCEDO_SRC_ROOT}/storage/store/sleeve/album_edit_state_sql.cpp"
     "${ALCEDO_SRC_ROOT}/storage/store/edit_history/commit_graph_store.cpp"
+    "${ALCEDO_SRC_ROOT}/storage/store/mask_asset/mask_asset_store.cpp"
 )
 
 def_library(Storage
@@ -58,3 +59,6 @@ def_library(Storage
     PUBLIC_DEPS Ai DuckDB DuckORM SleeveMapper StrConv PipelineScheduler
     PRIVATE_DEPS AppDiagnostics
 )
+# MaskAssetStore compresses R8 pixels with zlib. The bundled gRPC static zlib is used when it
+# exists, so that a target that links both has one zlib (as for Image).
+target_link_libraries(Storage PRIVATE $<IF:$<TARGET_EXISTS:zlibstatic>,zlibstatic,ZLIB::ZLIB>)

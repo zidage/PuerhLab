@@ -177,14 +177,12 @@ auto MixGradeExcludingLocalToneValues(ContentHash& hash, const ColorGradeNodeMod
   }
 }
 
-#ifdef ALCEDO_ENABLE_BRUSH_MASK
 auto MixNormalizedRect(ContentHash& hash, NormalizedRect rect) -> void {
   hash.MixF32(rect.x);
   hash.MixF32(rect.y);
   hash.MixF32(rect.w);
   hash.MixF32(rect.h);
 }
-#endif
 
 auto MixMaskSourceModel(ContentHash& hash, const MaskModel& model,
                         const NodeId& owner_id) -> void {
@@ -244,7 +242,22 @@ auto MixMaskSourceModel(ContentHash& hash, const MaskModel& model,
     hash.MixF32(gradient->transition_distance);
     hash.MixF32(gradient->start_value);
     hash.MixF32(gradient->end_value);
+    return;
   }
+  if (const auto* ai = std::get_if<AiSegmentationMaskSource>(&model.source)) {
+    // The stored coverage and the edge change set the pixels; the recipe, the model set, and the
+    // fingerprint only describe how the coverage was made.
+    hash.MixText(ai->asset_key.Value());
+    hash.MixU32(ai->descriptor.extent.width);
+    hash.MixU32(ai->descriptor.extent.height);
+    MixNormalizedRect(hash, ai->descriptor.reference_bounds);
+    hash.MixF32(ai->edge.feather_px);
+    hash.MixI32(ai->edge.expand_px);
+    return;
+  }
+  throw std::runtime_error("MixMaskSourceModel: Mask source kind " +
+                           std::string{MaskSourceKindText(GetMaskSourceKind(model.source))} +
+                           " has no content key");
 }
 
 auto MixCompiledMaskStack(ContentHash& hash, const PipelineDocument& document,

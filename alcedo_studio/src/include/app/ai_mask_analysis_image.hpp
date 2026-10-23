@@ -10,6 +10,7 @@
 
 #include "app/pipeline_root_state.hpp"
 #include "edit/geometry/render_request.hpp"
+#include "edit/graph/develop_node_model.hpp"
 #include "edit/graph/pipeline_document.hpp"
 #include "edit/graph/pipeline_graph_snapshot.hpp"
 #include "edit/history/commit_graph.hpp"
@@ -62,6 +63,18 @@ inline constexpr const char*   kAiMaskAnalysisImageKeyPrefix = "am1-";
  */
 [[nodiscard]] auto MakeAiMaskAnalysisImageKey(sl_element_id_t element_id, image_id_t image_id,
                                               const PipelineDocument& document) -> std::string;
+
+/**
+ * @brief Geometry fingerprint of an AI Mask: the Lens and RAW decode settings that move image
+ *        content in the analysis image.
+ *
+ * 32 lowercase hexadecimal digits of the XXH3 128-bit hash of the canonical JSON of the Develop
+ * fields `demosaic_method`, `highlights_reconstruct`, `lens_enabled`, `apply_distortion`,
+ * `apply_tca`, `apply_crop`, `auto_scale`, `use_user_scale`, `user_scale`, `projection_enabled`,
+ * `target_projection`, `lens_maker`, and `lens_model`. White balance and vignetting do not
+ * change it. Each field is read through the Model lock.
+ */
+[[nodiscard]] auto MakeAiMaskGeometryFingerprint(const DevelopParamsModel& develop) -> std::string;
 
 /// Render request of the analysis image: the whole ReferenceSource frame, Preview resampling, long
 /// edge at most kAiMaskAnalysisMaxLongEdge.

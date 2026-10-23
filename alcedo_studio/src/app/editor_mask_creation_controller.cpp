@@ -51,6 +51,8 @@ namespace {
       return "Radial";
     case MaskSourceKind::LinearGradient:
       return "Linear Gradient";
+    case MaskSourceKind::AiSegmentation:
+      return "AI Mask";
   }
   return "Mask";
 }
@@ -76,6 +78,8 @@ namespace {
   if (const auto* linear = std::get_if<LinearGradientMaskSource>(&source)) {
     return LinearCreationIsValid(*linear);
   }
+  // Drag creation makes only analytic sources; an AI Segmentation Mask comes from its edit
+  // session.
   return false;
 }
 

@@ -44,6 +44,9 @@ Item {
         if (root.sourceKind === "radial") {
             return qsTr("Radial")
         }
+        if (root.sourceKind === "aiSegmentation") {
+            return qsTr("AI")
+        }
         return ""
     }
     readonly property string rowName: root.displayName.length > 0

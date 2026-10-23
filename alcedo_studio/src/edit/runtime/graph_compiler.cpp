@@ -307,6 +307,10 @@ auto CompileGradeOwnedMaskStack(const ColorGradeNodeModel& grade, GraphValueId s
           "GraphCompiler: Brush mask rasterization is not available in this build");
     }
 #endif
+    if (compiled.source_kind == MaskSourceKind::AiSegmentation) {
+      throw std::runtime_error(
+          "GraphCompiler: AI Segmentation Mask raster evaluation is not available in this build");
+    }
   }
   PushPass(plan, GpuPassKind::MaskUnion, grade.Id(), std::move(union_inputs),
            {{stack.union_output, CompiledValueKind::Mask}});

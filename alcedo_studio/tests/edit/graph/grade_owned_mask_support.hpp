@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -74,6 +75,57 @@ inline auto MakeLinearGradientMask(MaskId id, LinearGradientMaskSource source = 
   mask.id     = std::move(id);
   mask.invert = invert;
   mask.source = std::move(source);
+  return mask;
+}
+
+/// Recipe with a People component (one toggle) and two prompt groups (a click with level 1, and a
+/// stroke followed by a box step).
+inline auto MakeAiMaskRecipe() -> AiMaskRecipe {
+  AiMaskRecipe        recipe;
+  AiMaskTaskComponent people;
+  people.task = AiMaskTaskKind::People;
+  people.person_toggles.push_back(
+      {2, AiMaskComponentOperation::Subtract, AiMaskBox{0.625f, 0.25f, 0.875f, 0.875f}});
+  recipe.components.push_back({AiMaskComponentOperation::Add, people});
+
+  AiMaskPromptGroup click;
+  click.steps.push_back({{{0.3125f, 0.4375f, AiMaskComponentOperation::Add}}, std::nullopt, 1});
+  recipe.components.push_back({AiMaskComponentOperation::Subtract, click});
+
+  AiMaskPromptGroup stroke;
+  stroke.steps.push_back({{{0.125f, 0.25f, AiMaskComponentOperation::Add},
+                           {0.1875f, 0.3125f, AiMaskComponentOperation::Add}},
+                          std::nullopt,
+                          0});
+  stroke.steps.push_back({{{0.5f, 0.5f, AiMaskComponentOperation::Subtract}},
+                          AiMaskBox{0.0625f, 0.125f, 0.5f, 0.75f},
+                          0});
+  recipe.components.push_back({AiMaskComponentOperation::Add, stroke});
+  return recipe;
+}
+
+/// Valid AI Segmentation source; @p asset_key must be 32 lowercase hexadecimal digits.
+inline auto MakeAiSegmentationSource(std::string asset_key = std::string(32, 'a'))
+    -> AiSegmentationMaskSource {
+  AiSegmentationMaskSource source;
+  source.asset_key                   = MaskAssetKey{std::move(asset_key)};
+  source.descriptor.extent           = {812, 1530};
+  source.descriptor.reference_bounds = NormalizedRect{0.25f, 0.0625f, 0.1875f, 0.5f};
+  source.analysis_extent             = {4096, 3072};
+  source.recipe                      = MakeAiMaskRecipe();
+  source.edge                        = {2.0f, -1};
+  source.model_set_id                = "sam2.1-tiny+people-sky-head-p1r2e15+s3od-synth";
+  source.geometry_fingerprint        = "9a1b2c3d4e5f60718293a4b5c6d7e877";
+  return source;
+}
+
+inline auto MakeAiSegmentationMask(MaskId                   id,
+                                   AiSegmentationMaskSource source = MakeAiSegmentationSource())
+    -> MaskModel {
+  MaskModel mask;
+  mask.id           = std::move(id);
+  mask.display_name = "AI Mask 1";
+  mask.source       = std::move(source);
   return mask;
 }
 

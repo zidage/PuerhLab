@@ -9,12 +9,15 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdint>
 #include <filesystem>
 #include <format>
 #include <memory>
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -31,7 +34,10 @@
 #include "edit/graph/pipeline_graph_snapshot.hpp"
 #include "edit/history/commit_graph.hpp"
 #include "edit/history/edit_commit.hpp"
+#include "edit/history/mini_git_working_history.hpp"
 #include "edit/history/pipeline_document_checkpoint.hpp"
+#include "edit/mask/mask_asset.hpp"
+#include "edit/mask/mask_model.hpp"
 #include "edit/operators/models/builtin_type_ids.hpp"
 #include "edit/operators/models/lmt_model.hpp"
 #include "edit/operators/models/scalar_operator_model.hpp"
@@ -1402,5 +1408,164 @@ TEST_F(PipelineMapperTests, PersistEditorHistoryRefusesAnImageTheEditorDoesNotHo
   const auto stored_after = StoredEditState(project, 763);
   ASSERT_TRUE(stored_before.has_value() && stored_after.has_value());
   EXPECT_EQ(stored_after->ToJSON(), stored_before->ToJSON());
+}
+
+/// 4 x 4 asset whose pixels all equal @p value; another value gives another key.
+auto MakeCleanupMaskAsset(std::uint8_t value) -> MaskAsset {
+  MaskAsset asset;
+  asset.descriptor.extent           = {4, 4};
+  asset.descriptor.reference_bounds = NormalizedRect{0.25f, 0.25f, 0.5f, 0.5f};
+  asset.pixels.assign(16, value);
+  asset.key = MakeMaskAssetKey(asset.descriptor, asset.pixels);
+  return asset;
+}
+
+auto MakeAiMaskOf(const MaskAsset& asset, std::string id) -> MaskModel {
+  AiSegmentationMaskSource source;
+  source.asset_key       = asset.key;
+  source.descriptor      = asset.descriptor;
+  source.analysis_extent = {64, 48};
+  source.recipe.components.push_back({AiMaskComponentOperation::Add, AiMaskTaskComponent{}});
+  source.model_set_id         = "sam2.1-tiny";
+  source.geometry_fingerprint = std::string(32, '0');
+  MaskModel mask;
+  mask.id           = MaskId{std::move(id)};
+  mask.display_name = "AI Mask";
+  mask.source       = std::move(source);
+  return mask;
+}
+
+auto AddAiMaskBatch(const MaskModel& mask) -> PipelineEditBatch {
+  AddMaskChange change;
+  change.node_id = NodeId{"grade.primary"};
+  change.mask_id = mask.id;
+  change.mask    = MaskModelToJson(mask);
+  return PipelineEditBatch::Make(PipelineEditOperationKind::AddMask, {change},
+                                 "history.operation.add_mask");
+}
+
+auto RemoveAiMaskBatch(const MaskModel& mask) -> PipelineEditBatch {
+  RemoveMaskChange change = {};
+  change.node_id          = NodeId{"grade.primary"};
+  change.mask_id          = mask.id;
+  change.mask             = MaskModelToJson(mask);
+  return PipelineEditBatch::Make(PipelineEditOperationKind::RemoveMask, {change},
+                                 "history.operation.remove_mask");
+}
+
+auto ReadMaskAssetError(PipelineMgmtService& pipelines, const MaskAssetKey& key) -> std::string {
+  try {
+    (void)pipelines.ReadMaskAsset(key);
+  } catch (const std::runtime_error& error) {
+    return error.what();
+  }
+  return {};
+}
+
+auto CleanupJournalDirectory(std::string_view name) -> std::filesystem::path {
+  const auto      directory = std::filesystem::temp_directory_path() / std::string{name};
+  std::error_code ec;
+  std::filesystem::remove_all(directory, ec);
+  return directory;
+}
+
+// SM5.1 M11: an asset that the root, the checkpoint, a reachable commit, or only an editor journal
+// record refers to stays after the clean-close cleanup.
+TEST_F(PipelineMapperTests, CleanupKeepsAssetsOfReachableHistory) {
+  ProjectService      project(db_path_, meta_path_);
+  PipelineMgmtService pipelines(project.GetStorage());
+  const auto          root_asset    = MakeCleanupMaskAsset(1);
+  const auto          commit_asset  = MakeCleanupMaskAsset(2);
+  const auto          head_asset    = MakeCleanupMaskAsset(3);
+  const auto          journal_asset = MakeCleanupMaskAsset(4);
+  for (const auto* asset : {&root_asset, &commit_asset, &head_asset, &journal_asset}) {
+    pipelines.PutMaskAsset(*asset);
+  }
+
+  // The import root (and its first checkpoint) holds an AI Mask.
+  auto root_document = CreateDefaultPipelineDocument();
+  root_document.PrimaryGrade()->AddMask(MakeAiMaskOf(root_asset, "mask.root"), 0);
+  pipelines.InitializeImageRoot(821, std::move(root_document), nullptr);
+
+  // Only commits refer to commit_asset (added, then removed); the head checkpoint and the last
+  // commit refer to head_asset.
+  InitializeDefaultRoot(pipelines, 822);
+  auto       lease          = pipelines.AcquireEditorLease(822);
+  const auto expected_state = lease.graph_.GetImageEditState();
+  const auto commit_mask    = MakeAiMaskOf(commit_asset, "mask.commit");
+  (void)CommitOnLease(lease, AddAiMaskBatch(commit_mask));
+  (void)CommitOnLease(lease, RemoveAiMaskBatch(commit_mask));
+  (void)CommitOnLease(lease, AddAiMaskBatch(MakeAiMaskOf(head_asset, "mask.head")));
+  std::string error;
+  ASSERT_TRUE(
+      pipelines.PersistEditorHistory(lease.graph_, expected_state, *lease.document_, &error))
+      << error;
+  const auto root_id = lease.graph_.GetRootId();
+  pipelines.ReleaseEditorLease(822);
+
+  // An edit that only the editor journal holds.
+  const auto journal_directory = CleanupJournalDirectory("mask_asset_cleanup_keep_journal");
+  {
+    MiniGitJournal       journal(journal_directory / "image-822.mini-git.wal");
+    MiniGitJournalRecord record;
+    record.kind        = MiniGitJournalRecordKind::kEditCommit;
+    record.edit_commit = EditCommit::MakePipelineEdit(
+        root_id, std::nullopt, AddAiMaskBatch(MakeAiMaskOf(journal_asset, "mask.journal")));
+    ASSERT_TRUE(journal.Append(record, &error)) << error;
+  }
+
+  EXPECT_EQ(pipelines.CollectUnreachableEditCommits(), 0u);
+  EXPECT_EQ(pipelines.CollectUnreferencedMaskAssets(journal_directory), 0u);
+  for (const auto* asset : {&root_asset, &commit_asset, &head_asset, &journal_asset}) {
+    EXPECT_EQ(pipelines.ReadMaskAsset(asset->key).pixels, asset->pixels);
+  }
+
+  // Without the journal, its asset has no reference left.
+  EXPECT_EQ(pipelines.CollectUnreferencedMaskAssets(journal_directory / "missing"), 1u);
+  EXPECT_EQ(
+      ReadMaskAssetError(pipelines, journal_asset.key),
+      "Mask asset " + std::string{journal_asset.key.Value()} + " is missing from the project");
+  EXPECT_EQ(pipelines.ReadMaskAsset(commit_asset.key).pixels, commit_asset.pixels);
+  std::error_code ec;
+  std::filesystem::remove_all(journal_directory, ec);
+}
+
+// SM5.1 M11: an orphan row and the asset of a commit that commit cleanup deleted are removed.
+TEST_F(PipelineMapperTests, CleanupRemovesUnreferencedAssets) {
+  ProjectService      project(db_path_, meta_path_);
+  PipelineMgmtService pipelines(project.GetStorage());
+  const auto          orphan_asset      = MakeCleanupMaskAsset(5);
+  const auto          unreachable_asset = MakeCleanupMaskAsset(6);
+  const auto          kept_asset        = MakeCleanupMaskAsset(7);
+  for (const auto* asset : {&orphan_asset, &unreachable_asset, &kept_asset}) {
+    pipelines.PutMaskAsset(*asset);
+  }
+
+  InitializeDefaultRoot(pipelines, 831);
+  auto       lease          = pipelines.AcquireEditorLease(831);
+  const auto expected_state = lease.graph_.GetImageEditState();
+  const auto abandoned      = AddAiMaskBatch(MakeAiMaskOf(unreachable_asset, "mask.abandoned"));
+  (void)CommitOnLease(lease, abandoned);
+  // Undo to the root and commit another edit: the first commit leaves every Version head path.
+  std::string error;
+  ASSERT_TRUE(ApplyPipelineEditBatch(*lease.document_, abandoned,
+                                     PipelineEditApplyDirection::Inverse, &error))
+      << error;
+  lease.graph_.MoveWorkingHead(lease.graph_.GetActiveVersionId(), std::nullopt);
+  (void)CommitOnLease(lease, AddAiMaskBatch(MakeAiMaskOf(kept_asset, "mask.kept")));
+  ASSERT_TRUE(
+      pipelines.PersistEditorHistory(lease.graph_, expected_state, *lease.document_, &error))
+      << error;
+  pipelines.ReleaseEditorLease(831);
+
+  const auto journal_directory = CleanupJournalDirectory("mask_asset_cleanup_remove_journal");
+  EXPECT_EQ(pipelines.CollectUnreachableEditCommits(), 1u);
+  EXPECT_EQ(pipelines.CollectUnreferencedMaskAssets(journal_directory), 2u);
+  for (const auto* asset : {&orphan_asset, &unreachable_asset}) {
+    EXPECT_EQ(ReadMaskAssetError(pipelines, asset->key),
+              "Mask asset " + std::string{asset->key.Value()} + " is missing from the project");
+  }
+  EXPECT_EQ(pipelines.ReadMaskAsset(kept_asset.key).pixels, kept_asset.pixels);
+  EXPECT_EQ(pipelines.CollectUnreferencedMaskAssets(journal_directory), 0u);
 }
 }  // namespace alcedo

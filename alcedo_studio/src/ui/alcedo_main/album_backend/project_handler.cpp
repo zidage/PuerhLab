@@ -405,6 +405,17 @@ bool ProjectHandler::PersistCurrentProjectState() {
   }
 }
 
+auto ProjectHandler::editor_journal_directory() const -> std::filesystem::path {
+  auto root = db_path_.parent_path();
+  if (root.empty()) {
+    root = project_workspace_dir_;
+  }
+  if (root.empty()) {
+    return {};
+  }
+  return root / "editor-journal";
+}
+
 bool ProjectHandler::PersistProjectForClose(QString* error) {
   if (!project_) {
     return true;
@@ -421,6 +432,9 @@ bool ProjectHandler::PersistProjectForClose(QString* error) {
       // Clean-close Mini-Git garbage collection: delete EditCommit rows that no Version head
       // reaches. An abnormal exit does not run this path.
       (void)pipeline_service_->CollectUnreachableEditCommits();
+      // Then delete the AI Mask assets that no remaining commit, checkpoint, root, or journal
+      // record refers to.
+      (void)pipeline_service_->CollectUnreferencedMaskAssets(editor_journal_directory());
     }
     (void)PurgeUninstalledSemanticModels();
   } catch (const std::exception& e) {

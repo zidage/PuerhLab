@@ -10,6 +10,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -107,6 +108,20 @@ class CommitGraphStore {
   /// Run DeleteUnreachableCommits for every image with edit state.
   /// @return total commit rows deleted across the project.
   auto DeleteUnreachableCommitsForProject() -> std::size_t;
+
+  /**
+   * @brief Call @p visit with the parsed JSON of each stored history value whose text contains
+   *        @p text.
+   *
+   * The values are every EditCommit payload, every ImageEditState serialized pipeline state, and
+   * every PipelineRoot serialized pipeline state of the project. SQL applies the text filter, so
+   * rows without @p text are not parsed. Reads only.
+   *
+   * @throws std::runtime_error when the query fails; nlohmann::json::parse_error for a stored
+   *         value that is not JSON.
+   */
+  void VisitStoredHistoryJsonContaining(std::string_view                                  text,
+                                        const std::function<void(const nlohmann::json&)>& visit);
 
   /// Delete every persisted Mini-Git row owned by one image.
   ///

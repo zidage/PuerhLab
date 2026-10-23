@@ -11,12 +11,15 @@
 
 #include <cmath>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <opencv2/core.hpp>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
+#include "edit/graph/develop_node_model.hpp"
+#include "edit/graph/pipeline_document.hpp"
 #include "image/image_buffer.hpp"
 
 namespace alcedo {
@@ -96,6 +99,54 @@ TEST(AiMaskAnalysisImageTest, ConversionRejectsHdrNonFiniteAndSizeErrors) {
 
   RenderedPipelineImage no_pixels;
   EXPECT_NE(ConversionError(no_pixels).find("no host pixels"), std::string::npos);
+}
+
+TEST(AiMaskAnalysisImageTest, GeometryFingerprintTracksLensAndRawDecodeOnly) {
+  const auto fingerprint_after = [](const std::function<void(DevelopParamsModel&)>& change) {
+    auto document = CreateDefaultPipelineDocument();
+    change(document.Develop()->Params());
+    return MakeAiMaskGeometryFingerprint(document.Develop()->Params());
+  };
+  const auto base = fingerprint_after([](DevelopParamsModel&) {});
+  ASSERT_EQ(base.size(), 32u);
+  EXPECT_EQ(base.find_first_not_of("0123456789abcdef"), std::string::npos);
+  EXPECT_EQ(fingerprint_after([](DevelopParamsModel&) {}), base);
+
+  EXPECT_NE(fingerprint_after([](DevelopParamsModel& develop) {
+              develop.ApplyLensCalibrationUpdate({.lens_enabled = true});
+            }),
+            base);
+  EXPECT_NE(fingerprint_after([](DevelopParamsModel& develop) {
+              develop.ApplyLensCalibrationUpdate({.apply_distortion = false});
+            }),
+            base);
+  EXPECT_NE(
+      fingerprint_after([](DevelopParamsModel& develop) {
+        develop.ApplyLensCalibrationUpdate({.lens_maker = "Zeiss", .lens_model = "Touit 1.8/32"});
+      }),
+      base);
+  EXPECT_NE(fingerprint_after([](DevelopParamsModel& develop) {
+              develop.ApplyRawDecodeUpdate({.demosaic_method = "neural_engine"});
+            }),
+            base);
+  EXPECT_NE(fingerprint_after([](DevelopParamsModel& develop) {
+              develop.ApplyRawDecodeUpdate({.highlights_reconstruct = false});
+            }),
+            base);
+
+  EXPECT_EQ(fingerprint_after([](DevelopParamsModel& develop) {
+              develop.ApplyRawDecodeUpdate({.use_camera_wb = false, .user_wb = 4300.0f});
+            }),
+            base);
+  EXPECT_EQ(fingerprint_after([](DevelopParamsModel& develop) {
+              develop.ApplyColorTemperatureUpdate(
+                  {.wb_mode = "custom", .custom_cct = 3200.0f, .custom_tint = 12.0f});
+            }),
+            base);
+  EXPECT_EQ(fingerprint_after([](DevelopParamsModel& develop) {
+              develop.ApplyLensCalibrationUpdate({.apply_vignetting = false});
+            }),
+            base);
 }
 
 }  // namespace

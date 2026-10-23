@@ -17,13 +17,14 @@
 #include <vector>
 
 #include "edit/geometry/types.hpp"
+#include "edit/mask/ai_mask_recipe.hpp"
+#include "edit/mask/mask_asset.hpp"
 #include "edit/mask/mask_id.hpp"
 #include "json.hpp"
 
 #ifdef ALCEDO_ENABLE_BRUSH_MASK
 #include "edit/mask/brush_raster_encoding.hpp"
 #include "edit/mask/brush_stroke.hpp"
-#include "edit/mask/mask_asset.hpp"
 #endif
 
 namespace alcedo {
@@ -31,10 +32,11 @@ namespace alcedo {
 /** @brief Discriminator for @ref MaskSource. */
 enum class MaskSourceKind : std::uint8_t {
 #ifdef ALCEDO_ENABLE_BRUSH_MASK
-  Brush           = 0,
+  Brush = 0,
 #endif
-  Radial          = 1,
-  LinearGradient  = 2,
+  Radial         = 1,
+  LinearGradient = 2,
+  AiSegmentation = 3,
 };
 
 #ifdef ALCEDO_ENABLE_BRUSH_MASK
@@ -95,11 +97,36 @@ struct LinearGradientMaskSource {
       -> bool = default;
 };
 
+/// Format version of the `ai_segmentation` source JSON.
+inline constexpr std::uint32_t kAiSegmentationSourceFormatVersion = 1;
+
+/**
+ * @brief AI Segmentation Mask: a stored R8 coverage asset and the recipe that made it.
+ *
+ * Rendering reads @p asset_key, @p descriptor, and @p edge. The edit session reads @p recipe.
+ * @p analysis_extent is the size of the analysis image that the session used; the asset raster
+ * has its resolution and covers @p descriptor.reference_bounds of the full ReferenceSpace.
+ * @p model_set_id and @p geometry_fingerprint identify the models and the Lens and RAW decode
+ * settings of the analysis image. The asset bytes live in the project database (`MaskAsset`).
+ */
+struct AiSegmentationMaskSource {
+  MaskAssetKey         asset_key;
+  MaskAssetDescriptor  descriptor{};
+  Extent2D             analysis_extent{};
+  AiMaskRecipe         recipe;
+  AiMaskEdgeAdjustment edge;
+  std::string          model_set_id;
+  std::string          geometry_fingerprint;
+
+  friend auto          operator==(const AiSegmentationMaskSource&, const AiSegmentationMaskSource&)
+      -> bool = default;
+};
+
 using MaskSource = std::variant<
 #ifdef ALCEDO_ENABLE_BRUSH_MASK
     BrushMaskSource,
 #endif
-    RadialMaskSource, LinearGradientMaskSource>;
+    RadialMaskSource, LinearGradientMaskSource, AiSegmentationMaskSource>;
 
 /**
  * @brief Direct Color Range field. Only the disabled placeholder is supported.
@@ -149,7 +176,7 @@ struct MaskModel {
 [[nodiscard]] auto GetMaskSourceKind(const MaskSource& source) -> MaskSourceKind;
 
 /**
- * @brief JSON kind text for @p kind (`brush`, `radial`, `linear_gradient`).
+ * @brief JSON kind text for @p kind (`brush`, `radial`, `linear_gradient`, `ai_segmentation`).
  */
 [[nodiscard]] auto MaskSourceKindText(MaskSourceKind kind) -> std::string_view;
 
@@ -319,6 +346,10 @@ enum class AnalyticMaskKind : std::uint8_t {
   LinearGradient = 1,
 };
 
+/**
+ * @brief Analytic kind of a Radial or Linear Gradient Mask.
+ * @throws std::invalid_argument when the source is not analytic.
+ */
 [[nodiscard]] auto AnalyticKindFromMask(const MaskModel& mask) -> AnalyticMaskKind;
 [[nodiscard]] auto RadialParamsFromMask(const MaskModel& mask) -> RadialMaskParams;
 [[nodiscard]] auto LinearGradientParamsFromMask(const MaskModel& mask) -> LinearGradientMaskParams;

@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <stdexcept>
 #include <variant>
 
 namespace alcedo {
@@ -303,6 +304,11 @@ auto ApplyAnalyticMaskHandle(AnalyticMaskHandle handle, const MaskSource& source
       default:
         return std::nullopt;
     }
+  }
+  if (std::holds_alternative<AiSegmentationMaskSource>(source)) {
+    throw std::invalid_argument(
+        "ApplyAnalyticMaskHandle: AI Segmentation Mask handle editing is not available in this "
+        "build");
   }
   return std::nullopt;
 }

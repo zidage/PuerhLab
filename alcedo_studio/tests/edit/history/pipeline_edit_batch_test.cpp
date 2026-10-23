@@ -13,6 +13,7 @@
 #include <iterator>
 #include <limits>
 #include <random>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <variant>
@@ -25,6 +26,7 @@
 #include "edit/history/edit_commit.hpp"
 #include "edit/history/pipeline_edit_change.hpp"
 #include "edit/history/pipeline_history_format.hpp"
+#include "edit/mask/ai_mask_asset_references.hpp"
 #include "edit/mask/mask_model.hpp"
 #include "edit/operators/models/adjustment_catalog.hpp"
 #include "edit/operators/models/builtin_type_ids.hpp"
@@ -733,6 +735,93 @@ TEST(PipelineEditBatch, GraphInsertAndTypedCommitVerification) {
   ASSERT_NE(stored, nullptr);
   const auto restored = PipelineEditBatch::FromJSON(stored->GetPayloadJSON());
   EXPECT_EQ(restored.CanonicalJSON().dump(), typed.GetPayloadJSON().dump());
+}
+
+TEST(PipelineEditBatch, CollectAiMaskAssetKeysFindsKeysInEveryBatchType) {
+  const auto ai_mask_json = [](MaskId id, char digit) {
+    return MaskModelToJson(grade_mask_test::MakeAiSegmentationMask(
+        std::move(id), grade_mask_test::MakeAiSegmentationSource(std::string(32, digit))));
+  };
+  const auto ai_source_json = [&ai_mask_json](char digit) {
+    return ai_mask_json(MaskId{"mask.ai"}, digit).at("source");
+  };
+  const auto keys_of = [](const PipelineEditBatch& batch) {
+    std::set<MaskAssetKey> keys;
+    CollectAiMaskAssetKeys(batch.CanonicalJSON(), keys);
+    return keys;
+  };
+  const auto    key = [](char digit) { return MaskAssetKey{std::string(32, digit)}; };
+
+  AddMaskChange add_mask;
+  add_mask.node_id = NodeId{"grade.look"};
+  add_mask.mask_id = MaskId{"mask.ai"};
+  add_mask.mask    = ai_mask_json(MaskId{"mask.ai"}, 'a');
+  EXPECT_EQ(keys_of(PipelineEditBatch::Make(PipelineEditOperationKind::AddMask, {add_mask},
+                                            "history.operation.add_mask")),
+            std::set<MaskAssetKey>{key('a')});
+
+  RemoveMaskChange remove_mask = {};
+  remove_mask.node_id          = NodeId{"grade.look"};
+  remove_mask.mask_id          = MaskId{"mask.ai"};
+  remove_mask.mask             = ai_mask_json(MaskId{"mask.ai"}, 'b');
+  EXPECT_EQ(keys_of(PipelineEditBatch::Make(PipelineEditOperationKind::RemoveMask, {remove_mask},
+                                            "history.operation.remove_mask")),
+            std::set<MaskAssetKey>{key('b')});
+
+  ReplaceMaskSourceChange replace;
+  replace.node_id       = NodeId{"grade.look"};
+  replace.mask_id       = MaskId{"mask.ai"};
+  replace.before_source = ai_source_json('c');
+  replace.after_source  = ai_source_json('d');
+  EXPECT_EQ(keys_of(PipelineEditBatch::Make(PipelineEditOperationKind::ReplaceMaskSource, {replace},
+                                            "history.operation.replace_mask_source")),
+            (std::set<MaskAssetKey>{key('c'), key('d')}));
+
+  auto grade = std::make_unique<ColorGradeNodeModel>(NodeId{"grade.look"});
+  grade->SetDisplayName("Look");
+  grade->AddMask(MakeRadialMask(MaskId{"mask.radial"}, "Radial"), 0);
+  grade->AddMask(
+      grade_mask_test::MakeAiSegmentationMask(
+          MaskId{"mask.ai"}, grade_mask_test::MakeAiSegmentationSource(std::string(32, 'e'))),
+      1);
+  RemoveColorGradeChange remove_grade;
+  remove_grade.node_id               = NodeId{"grade.look"};
+  remove_grade.node                  = grade->ToJson();
+  remove_grade.predecessor_id        = NodeId{"develop"};
+  remove_grade.successor_id          = NodeId{"drt"};
+  remove_grade.removed_incoming_edge = MakeSceneEdge("develop", "grade.look");
+  remove_grade.removed_outgoing_edge = MakeSceneEdge("grade.look", "drt");
+  remove_grade.bridge_edge           = MakeSceneEdge("develop", "drt");
+  EXPECT_EQ(keys_of(PipelineEditBatch::Make(
+                PipelineEditOperationKind::RemoveColorGrade, {remove_grade},
+                "history.operation.remove_color_grade",
+                nlohmann::json{{"node_display_name", "Look"}, {"node_id", "grade.look"}})),
+            std::set<MaskAssetKey>{key('e')});
+
+  AddColorGradeChange pasted_grade;
+  pasted_grade.node_id        = NodeId{"grade.look"};
+  pasted_grade.node           = grade->ToJson();
+  pasted_grade.predecessor_id = NodeId{"develop"};
+  pasted_grade.successor_id   = NodeId{"drt"};
+  pasted_grade.incoming_edge  = MakeSceneEdge("develop", "grade.look");
+  pasted_grade.outgoing_edge  = MakeSceneEdge("grade.look", "drt");
+  AddMaskChange pasted_mask;
+  pasted_mask.node_id       = NodeId{"grade.look"};
+  pasted_mask.mask_id       = MaskId{"mask.pasted"};
+  pasted_mask.mask          = ai_mask_json(MaskId{"mask.pasted"}, 'f');
+  pasted_mask.display_index = 2;
+  EXPECT_EQ(
+      keys_of(PipelineEditBatch::Make(PipelineEditOperationKind::Paste, {pasted_grade, pasted_mask},
+                                      "history.operation.paste")),
+      (std::set<MaskAssetKey>{key('e'), key('f')}));
+
+  AddMaskChange radial;
+  radial.node_id = NodeId{"grade.look"};
+  radial.mask_id = MaskId{"mask.radial"};
+  radial.mask    = MaskModelToJson(MakeRadialMask(MaskId{"mask.radial"}, "Radial"));
+  EXPECT_TRUE(keys_of(PipelineEditBatch::Make(PipelineEditOperationKind::AddMask, {radial},
+                                              "history.operation.add_mask"))
+                  .empty());
 }
 
 }  // namespace alcedo
