@@ -423,6 +423,7 @@ rules of SM3.A and SM3.C: the port is correct when it gives the MVP results on t
 | Combination across mask types (F7) and recipe storage (F9), lab decision O1 | SM5 and SM9, after a user decision |
 | Training data rule U13 and the S3OD float32 tolerance (lab acceptance record, section 6) | User decision before SM2 publishes files |
 | Model unload when the user goes back to adjusting (U6) | SM3.A provides the operation; SM9 calls it |
+| S3OD residency: resident from load to unload (SM3.C C6, C10; slows the SAM 2.1 encoder by about 60 ms and a decode by 2 to 3 ms on DirectML) or loaded for each Subject computation (about 0.9 s per new image); SM3.C plan section 13.1 | SM9, with the AI Mask tool interaction |
 
 ---
 
@@ -587,8 +588,8 @@ Scope:
 - The Mask thumbnail from the R8 asset.
 - Use the lab MVP UI as a reference only (D15). Record each difference from it with its reason.
 
-Open decisions: the exact interaction set of D3, and the tool behavior at the 64-point decoder
-limit. Split this phase before it starts. The expected diff is more than 2000 lines.
+Open decisions: the exact interaction set of D3, the tool behavior at the 64-point decoder
+limit, and the S3OD residency (section 8.2.6). Split this phase before it starts. The expected diff is more than 2000 lines.
 
 ### 9.9 SM10 — Product qualification
 

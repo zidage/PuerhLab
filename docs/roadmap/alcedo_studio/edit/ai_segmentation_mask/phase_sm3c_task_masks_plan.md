@@ -474,9 +474,9 @@ The peak of 2,955 MB is inside the 3 GB budget of U6 (the SM3.B plan expected ab
 
 With the S3OD DirectML session resident, the SAM 2.1 encoder takes about 60 ms longer and a
 decode about 2 to 3 ms longer. The CPU work of SM3.C adds only about 7 ms to a start. The cause
-inside DirectML is not known. A user decision can trade this cost against the S3OD load time
-(load S3OD at the first Subject request of an image and unload it after the run: about 0.9 s of
-load and a first run for each new image; section 13.3).
+inside DirectML is not known. The other choice is to load S3OD at the first Subject request of an
+image and unload it after the run (about 0.9 s of load and a first run for each new image). The
+user moved this decision to SM9 (section 13.3).
 
 ### 13.2 macOS record
 
@@ -492,5 +492,7 @@ the devices `""` and `cpu`.
 
 - The macOS port check with the Core ML models (section 13.2). SM3.C is complete on macOS only
   after it passes.
-- User decision: keep S3OD resident from load to unload (current, C6 and C10), or load it for
-  each Subject computation (section 13.1, last table).
+- S3OD residency: keep S3OD resident from load to unload (current, C6 and C10), or load it for
+  each Subject computation (section 13.1, last table). The user decided on 2026-10-23 that SM9
+  makes this decision together with the AI Mask tool interaction (when the tool requests Subject
+  and Background, and how long it keeps a session). SM3.C keeps C6 and C10 until then.
