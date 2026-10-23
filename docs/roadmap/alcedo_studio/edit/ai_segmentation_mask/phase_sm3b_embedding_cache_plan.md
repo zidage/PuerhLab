@@ -2,9 +2,8 @@
 
 Date: 2026-10-22.
 
-Status: partial on 2026-10-22 (`feature/ai-segmentation-sm3b`). Windows is implemented and
-verified (section 13). The phase is complete only after the macOS build and run (decision B5);
-they are not done because the Mac is not reachable.
+Status: complete on 2026-10-22 (`feature/ai-segmentation-sm3b`, #463, issue #464). Windows and
+macOS are verified (section 13); the macOS build and run of decision B5 are done.
 
 Parent plan: [AI Segmentation Mask Master Plan](../ai_segmentation_mask_master_plan.md), section
 9.2.2.
@@ -393,9 +392,8 @@ cargo test --release --test segmentation_port_check -- --nocapture
 
 ### 13.1 SM3.B completion record (2026-10-22)
 
-**Status:** partial. Windows: implemented and verified. macOS: the Core ML adapter type-checks for
-`aarch64-apple-darwin`; the macOS build, `cargo test`, and the port check with the Core ML models
-are not done (the Mac `yurunmac.local` does not resolve). B5 makes them a completion requirement.
+**Status:** complete. Windows: implemented and verified. macOS: built and verified on the Mac
+(section 13.2), so the requirement of decision B5 is met.
 
 **Source revision and branch:** uncommitted work on `c016dea1` (`main` after #462),
 `feature/ai-segmentation-sm3b`.
@@ -456,7 +454,7 @@ OrtDecoder::load: a session or its warm-up run fails
 | C++ section 8 tests | `SegmentationClientTest`, `AiMaskSegmentationServiceTest` | 17 of 17 passed |
 | Direct callers of `AiProto` and `SidecarClient` | `AiSidecarRuntimeServiceTest`, `ImageAnalysisServiceTest` with the two above | 79 passed, 2 environment skips (existing live tests), 0 failed |
 | Core ML adapter type check | shim crate `build/tmp/sm3b/coreml_shim`, `cargo check --target aarch64-apple-darwin --lib --tests` | 0, no warning |
-| `coreml_features_keep_float32_array_without_copy` | macOS | not run (Mac not reachable) |
+| `coreml_features_keep_float32_array_without_copy` | macOS | passed (section 13.2) |
 
 Commands: section 10; `cargo fmt --check` clean; `cargo_msvc.cmd clippy --release --all-targets`:
 no finding in the changed files; the run exits 101 on the existing `semantic.rs:913`
@@ -496,10 +494,10 @@ GPU memory: the per-count sessions and their bound features add 280 MB after dec
 figure for all models (SM1, 2,666 MB in the Python process) plus 280 MB is about 2,950 MB, inside
 the U6 budget of 3 GB but with little margin. SM3.C must measure the sidecar with all models.
 
-macOS: not measured.
+macOS: section 13.2.
 
-**Checklist / exit condition:** Windows items of sections 7 and 8 are done. Step 13 (macOS build,
-`cargo test`, port check, Core ML timing) is open.
+**Checklist / exit condition:** all steps of section 7 and all tests of section 8 are done on
+Windows and macOS.
 
 **LOC note:** about 2,200 inserted and 650 removed lines, of which 410 are documents. The code is
 above the 900-1,300 estimate: the engine tests were rewritten for the role interfaces (the fake
@@ -508,8 +506,38 @@ file is `engine.rs` with 896 lines, of which 480 are tests.
 
 **Remaining gaps:**
 
-- macOS build, unit tests, port check, and timing (B5). Run on the Mac:
-  `cargo test --release -- --skip live_` and the port check of section 10 with the
-  `.mlmodelc` models and a copy of `build/tmp/sm3a/port_reference`.
 - The C++ client was not run against the real sidecar; the Python client covered the real sidecar.
 - The image key content is open until SM4.
+
+### 13.2 macOS record (2026-10-22)
+
+Mac: Apple Silicon (arm64), macOS 27.0.1, rustc 1.90.0, branch `feature/ai-segmentation-sm3b` at
+`6a52abfc`. Core ML models: `point_encoder.mlmodelc` and `point_decoder.mlmodelc` of the lab
+evidence `build/tmp/explore/coreml/float32/`. Port reference: a copy of the Windows
+`build/tmp/sm3a/port_reference` (14 photos, the same prompts).
+
+| Check | Result |
+| --- | --- |
+| `cargo test --release -- --skip live_` | 327 + 4 + 5 + 1 passed, 0 failed, 0 warnings; includes `coreml_features_keep_float32_array_without_copy` and all SM3.B engine and cache tests |
+| Port check, device `""` (encoder `ComputeUnits::All`, decoder `CpuOnly`) | passed: 140 masks, minimum photo IoU 0.999964; key-only start of the first photo `ImageNotCached` |
+| Port check, device `cpu` (all models `CpuOnly`) | passed: 140 masks, minimum photo IoU 0.999973 |
+| SM3.A port check at `c016dea1` on the same Mac | passed: 128 masks, minimum photo IoU 0.999964 (the open SM3.A macOS port check) |
+| C++ `SegmentationClientTest`, `AiMaskSegmentationServiceTest` | 17 of 17 passed in the `macOS arm64 Metal` CI job of #463 |
+
+Core ML timing, port check, same Mac and day (milliseconds, p50):
+
+| Item | SM3.A | SM3.B |
+| --- | ---: | ---: |
+| Model load | 67 + 67 (warm) | 54 to 439 + 64 to 67 |
+| Encoder (preprocessing and encoder) | 241 | 230 to 232 |
+| Decode, 1 / 2 / 3 / 4 decoder points | 33 / 33 / 34 / 34 | 33.5 / 33.3 / 33.0 / 33.5 |
+| Same prompt on the same session (20 calls) | not measured | 29.1 |
+| Same, with a strided read and copy of the features on each call (temporary build) | | 38.6 |
+| Start from the cache (engine) | none | 6 to 7 us |
+
+The Core ML decode time does not change: the decoder runs on the CPU (U15) and its run dominates.
+SM3.A copied the host tensors into new arrays with one memory copy for each call; SM3.B adds
+retained references to the stored arrays and does not copy. The temporary build, which reads
+the arrays through their strides and copies them on each call, is 9.5 ms slower. The cache saves
+the encoder (230 ms) for each cached start. The first encoder run after a load took 3,039 ms in the
+first run on this Mac (Core ML preparation) and 292 ms in later processes.

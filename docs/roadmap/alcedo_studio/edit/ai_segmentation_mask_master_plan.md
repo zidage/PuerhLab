@@ -5,12 +5,11 @@ Date: 2026-10-19. Revised: 2026-10-22.
 Status: SM1 complete on 2026-10-22. The EfficientSAM3 quality review failed (section 8.1). The
 re-evaluation in the `alcedo-ai-mask-lab` repository accepted the model set SAM 2.1 Hiera tiny, the
 people and sky head, and S3OD `s3od-synth` (section 8.2). Alcedo Studio does not use EfficientSAM3
-or SAM3. SM3 is split into SM3.A, SM3.B, and SM3.C. SM3.A is complete on Windows on 2026-10-22; its macOS
-build and run wait for the Mac
-([phase plan](ai_segmentation_mask/phase_sm3a_segmentation_service_plan.md)). SM3.B is implemented
-and verified on Windows on 2026-10-22; it is complete only after the macOS build and run (user
-decision B5, [phase plan](ai_segmentation_mask/phase_sm3b_embedding_cache_plan.md)). SM2 runs
-after SM9 (section 7).
+or SAM3. SM3 is split into SM3.A, SM3.B, and SM3.C. SM3.A is complete on 2026-10-22
+([phase plan](ai_segmentation_mask/phase_sm3a_segmentation_service_plan.md)); its macOS port check
+ran with the SM3.B macOS run. SM3.B is complete on Windows and macOS on 2026-10-22
+([phase plan](ai_segmentation_mask/phase_sm3b_embedding_cache_plan.md)). SM2 runs after SM9
+(section 7).
 
 Target release: Alcedo Studio 0.3.4. The AI Segmentation Mask is the main feature of that release.
 
@@ -272,8 +271,8 @@ The project storage owns the R8 bytes. No owner keeps a copy of another owner's 
 | Phase | Result | Main modules | Dependency | Expected diff | Status |
 | --- | --- | --- | --- | ---: | --- |
 | SM1 | Model selection, export, runtime feasibility, latency, and quality evidence | `alcedo-ai-mask-lab` | none | 900-1500 | complete 2026-10-22 (section 8) |
-| SM3.A | Segmentation service architecture: proto, Rust service with the Windows ONNX Runtime and macOS Core ML adapters, SAM 2.1 encode and decode, C++ client with a persistent channel, app session | proto, Rust service, `sidecar_client`, app | SM1 | 2400-2950 estimated, in two parts SM3.A.1 and SM3.A.2; actual about 4,500 | complete on Windows 2026-10-22; macOS build and run open ([phase plan](ai_segmentation_mask/phase_sm3a_segmentation_service_plan.md)) |
-| SM3.B | Image embedding cache and first optimizations | Rust service, app session | SM3.A | 800-1400; actual about 1,800 code lines | Windows complete 2026-10-22; macOS build and run open, required for completion ([phase plan](ai_segmentation_mask/phase_sm3b_embedding_cache_plan.md)) |
+| SM3.A | Segmentation service architecture: proto, Rust service with the Windows ONNX Runtime and macOS Core ML adapters, SAM 2.1 encode and decode, C++ client with a persistent channel, app session | proto, Rust service, `sidecar_client`, app | SM1 | 2400-2950 estimated, in two parts SM3.A.1 and SM3.A.2; actual about 4,500 | complete 2026-10-22; macOS port check passed with the SM3.B macOS run ([phase plan](ai_segmentation_mask/phase_sm3a_segmentation_service_plan.md)) |
+| SM3.B | Image embedding cache and first optimizations | Rust service, app session | SM3.A | 800-1400; actual about 1,800 code lines | complete 2026-10-22 on Windows and macOS ([phase plan](ai_segmentation_mask/phase_sm3b_embedding_cache_plan.md)) |
 | SM3.C | Task masks in the service: Subject (S3OD), Background, Sky and People (head) | Rust service, proto, C++ client | SM3.A | 1200-1800 | outline |
 | SM4 | Analysis render in ReferenceSpace | geometry, scheduler, app service | none | 600-1200 | outline |
 | SM5 | AI Mask source model, R8 persistence, history, and project format | `edit/mask`, history, storage | SM1 | over 2000, split before start | outline |
