@@ -24,15 +24,18 @@ the selected box logits as `mask_input`.
 Output (--out): `manifest.json` and little-endian float32 files (`*.f32`) of the mask input and
 the logits of every returned mask.
 
-Task masks (SM3.C), when --lab-dir, --head-onnx, --head-json, and --subject-onnx are given: the
-script runs the people and sky head on the encoder output and S3OD on the photo with the functions
-of the lab repository (`alcedo-ai-mask-lab`, the code of the MVP `mask_pipeline.py`):
-`evaluate_quality_photos.sky_regions` and `region_points` (Sky), `head_model.decode_people` with
-an overlap limit of 0.5 (People), and `s3od_graphs.letterbox`, `select_mask`, and `unpad`
-(Subject). It writes the logits of each Sky region and of each listed person, and the Subject
-alpha. The People list follows the SM3.C plan: the boxes with a score of at least the list
-threshold, else the best box when the person presence passed (decision C2), sorted from left to
-right by the box center (C3). The Rust test makes the unions itself.
+Task masks (SM3.C and SM3.D), when --lab-dir, --head-onnx, --head-json, and --subject-onnx are
+given: the script runs the people and sky head on the encoder output and S3OD on the photo and on
+each person crop with the functions of the lab repository (`alcedo-ai-mask-lab`, the code of the
+MVP `mask_pipeline.py`): `evaluate_quality_photos.sky_regions` and `region_points` (Sky),
+`head_model.decode_people` with an overlap limit of 0.5 (People list), `s3od_graphs.letterbox`,
+`select_mask`, and `unpad` (Subject and each person crop), and `mask_pipeline.person_crop_rect`,
+`person_crop_image`, `subject_fraction`, and `PERSON_IN_SUBJECT_FRACTION` (SM3.D). It writes the
+logits of each Sky region, the Subject alpha, and for each listed person the crop rectangle, the
+crop alpha, `subject_fraction`, and `in_subject`. The People list follows the SM3.C plan: the
+boxes with a score of at least the list threshold, else the best box when the person presence
+passed (decision C2), sorted from left to right by the box center (C3). The Rust test makes the
+Sky union itself.
 """
 
 from __future__ import annotations
@@ -134,10 +137,12 @@ class TaskReference:
                  decode) -> None:
         scripts = lab_dir / "scripts"
         for directory in (scripts / "poc" / "people_sky_head",
-                          scripts / "poc" / "sam_feature_localization"):
+                          scripts / "poc" / "sam_feature_localization",
+                          scripts / "poc" / "ai_mask_mvp"):
             sys.path.insert(0, str(directory))
         import evaluate_quality_photos as quality
         import head_model
+        import mask_pipeline
 
         # s3od_graphs by its file path: its directory has another `compare_onnx_outputs.py`.
         spec = importlib.util.spec_from_file_location(
@@ -146,6 +151,7 @@ class TaskReference:
         spec.loader.exec_module(self.s3od)
         self.quality = quality
         self.head_model = head_model
+        self.mask_pipeline = mask_pipeline
         self.decode = decode
         validation = json.loads(head_json.read_text())["validation"]
         self.thresholds = {
@@ -158,6 +164,14 @@ class TaskReference:
                                             providers=["CPUExecutionProvider"])
         self.sha256 = {"head": file_sha256(head_onnx), "head_json": file_sha256(head_json),
                        "subject": file_sha256(subject_onnx)}
+
+    def subject_alpha(self, rgb8: np.ndarray) -> tuple[np.ndarray, float]:
+        """S3OD on an RGB8 image (MVP select_subject): the alpha without padding and its score."""
+        pixels, info = self.s3od.letterbox(np.ascontiguousarray(rgb8), self.s3od.IMAGE_SIZE)
+        masks, iou_scores = self.subject.run(None, {"pixel_values": pixels})
+        alpha, index = self.s3od.select_mask(masks, iou_scores)
+        alpha = np.ascontiguousarray(self.s3od.unpad(alpha[None], info)[0], np.float32)
+        return alpha, float(iou_scores[0, index])
 
     def run(self, rgb8: np.ndarray, image_embed: np.ndarray, out: Path, stem: str) -> dict:
         sigmoid = self.quality.sigmoid
@@ -181,7 +195,17 @@ class TaskReference:
             sky["found"] = bool(regions)
         record["sky"] = sky
 
-        # People (MVP select_people with the SM3.C list rules C2 and C3).
+        # Subject (MVP select_subject with S3OD).
+        subject_alpha, subject_score = self.subject_alpha(rgb8)
+        alpha_file = f"{stem}_subject_alpha.f32"
+        (out / alpha_file).write_bytes(subject_alpha.astype("<f4").tobytes())
+        record["subject"] = {"width": int(subject_alpha.shape[1]),
+                             "height": int(subject_alpha.shape[0]), "score": subject_score,
+                             "alpha": alpha_file}
+
+        # People (SM3.D: the SM3.C list rules C2 and C3, S3OD on each person crop).
+        lab = self.mask_pipeline
+        height, width = rgb8.shape[:2]
         torch_outputs = {key: torch.from_numpy(value) for key, value in outputs.items()}
         decoded = self.head_model.decode_people(torch_outputs, nms_iou=0.5)[0]
         boxes = [{"box_cells": [float(v) for v in box], "score": float(score)}
@@ -194,24 +218,21 @@ class TaskReference:
             listed.sort(key=lambda box: ((box["box_cells"][0] + box["box_cells"][2]) / 2,
                                          -box["score"]))
             for index, box in enumerate(listed):
-                model_box = [min(max(v, 0.0), 64.0) * 16.0 for v in box["box_cells"]]
-                logits = self.decode(np.array([[model_box[:2], model_box[2:]]], np.float32),
-                                     np.array([[2.0, 3.0]], np.float32))
-                logits_file = f"{stem}_person{index}.f32"
-                (out / logits_file).write_bytes(logits.astype("<f4").tobytes())
-                people["people"].append({**box, "logits": logits_file})
+                rect = lab.person_crop_rect(box["box_cells"], width, height)
+                crop = lab.person_crop_image(rgb8, rect, self.s3od)
+                alpha, score = self.subject_alpha(crop)
+                fraction = lab.subject_fraction(subject_alpha, box["box_cells"])
+                person_file = f"{stem}_person{index}_alpha.f32"
+                (out / person_file).write_bytes(alpha.astype("<f4").tobytes())
+                people["people"].append({
+                    **box, "rect": [int(v) for v in rect],
+                    "crop_width": int(crop.shape[1]), "crop_height": int(crop.shape[0]),
+                    "alpha": person_file, "alpha_width": int(alpha.shape[1]),
+                    "alpha_height": int(alpha.shape[0]), "alpha_score": score,
+                    "subject_fraction": fraction,
+                    "in_subject": fraction >= lab.PERSON_IN_SUBJECT_FRACTION})
             people["found"] = bool(listed)
         record["people"] = people
-
-        # Subject (MVP select_subject with S3OD).
-        pixels, info = self.s3od.letterbox(rgb8, self.s3od.IMAGE_SIZE)
-        masks, iou_scores = self.subject.run(None, {"pixel_values": pixels})
-        alpha, index = self.s3od.select_mask(masks, iou_scores)
-        alpha = np.ascontiguousarray(self.s3od.unpad(alpha[None], info)[0], np.float32)
-        alpha_file = f"{stem}_subject_alpha.f32"
-        (out / alpha_file).write_bytes(alpha.astype("<f4").tobytes())
-        record["subject"] = {"width": int(alpha.shape[1]), "height": int(alpha.shape[0]),
-                             "score": float(iou_scores[0, index]), "alpha": alpha_file}
         return record
 
 
@@ -260,6 +281,8 @@ def main() -> None:
                               decode_single)
         manifest["task_sha256"] = tasks.sha256
         manifest["task_thresholds"] = tasks.thresholds
+        manifest["person_crop_margin"] = tasks.mask_pipeline.PERSON_CROP_MARGIN
+        manifest["person_in_subject_fraction"] = tasks.mask_pipeline.PERSON_IN_SUBJECT_FRACTION
     for photo_path in sorted(args.photos.iterdir()):
         entry = entries.get(photo_path.name)
         if entry is None:

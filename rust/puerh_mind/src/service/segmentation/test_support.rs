@@ -52,6 +52,8 @@ pub struct FakeCalls {
     pub encoder_runs: AtomicUsize,
     pub decoder_calls: Mutex<Vec<FakeDecoderCall>>,
     pub head_runs: AtomicUsize,
+    /// Number of the next head runs that fail.
+    pub head_failures: AtomicUsize,
     /// The output of every fake head run after the warm-up; `None`: no sky and no person.
     pub head_output: Mutex<Option<HeadOutput>>,
     pub subject_runs: AtomicUsize,
@@ -59,6 +61,9 @@ pub struct FakeCalls {
     pub subject_failures: AtomicUsize,
     /// The alpha value of the selected fake S3OD mask (mask 1) on the whole input.
     pub subject_alpha: Mutex<f32>,
+    /// The first-channel input value at the center of the 1024 x 1024 input of every S3OD run, so
+    /// a test can tell a photo run from a crop run.
+    pub subject_center_inputs: Mutex<Vec<f32>>,
     /// When true, the fake decoder marks token 0 at the cell `plane - 1 - x`, where x is the first
     /// decoder coordinate, so masks of different prompts differ.
     pub mark_prompt_cell: std::sync::atomic::AtomicBool,
@@ -169,6 +174,9 @@ impl SegmentationHead for FakeHead {
     fn run(&mut self, features: &Arc<dyn ImageFeatures>) -> Result<HeadOutput> {
         features_of::<FakeImageFeatures>(features.as_ref())?;
         self.calls.head_runs.fetch_add(1, Ordering::SeqCst);
+        if take_failure(&self.calls.head_failures) {
+            bail!("fake head run failed");
+        }
         Ok(self
             .calls
             .head_output
@@ -179,6 +187,15 @@ impl SegmentationHead for FakeHead {
     }
 }
 
+/// Takes one planned failure from @p failures; true when the run must fail.
+fn take_failure(failures: &AtomicUsize) -> bool {
+    failures
+        .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |left| {
+            left.checked_sub(1)
+        })
+        .is_ok()
+}
+
 struct FakeSubjectModel {
     calls: Arc<FakeCalls>,
 }
@@ -187,13 +204,13 @@ impl SubjectModel for FakeSubjectModel {
     fn run(&mut self, pixel_values: &TensorF32) -> Result<SubjectOutput> {
         pixel_values.expect_shape("pixel_values", &SUBJECT_PIXEL_VALUES_SHAPE)?;
         self.calls.subject_runs.fetch_add(1, Ordering::SeqCst);
-        let failures = &self.calls.subject_failures;
-        if failures
-            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |left| {
-                left.checked_sub(1)
-            })
-            .is_ok()
-        {
+        let center = (SUBJECT_IMAGE_SIZE / 2) * SUBJECT_IMAGE_SIZE + SUBJECT_IMAGE_SIZE / 2;
+        self.calls
+            .subject_center_inputs
+            .lock()
+            .expect("center inputs")
+            .push(pixel_values.data()[center]);
+        if take_failure(&self.calls.subject_failures) {
             bail!("fake S3OD run failed");
         }
         let plane = SUBJECT_IMAGE_SIZE * SUBJECT_IMAGE_SIZE;

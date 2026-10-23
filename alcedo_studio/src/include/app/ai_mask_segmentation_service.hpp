@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -72,10 +73,10 @@ class AiMaskSegmentationService {
   /// Decodes @p prompt on the current session. Fails without a sidecar call when no session
   /// exists.
   auto               Decode(const SegmentationPrompt& prompt) -> SegmentationDecodeResult;
-  /// Runs the task mask @p task on the current session (SM3.C). @p person_indices selects people
-  /// of the People list for kPeople (empty: all listed people). Fails without a sidecar call when
-  /// no session exists.
-  auto               RunTask(SegmentationTask task, const std::vector<uint32_t>& person_indices = {})
+  /// Runs the task mask @p task on the current session (SM3.C, SM3.D). @p person_index is the
+  /// index into the People list for kPerson; the other tasks take no index. Fails without a
+  /// sidecar call when no session exists or the service is closed.
+  auto RunTask(SegmentationTask task, std::optional<uint32_t> person_index = std::nullopt)
       -> SegmentationTaskResult;
   /// Ends the current session. Succeeds without a sidecar call when no session exists.
   auto               EndImage() -> SegmentationCallStatus;

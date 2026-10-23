@@ -3,7 +3,7 @@
 Date: 2026-10-23.
 
 Status: implemented and verified on Windows on 2026-10-23 (`feature/ai-segmentation-sm3c`). The
-macOS port check with the Core ML models is open (section 13.2).
+macOS port check with the Core ML models passed on 2026-10-23 with SM3.D (section 13.2).
 
 Parent plan: [AI Segmentation Mask Master Plan](../ai_segmentation_mask_master_plan.md), section
 9.2.3.
@@ -480,18 +480,25 @@ user moved this decision to SM9 (section 13.3).
 
 ### 13.2 macOS record
 
-Not done on 2026-10-23: `yurunmac.local` did not resolve and the known addresses of the Mac did
-not answer. The macOS build of the Rust sidecar and the C++ tests run in the `macOS arm64 Metal`
-CI job of the pull request. The executor runs on the Mac: `cargo test --release -- --skip live_`
-and the port check with `point_encoder.mlmodelc`, `point_decoder.mlmodelc`,
-`people_sky_head.mlmodelc`, `people_sky_head.json`, and `s3od.mlmodelc`
-(`float16_embeddings_attention_float32`) against a copy of `build/tmp/sm3c/port_reference`, on
-the devices `""` and `cpu`.
+First attempt (2026-10-23, SM3.C): not done. `yurunmac.local` did not resolve and the known
+addresses of the Mac did not answer.
+
+Done with SM3.D on 2026-10-23 (SM3.D plan, section 12.3): Apple Silicon, macOS 27.0.1, the SM3.D
+branch on `2722a740`, the Core ML models `point_encoder.mlmodelc`, `point_decoder.mlmodelc`,
+`people_sky_head.mlmodelc` with its JSON file, and `s3od.mlmodelc`
+(`float16_embeddings_attention_float32`). The SM3.D port check includes all SM3.C tasks.
+
+| Test | Result |
+| --- | --- |
+| `cargo test --release -- --skip live_` | 368 + 4 + 5 + 1 passed |
+| C++ `SegmentationClientTest`, `AiMaskSegmentationServiceTest` | 22 of 22 passed |
+| Port check, Core ML `All` (device `""`) | passed: prompt masks minimum photo IoU 0.999964; Sky unions IoU at least 0.999999; Subject grid IoU at least 0.998243; Background at least 0.999960; encoder p50 424 to 430 ms; decoder p50 41 to 44 ms |
+| Port check, Core ML `CPUOnly` (device `cpu`) | failed: `Nikon-D800e-raw-00007` Subject grid IoU 0.996392 (and SM3.D person crops); prompt masks, Sky, and Background pass. Issue #477. The app uses Core ML `All`. |
 
 ### 13.3 Remaining items
 
-- The macOS port check with the Core ML models (section 13.2). SM3.C is complete on macOS only
-  after it passes.
+- The macOS port check with the Core ML models: done with SM3.D (section 13.2). It passes on Core
+  ML `All`; the `CPUOnly` device fails (issue #477).
 - S3OD residency: keep S3OD resident from load to unload (current, C6 and C10), or load it for
   each Subject computation (section 13.1, last table). The user decided on 2026-10-23 that SM9
   makes this decision together with the AI Mask tool interaction (when the tool requests Subject

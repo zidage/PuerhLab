@@ -9,8 +9,9 @@
 //! and then ends the sessions and clears the cache. Each model has its own mutex: one call per
 //! model at a time. The engine never holds the session lock and the cache lock at the same time.
 //!
-//! The task masks (SM3.C plan) run the people and sky head, the decoder, and S3OD with the rules
-//! of [`super::task_masks`] and keep their results in the image entry.
+//! The task masks (SM3.C and SM3.D plans) run the people and sky head, the decoder, and S3OD with
+//! the rules of [`super::task_masks`] and keep their results in the image entry. The head runs once
+//! at the session start; it makes the People list and the person crops (SM3.D decision E5).
 
 use std::collections::HashMap;
 use std::fmt;
@@ -25,10 +26,10 @@ use super::backend::{
     SegmentationEncoder, SegmentationHead, SegmentationModelRole, SubjectModel,
 };
 use super::image_embedding_cache::ImageEmbeddingCache;
-use super::image_entry::{ImageEntry, PeopleResult, PersonMask, ResultSlot, SkyResult};
+use super::image_entry::{ImageEntry, PeopleList, PersonCrop, ResultSlot, SkyResult};
 use super::model_set::{HEAD_THRESHOLDS_FILE, MASK_INPUT_SHAPE, MAX_IMAGE_EDGE, MODEL_SET_ID};
 use super::sam2::{self, DecodedMasks, SegmentationPrompt};
-use super::task_masks::{self, HeadThresholds, SubjectAlpha};
+use super::task_masks::{self, HeadThresholds, SubjectAlpha, SubjectInputImage};
 use super::tensor::TensorF32;
 
 /// Largest number of sessions at one time. The tool keeps one session; a few more cover a host
@@ -110,7 +111,7 @@ pub struct SegmentationStatus {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StartedSession {
     pub session_id: String,
-    /// Time of the preprocessing and the encoder; 0 for a cache hit.
+    /// Time of the preprocessing, the encoder, the head, and the person crops; 0 for a cache hit.
     pub encoder_ms: u64,
     /// True when the session uses a cached image embedding.
     pub from_cache: bool,
@@ -123,32 +124,54 @@ pub struct DecodeResult {
     pub decoder_ms: u64,
 }
 
-/// A task mask (SM3.C plan, section 2.1).
+/// A task mask (SM3.C plan, section 2.1; SM3.D plan, section 2.1).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SegmentationTask {
     Subject,
     Background,
     Sky,
     People,
+    /// The S3OD alpha of the crop of one person of the People list (SM3.D decision E2).
+    Person,
 }
 
-/// A task request: the task and, for People, the selected indices of the People list (empty
-/// selects all listed people).
+/// A task request: the task and, for `Person` only, the index into the People list (SM3.D
+/// decision E11).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TaskRequest {
     pub task: SegmentationTask,
-    pub person_indices: Vec<u32>,
+    pub person_index: Option<u32>,
+}
+
+/// A normalized rectangle of the session image (x0, y0, x1, y1 in [0, 1]).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MaskBox {
+    pub x0: f32,
+    pub y0: f32,
+    pub x1: f32,
+    pub y1: f32,
+}
+
+impl MaskBox {
+    /// The whole session image.
+    pub const FULL_IMAGE: MaskBox = MaskBox {
+        x0: 0.0,
+        y0: 0.0,
+        x1: 1.0,
+        y1: 1.0,
+    };
 }
 
 /// The values of a task mask, row-major.
 #[derive(Debug, Clone, PartialEq)]
 pub enum TaskMaskValues {
-    /// Sky and People: the union mask at the session image size, R8, `MASK_INSIDE` (255) inside
-    /// and 0 outside (SM3.C plan, decision C5).
+    /// Sky: the union mask at the session image size, R8, `MASK_INSIDE` (255) inside and 0 outside
+    /// (SM3.C plan, decision C5).
     Binary(Vec<u8>),
-    /// Subject and Background: S3OD alpha in [0, 1] on the unpadded S3OD grid; inside where
-    /// >= 0.5.
-    Alpha(Vec<f32>),
+    /// Subject, Background, People, and Person: S3OD alpha in [0, 1] on the unpadded S3OD grid;
+    /// inside where >= 0.5. The grid covers `mask_box` of the session image (SM3.D decision E10):
+    /// the whole image, or the crop rectangle of a person.
+    Alpha { values: Vec<f32>, mask_box: MaskBox },
 }
 
 /// The mask of a task result.
@@ -159,8 +182,10 @@ pub struct TaskMask {
     pub values: TaskMaskValues,
 }
 
-/// One entry of the People list of a task result: the normalized box, clipped to the image, and
-/// the score.
+/// One entry of the People list of a task result: the normalized box, clipped to the image, the
+/// score, and the share of the box in the Subject alpha (SM3.D decision E8). `subject_fraction` is
+/// 0 and `in_subject` false while the image has no Subject alpha (a Person request before any
+/// Subject, Background, or People request).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PersonListEntry {
     pub x0: f32,
@@ -168,10 +193,12 @@ pub struct PersonListEntry {
     pub x1: f32,
     pub y1: f32,
     pub score: f32,
+    pub subject_fraction: f32,
+    pub in_subject: bool,
 }
 
-/// The result of a task request (SM3.C plan, section 2.2). `mask` is `None` exactly when the task
-/// finds nothing; `message` then says why.
+/// The result of a task request (SM3.C plan, section 2.2; SM3.D plan, section 2.2). `mask` is
+/// `None` exactly when the task finds nothing; `message` then says why.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct TaskResult {
     pub mask: Option<TaskMask>,
@@ -179,7 +206,9 @@ pub struct TaskResult {
     pub presence: f32,
     pub presence_threshold: f32,
     pub region_count: u32,
+    /// People and Person: the full People list.
     pub people: Vec<PersonListEntry>,
+    /// Subject, Background, People: the S3OD IoU score of the photo run; Person: of the crop run.
     pub subject_score: f32,
     pub mask_area: u32,
     /// Time of the model runs of this request; 0 when all results came from the image entry.
@@ -251,7 +280,7 @@ fn read_head_thresholds(directory: &Path) -> Result<HeadThresholds, Segmentation
         .map_err(|err| SegmentationError::ModelNotReady(format!("{}: {err:#}", path.display())))
 }
 
-/// The union of the SAM 2.1 masks @p members at the image size of @p entry, with its area.
+/// The union of the SAM 2.1 masks @p members at the image size of @p entry, with its area (Sky).
 fn union_mask<'a>(
     entry: &ImageEntry,
     members: impl IntoIterator<Item = &'a [f32]>,
@@ -268,11 +297,107 @@ fn union_mask<'a>(
     )
 }
 
-fn alpha_mask(alpha: &SubjectAlpha, values: Vec<f32>) -> TaskMask {
+fn alpha_mask(alpha: &SubjectAlpha, values: Vec<f32>, mask_box: MaskBox) -> TaskMask {
     TaskMask {
         width: alpha.width as u32,
         height: alpha.height as u32,
-        values: TaskMaskValues::Alpha(values),
+        values: TaskMaskValues::Alpha { values, mask_box },
+    }
+}
+
+/// The People list of @p head (SM3.D plan, section 2.3, steps 1 and 2): the SM3.C presence and
+/// list rules, and the crop of each listed person from the session image @p rgb8 of @p width x
+/// @p height (decisions E3 and E4). Presence below the threshold or no box: no crops and the "not
+/// found" message.
+fn people_list_of(
+    thresholds: &HeadThresholds,
+    head: &HeadOutput,
+    rgb8: &[u8],
+    width: usize,
+    height: usize,
+) -> anyhow::Result<PeopleList> {
+    let (_, presence) = task_masks::presences(head);
+    let threshold = thresholds.person_presence;
+    let mut people = PeopleList {
+        presence,
+        presence_threshold: threshold,
+        persons: Vec::new(),
+        message: String::new(),
+    };
+    if presence < threshold {
+        people.message =
+            format!("No people found: person presence {presence:.3} is below {threshold:.3}.");
+        return Ok(people);
+    }
+    let boxes = task_masks::decode_people(head);
+    let listed = task_masks::people_list(&boxes, thresholds.people_list, true);
+    if listed.is_empty() {
+        people.message =
+            format!("No people found: presence {presence:.3}, but the head found no person box.");
+        return Ok(people);
+    }
+    for person in listed {
+        let rect = task_masks::person_crop_rect(&person, width, height);
+        let image = task_masks::person_crop_image(rgb8, width, height, rect)?;
+        people.persons.push(PersonCrop {
+            person,
+            rect,
+            image,
+        });
+    }
+    Ok(people)
+}
+
+/// The normalized rectangle of the crop of @p crop on an image of @p width x @p height (SM3.D
+/// decision E10).
+fn crop_mask_box(crop: &PersonCrop, width: usize, height: usize) -> MaskBox {
+    let (width, height) = (width as f32, height as f32);
+    MaskBox {
+        x0: crop.rect.x0 as f32 / width,
+        y0: crop.rect.y0 as f32 / height,
+        x1: crop.rect.x1 as f32 / width,
+        y1: crop.rect.y1 as f32 / height,
+    }
+}
+
+/// The People list entries of @p people. With @p subject, the Subject alpha of the image, each
+/// entry has its `subject_fraction` and `in_subject` (SM3.D decision E8); without it, 0 and false.
+fn person_list_entries(
+    people: &PeopleList,
+    subject: Option<&SubjectAlpha>,
+) -> Vec<PersonListEntry> {
+    people
+        .persons
+        .iter()
+        .map(|crop| {
+            let prompt_box = crop.person.prompt_box();
+            let subject_fraction = subject.map_or(0.0, |alpha| {
+                task_masks::subject_fraction(alpha, &crop.person)
+            });
+            PersonListEntry {
+                x0: prompt_box.x0,
+                y0: prompt_box.y0,
+                x1: prompt_box.x1,
+                y1: prompt_box.y1,
+                score: crop.person.score,
+                subject_fraction,
+                in_subject: subject.is_some()
+                    && subject_fraction >= task_masks::PERSON_IN_SUBJECT_FRACTION,
+            }
+        })
+        .collect()
+}
+
+/// Checks the task and the person index of @p request (SM3.D decision E11) before any model work.
+fn validate_task_request(request: &TaskRequest) -> Result<(), SegmentationError> {
+    match (request.task, request.person_index) {
+        (SegmentationTask::Person, None) => Err(SegmentationError::InvalidInput(
+            "the Person task needs a person index".to_string(),
+        )),
+        (SegmentationTask::Person, Some(_)) | (_, None) => Ok(()),
+        (task, Some(_)) => Err(SegmentationError::InvalidInput(format!(
+            "a person index is only valid for the Person task, not for {task:?}"
+        ))),
     }
 }
 
@@ -481,9 +606,11 @@ impl SegmentationEngine {
     ///
     /// A cached image key starts the session with the cached image entry and does not run the
     /// encoder. Otherwise the encoder runs once on the pixels, the S3OD input image is made from
-    /// them (SM3.C plan, decision C8), and a non-empty key stores the new image entry in the
-    /// cache. A request without pixels and with an unknown key fails with `ImageNotCached`. No
-    /// session is kept after a failure.
+    /// them (SM3.C plan, decision C8), the head runs on the encoder output, and the People list
+    /// and the person crops are made from the head output and the pixels (SM3.D decisions E4 and
+    /// E5); a non-empty key stores the new image entry in the cache. A request without pixels and
+    /// with an unknown key fails with `ImageNotCached`. A failure of a model run is an `Inference`
+    /// error. No session and no cache entry is kept after a failure.
     pub fn start_session(
         &self,
         request: StartSessionRequest<'_>,
@@ -526,12 +653,28 @@ impl SegmentationEngine {
             .map_err(|_| poisoned("encoder"))?
             .encode(&pixels)
             .map_err(inference)?;
+        let head = loaded
+            .head
+            .lock()
+            .map_err(|_| poisoned("head"))?
+            .run(&features)
+            .map_err(inference)?;
+        let people = people_list_of(
+            &loaded.thresholds,
+            &head,
+            image.rgb8,
+            width as usize,
+            height as usize,
+        )
+        .map_err(inference)?;
         let encoder_ms = elapsed_ms(started);
         let entry = Arc::new(ImageEntry::new(
             width as usize,
             height as usize,
             features,
             subject_input,
+            head,
+            people,
         ));
 
         self.check_session_capacity()?;
@@ -613,29 +756,29 @@ impl SegmentationEngine {
         Ok(masks.masks.swap_remove(selected).logits)
     }
 
-    /// Runs the task mask @p request on the image of @p session_id (SM3.C plan, section 2).
+    /// Runs the task mask @p request on the image of @p session_id (SM3.C plan, section 2; SM3.D
+    /// plan, sections 2.1 to 2.4).
     ///
-    /// The head outputs, the Sky and People results, and the Subject alpha are computed once per
+    /// The Sky result, the Subject alpha, and the alpha of each person crop are computed once per
     /// image entry; later requests read them from the entry. A task that finds nothing is a
-    /// successful result without a mask.
+    /// successful result without a mask. An invalid task, person index, or session fails before
+    /// any model run.
     pub fn run_task(
         &self,
         session_id: &str,
         request: TaskRequest,
     ) -> Result<TaskResult, SegmentationError> {
-        if request.task != SegmentationTask::People && !request.person_indices.is_empty() {
-            return Err(SegmentationError::InvalidInput(
-                "person indices are only valid for the People task".to_string(),
-            ));
-        }
+        validate_task_request(&request)?;
         let models = self.models.read().map_err(|_| poisoned("model set"))?;
         let loaded = models.as_ref().ok_or_else(not_loaded)?;
         let entry = self.session_entry(session_id)?;
         let started = Instant::now();
-        let (mut result, computed) = match request.task {
-            SegmentationTask::Sky => Self::sky_task(loaded, &entry)?,
-            SegmentationTask::People => Self::people_task(loaded, &entry, &request.person_indices)?,
-            SegmentationTask::Subject | SegmentationTask::Background => {
+        let (mut result, computed) = match (request.task, request.person_index) {
+            (SegmentationTask::Sky, _) => Self::sky_task(loaded, &entry)?,
+            (SegmentationTask::People, _) => Self::people_task(loaded, &entry)?,
+            (SegmentationTask::Person, Some(index)) => Self::person_task(loaded, &entry, index)?,
+            (SegmentationTask::Person, None) => unreachable!("validate_task_request"),
+            (SegmentationTask::Subject | SegmentationTask::Background, _) => {
                 Self::subject_task(loaded, &entry, request.task)?
             }
         };
@@ -645,30 +788,12 @@ impl SegmentationEngine {
         Ok(result)
     }
 
-    /// The head outputs of @p entry, computed once.
-    fn head_outputs(
-        loaded: &LoadedModelSet,
-        entry: &ImageEntry,
-    ) -> Result<Arc<HeadOutput>, SegmentationError> {
-        let (head, _) = result_of(&entry.head, || {
-            loaded
-                .head
-                .lock()
-                .map_err(|_| poisoned("head"))?
-                .run(&entry.features)
-                .map_err(inference)
-        })?;
-        Ok(head)
-    }
-
     fn sky_task(
         loaded: &LoadedModelSet,
         entry: &ImageEntry,
     ) -> Result<(TaskResult, bool), SegmentationError> {
-        let (sky, computed) = result_of(&entry.sky, || {
-            let head = Self::head_outputs(loaded, entry)?;
-            Self::compute_sky(loaded, entry, &head)
-        })?;
+        let (sky, computed) =
+            result_of(&entry.sky, || Self::compute_sky(loaded, entry, &entry.head))?;
         let mut result = TaskResult {
             presence: sky.presence,
             presence_threshold: sky.presence_threshold,
@@ -724,96 +849,117 @@ impl SegmentationEngine {
         Ok(sky)
     }
 
+    /// One S3OD run on @p input with the resident model (SM3.D decision D22), and the selected
+    /// alpha without the padding. Used for the photo and for each person crop.
+    fn subject_alpha_of(
+        loaded: &LoadedModelSet,
+        input: &SubjectInputImage,
+    ) -> Result<SubjectAlpha, SegmentationError> {
+        let pixel_values = task_masks::subject_pixel_values(input).map_err(inference)?;
+        let output = loaded
+            .subject
+            .lock()
+            .map_err(|_| poisoned("subject model"))?
+            .run(&pixel_values)
+            .map_err(inference)?;
+        task_masks::select_subject_alpha(&output, input).map_err(inference)
+    }
+
+    /// The Subject alpha of @p entry, computed once (SM3.C plan, section 2.5). The flag is true when
+    /// this call ran S3OD.
+    fn photo_subject_alpha(
+        loaded: &LoadedModelSet,
+        entry: &ImageEntry,
+    ) -> Result<(Arc<SubjectAlpha>, bool), SegmentationError> {
+        result_of(&entry.subject, || {
+            Self::subject_alpha_of(loaded, &entry.subject_input)
+        })
+    }
+
+    /// People rule of the SM3.D plan, section 2.3, step 3: not found without people, with no S3OD
+    /// run (E6); else the Subject alpha, found also when no value reaches 0.5 (E7), and the People
+    /// list with `subject_fraction` and `in_subject` (E8). No decoder run.
     fn people_task(
         loaded: &LoadedModelSet,
         entry: &ImageEntry,
-        person_indices: &[u32],
     ) -> Result<(TaskResult, bool), SegmentationError> {
-        let (people, computed) = result_of(&entry.people, || {
-            let head = Self::head_outputs(loaded, entry)?;
-            Self::compute_people(loaded, entry, &head)
-        })?;
-        if let Some(index) = person_indices
-            .iter()
-            .find(|index| **index as usize >= people.people.len())
-        {
-            return Err(SegmentationError::InvalidInput(format!(
-                "person index {index} is outside the People list of {} people",
-                people.people.len()
-            )));
-        }
+        let people = &entry.people;
         let mut result = TaskResult {
             presence: people.presence,
             presence_threshold: people.presence_threshold,
             message: people.message.clone(),
-            people: people
-                .people
-                .iter()
-                .map(|person| {
-                    let prompt_box = person.person.prompt_box();
-                    PersonListEntry {
-                        x0: prompt_box.x0,
-                        y0: prompt_box.y0,
-                        x1: prompt_box.x1,
-                        y1: prompt_box.y1,
-                        score: person.person.score,
-                    }
-                })
-                .collect(),
             ..Default::default()
         };
-        if !people.people.is_empty() {
-            let selected = people
-                .people
-                .iter()
-                .enumerate()
-                .filter(|(index, _)| {
-                    person_indices.is_empty() || person_indices.contains(&(*index as u32))
-                })
-                .map(|(_, person)| person.logits.as_slice());
-            let (mask, area) = union_mask(entry, selected);
-            result.mask_area = area;
-            result.mask = Some(mask);
+        if people.persons.is_empty() {
+            return Ok((result, false));
         }
+        let (alpha, computed) = Self::photo_subject_alpha(loaded, entry)?;
+        result.people = person_list_entries(people, Some(&alpha));
+        result.subject_score = alpha.score;
+        result.mask_area = task_masks::alpha_area(&alpha.values);
+        result.mask = Some(alpha_mask(
+            &alpha,
+            alpha.values.clone(),
+            MaskBox::FULL_IMAGE,
+        ));
         Ok((result, computed))
     }
 
-    /// People rule of the SM3.C plan, section 2.4: one decoder call per listed person.
-    fn compute_people(
+    /// Person rule of the SM3.D plan, section 2.4: the S3OD alpha of the stored crop of person
+    /// @p index, computed once (E2, E4); not found when no value reaches 0.5 (E9). The People list
+    /// carries the fractions of the stored Subject alpha, when the image has one.
+    fn person_task(
         loaded: &LoadedModelSet,
         entry: &ImageEntry,
-        head: &HeadOutput,
-    ) -> Result<PeopleResult, SegmentationError> {
-        let (_, presence) = task_masks::presences(head);
-        let threshold = loaded.thresholds.person_presence;
-        let mut people = PeopleResult {
-            presence,
-            presence_threshold: threshold,
-            people: Vec::new(),
-            message: String::new(),
+        index: u32,
+    ) -> Result<(TaskResult, bool), SegmentationError> {
+        let people = &entry.people;
+        let (Some(crop), Some(slot)) = (
+            people.persons.get(index as usize),
+            entry.person_alphas.get(index as usize),
+        ) else {
+            return Err(SegmentationError::InvalidInput(format!(
+                "person index {index} is outside the People list of {} people",
+                people.persons.len()
+            )));
         };
-        if presence < threshold {
-            people.message =
-                format!("No people found: person presence {presence:.3} is below {threshold:.3}.");
-            return Ok(people);
-        }
-        let boxes = task_masks::decode_people(head);
-        let listed = task_masks::people_list(&boxes, loaded.thresholds.people_list, true);
-        if listed.is_empty() {
-            people.message = format!(
-                "No people found: presence {presence:.3}, but the head found no person box."
+        let (alpha, computed) = result_of(slot, || {
+            let input = task_masks::subject_input_image(
+                &crop.image.rgb8,
+                crop.image.width,
+                crop.image.height,
+            )
+            .map_err(inference)?;
+            Self::subject_alpha_of(loaded, &input)
+        })?;
+        let subject = entry
+            .subject
+            .lock()
+            .map_err(|_| poisoned("image entry"))?
+            .clone();
+        let mut result = TaskResult {
+            presence: people.presence,
+            presence_threshold: people.presence_threshold,
+            people: person_list_entries(people, subject.as_deref()),
+            subject_score: alpha.score,
+            ..Default::default()
+        };
+        let area = task_masks::alpha_area(&alpha.values);
+        if area == 0 {
+            result.message = format!(
+                "No person found in the crop of person {index}: no alpha value reaches {} (S3OD score {:.3}).",
+                task_masks::ALPHA_INSIDE,
+                alpha.score
             );
-            return Ok(people);
+            return Ok((result, computed));
         }
-        for person in listed {
-            let prompt = SegmentationPrompt {
-                prompt_box: Some(person.prompt_box()),
-                ..Default::default()
-            };
-            let logits = Self::decode_single_mask(loaded, &entry.features, prompt)?;
-            people.people.push(PersonMask { person, logits });
-        }
-        Ok(people)
+        result.mask_area = area;
+        result.mask = Some(alpha_mask(
+            &alpha,
+            alpha.values.clone(),
+            crop_mask_box(crop, entry.width, entry.height),
+        ));
+        Ok((result, computed))
     }
 
     /// Subject and Background rules of the SM3.C plan, section 2.5 and decisions C1 and C9.
@@ -822,17 +968,7 @@ impl SegmentationEngine {
         entry: &ImageEntry,
         task: SegmentationTask,
     ) -> Result<(TaskResult, bool), SegmentationError> {
-        let (alpha, computed) = result_of(&entry.subject, || {
-            let pixel_values =
-                task_masks::subject_pixel_values(&entry.subject_input).map_err(inference)?;
-            let output = loaded
-                .subject
-                .lock()
-                .map_err(|_| poisoned("subject model"))?
-                .run(&pixel_values)
-                .map_err(inference)?;
-            task_masks::select_subject_alpha(&output, &entry.subject_input).map_err(inference)
-        })?;
+        let (alpha, computed) = Self::photo_subject_alpha(loaded, entry)?;
         let mut result = TaskResult {
             subject_score: alpha.score,
             ..Default::default()
@@ -858,7 +994,7 @@ impl SegmentationEngine {
             return Ok((result, computed));
         }
         result.mask_area = area;
-        result.mask = Some(alpha_mask(&alpha, values));
+        result.mask = Some(alpha_mask(&alpha, values, MaskBox::FULL_IMAGE));
         Ok((result, computed))
     }
 
@@ -883,6 +1019,7 @@ mod tests {
         PRESENCE_LOGITS_SHAPE, SKY_LOGITS_SHAPE,
     };
     use super::super::sam2::{PointLabel, PromptBox, PromptPoint};
+    use super::super::task_masks::PixelRect;
     use super::super::test_support::{
         FAKE_TOKEN_AREAS, FakeCalls, FakeFactory, empty_head_output, model_directory,
     };
@@ -1329,14 +1466,14 @@ mod tests {
     fn task(task: SegmentationTask) -> TaskRequest {
         TaskRequest {
             task,
-            person_indices: Vec::new(),
+            person_index: None,
         }
     }
 
-    fn people(indices: &[u32]) -> TaskRequest {
+    fn person(index: u32) -> TaskRequest {
         TaskRequest {
-            task: SegmentationTask::People,
-            person_indices: indices.to_vec(),
+            task: SegmentationTask::Person,
+            person_index: Some(index),
         }
     }
 
@@ -1366,6 +1503,66 @@ mod tests {
 
     fn set_head(calls: &FakeCalls, head: HeadOutput) {
         *calls.head_output.lock().expect("head output") = Some(head);
+    }
+
+    /// Two people with the person presence above its threshold: person 0 centered on the head grid
+    /// cell (row 10, column 10), person 1 on (row 40, column 20), each 4 x 8 cells.
+    fn two_people_head() -> HeadOutput {
+        head_output([-5.0, 5.0], &[(40, 20, 2.0), (10, 10, 3.0)])
+    }
+
+    /// A 640 x 480 RGB8 image whose pixels differ: (x mod 251, y mod 251, (x + y) mod 251).
+    fn pattern_image() -> Vec<u8> {
+        (0..480usize)
+            .flat_map(|y| {
+                (0..640usize)
+                    .flat_map(move |x| [(x % 251) as u8, (y % 251) as u8, ((x + y) % 251) as u8])
+            })
+            .collect()
+    }
+
+    fn start_pattern(
+        engine: &SegmentationEngine,
+        image_key: &str,
+    ) -> Result<StartedSession, SegmentationError> {
+        let pixels = pattern_image();
+        engine.start_session(StartSessionRequest {
+            image: Some(RgbImageView {
+                width: 640,
+                height: 480,
+                rgb8: &pixels,
+            }),
+            image_key,
+        })
+    }
+
+    /// The crop rectangles of `two_people_head` on the 640 x 480 image (SM3.D decision E3): the
+    /// box of person 0 is x 8 to 12 cells (0.125 to 0.1875) and y 6 to 14 cells (0.09375 to
+    /// 0.21875), widened by 0.00625 and 0.0125; person 1 is x 18 to 22 and y 36 to 44 cells.
+    const PERSON_RECTS: [PixelRect; 2] = [
+        PixelRect {
+            x0: 76,
+            y0: 39,
+            x1: 124,
+            y1: 111,
+        },
+        PixelRect {
+            x0: 176,
+            y0: 264,
+            x1: 224,
+            y1: 336,
+        },
+    ];
+
+    fn entry_of(engine: &SegmentationEngine, session_id: &str) -> Arc<ImageEntry> {
+        engine.session_entry(session_id).expect("session entry")
+    }
+
+    fn alpha_of(result: &TaskResult) -> (&[f32], MaskBox) {
+        match &result.mask.as_ref().expect("mask").values {
+            TaskMaskValues::Alpha { values, mask_box } => (values, *mask_box),
+            TaskMaskValues::Binary(_) => panic!("the mask must be an alpha mask"),
+        }
     }
 
     #[test]
@@ -1399,6 +1596,70 @@ mod tests {
     }
 
     #[test]
+    fn start_session_runs_head_and_cuts_person_crops() {
+        let (engine, calls) = loaded_engine();
+        set_head(&calls, two_people_head());
+        let session = start_pattern(&engine, "").expect("start");
+        assert_eq!(calls.head_runs.load(Ordering::SeqCst), 1);
+        assert_eq!(calls.subject_runs.load(Ordering::SeqCst), 0);
+        let entry = entry_of(&engine, &session.session_id);
+        let people = &entry.people;
+        assert!(people.message.is_empty());
+        // Left to right: person 0 (column 10) before person 1 (column 20).
+        let rects: Vec<PixelRect> = people.persons.iter().map(|crop| crop.rect).collect();
+        assert_eq!(rects, PERSON_RECTS.to_vec());
+        assert_eq!(entry.person_alphas.len(), 2);
+        let pixels = pattern_image();
+        for crop in &people.persons {
+            // Crops of at most 1024 px keep their pixels.
+            assert_eq!((crop.image.width, crop.image.height), (48, 72));
+            let (x, y) = (crop.rect.x0, crop.rect.y0);
+            assert_eq!(&crop.image.rgb8[..3], &pixels[(y * 640 + x) * 3..][..3]);
+        }
+    }
+
+    #[test]
+    fn start_session_without_people_keeps_no_crops() {
+        let (engine, calls) = loaded_engine();
+        let session = start(&engine).expect("start");
+        let entry = entry_of(&engine, &session.session_id);
+        assert!(entry.people.persons.is_empty());
+        assert!(entry.person_alphas.is_empty());
+        let result = engine
+            .run_task(&session.session_id, task(SegmentationTask::People))
+            .expect("people");
+        assert!(result.mask.is_none());
+        assert!(result.people.is_empty());
+        assert!(
+            result
+                .message
+                .starts_with("No people found: person presence"),
+            "{}",
+            result.message
+        );
+        assert!(result.presence_threshold > 0.53 && result.presence_threshold < 0.54);
+        assert_eq!(calls.subject_runs.load(Ordering::SeqCst), 0);
+        assert_eq!(calls.decoder_calls.lock().expect("calls").len(), 0);
+    }
+
+    #[test]
+    fn head_failure_at_start_fails_start_and_caches_nothing() {
+        let (engine, calls) = loaded_engine();
+        calls.head_failures.store(1, Ordering::SeqCst);
+        assert!(matches!(
+            start_keyed(&engine, "photo-a"),
+            Err(SegmentationError::Inference(message)) if message.contains("fake head run failed")
+        ));
+        let status = engine.status().expect("status");
+        assert_eq!(status.session_count, 0);
+        assert_eq!(status.cached_image_count, 0);
+        assert!(matches!(
+            start_key_only(&engine, "photo-a"),
+            Err(SegmentationError::ImageNotCached(_))
+        ));
+    }
+
+    #[test]
     fn run_task_sky_unions_regions_and_reports_not_found() {
         let (engine, calls) = loaded_engine();
         let session = start(&engine).expect("start");
@@ -1413,8 +1674,8 @@ mod tests {
         );
         assert_eq!(calls.decoder_calls.lock().expect("calls").len(), 0);
 
-        let session = start(&engine).expect("second image");
         set_head(&calls, head_output([5.0, -5.0], &[]));
+        let session = start(&engine).expect("second image");
         let result = engine
             .run_task(&session.session_id, task(SegmentationTask::Sky))
             .expect("sky");
@@ -1436,88 +1697,97 @@ mod tests {
     }
 
     #[test]
-    fn run_task_computes_head_and_people_once_per_entry() {
+    fn run_task_sky_reads_stored_head() {
         let (engine, calls) = loaded_engine();
-        set_head(
-            &calls,
-            head_output([-5.0, 5.0], &[(10, 40, 3.0), (10, 10, 2.0), (40, 20, 1.0)]),
-        );
+        set_head(&calls, head_output([5.0, 5.0], &[(10, 10, 3.0)]));
         let session = start_keyed(&engine, "photo-a").expect("start");
-        let first = engine
-            .run_task(&session.session_id, people(&[]))
-            .expect("people");
-        assert_eq!(first.people.len(), 3);
-        // Left to right: the centers at the columns 10, 20, and 40.
-        let centers: Vec<f32> = first.people.iter().map(|p| (p.x0 + p.x1) / 2.0).collect();
-        assert_eq!(centers, vec![10.0 / 64.0, 20.0 / 64.0, 40.0 / 64.0]);
-        assert_eq!(calls.head_runs.load(Ordering::SeqCst), 1);
-        assert_eq!(calls.decoder_calls.lock().expect("calls").len(), 3);
-        assert!(first.mask.is_some());
-
-        let second = engine
-            .run_task(&session.session_id, people(&[2]))
-            .expect("people selection");
-        assert_eq!(second.model_ms, 0);
-        assert_eq!(second.people, first.people);
-        // Sky on the same image reads the stored head outputs.
         engine
             .run_task(&session.session_id, task(SegmentationTask::Sky))
             .expect("sky");
-        assert_eq!(calls.head_runs.load(Ordering::SeqCst), 1);
-        // A key-only start of the same image shares the image entry.
         engine.end_session(&session.session_id).expect("end");
         let cached = start_key_only(&engine, "photo-a").expect("cached start");
-        engine
-            .run_task(&cached.session_id, people(&[0, 1]))
-            .expect("cached people");
+        let sky = engine
+            .run_task(&cached.session_id, task(SegmentationTask::Sky))
+            .expect("cached sky");
+        assert_eq!(sky.model_ms, 0);
         assert_eq!(calls.head_runs.load(Ordering::SeqCst), 1);
-        // The 3 person decodes only: the sky presence is below its threshold.
-        assert_eq!(calls.decoder_calls.lock().expect("calls").len(), 3);
+        assert_eq!(calls.decoder_calls.lock().expect("calls").len(), 1);
     }
 
     #[test]
-    fn run_task_people_selection_unions_selected_masks() {
+    fn run_task_people_returns_subject_alpha_and_list_without_decoder() {
         let (engine, calls) = loaded_engine();
-        calls.mark_prompt_cell.store(true, Ordering::SeqCst);
-        set_head(
-            &calls,
-            head_output([-5.0, 5.0], &[(10, 10, 3.0), (10, 40, 3.0)]),
+        set_head(&calls, two_people_head());
+        *calls.subject_alpha.lock().expect("alpha") = 0.8;
+        let session = start_pattern(&engine, "").expect("start");
+        let result = engine
+            .run_task(&session.session_id, task(SegmentationTask::People))
+            .expect("people");
+        assert!(result.message.is_empty(), "{}", result.message);
+        let mask = result.mask.as_ref().expect("people mask");
+        // The 640 x 480 image resized to a long edge of 1024.
+        assert_eq!((mask.width, mask.height), (1024, 768));
+        let (values, mask_box) = alpha_of(&result);
+        assert_eq!(mask_box, MaskBox::FULL_IMAGE);
+        assert!(values.iter().all(|value| *value == 0.8));
+        assert_eq!(result.mask_area, 1024 * 768);
+        assert_eq!(result.subject_score, 0.95);
+        assert!(result.presence >= result.presence_threshold);
+        assert_eq!(result.people.len(), 2);
+        // Person 0: x 8 to 12 cells.
+        assert_eq!(
+            (result.people[0].x0, result.people[0].x1),
+            (8.0 / 64.0, 12.0 / 64.0)
         );
-        // A 256 x 256 image: each union mask pixel reads exactly one logit cell.
-        let pixels = gray_image(256, 256);
-        let session = engine
-            .start_session(StartSessionRequest {
-                image: Some(RgbImageView {
-                    width: 256,
-                    height: 256,
-                    rgb8: &pixels,
-                }),
-                image_key: "",
-            })
-            .expect("start");
-        let plane = LOGIT_SIZE * LOGIT_SIZE;
-        // Person 0: box x0 = 8 cells = 128 model px; person 1: box x0 = 38 cells = 608 model px.
-        let (cell_0, cell_1) = (plane - 1 - 128, plane - 1 - 608);
-        let binary = |result: &TaskResult| match &result.mask.as_ref().expect("mask").values {
-            TaskMaskValues::Binary(values) => values.clone(),
-            TaskMaskValues::Alpha(_) => panic!("the People mask must be an R8 mask"),
-        };
-        let inside = task_masks::MASK_INSIDE;
-        let one = engine
-            .run_task(&session.session_id, people(&[0]))
-            .expect("person 0");
-        let values = binary(&one);
-        assert!(values[cell_0] == inside && values[cell_1] == 0);
-        let both = engine
-            .run_task(&session.session_id, people(&[1, 0, 1]))
-            .expect("people 0 and 1");
-        let values = binary(&both);
-        assert!(values[cell_0] == inside && values[cell_1] == inside);
-        assert_eq!(both.mask_area as usize, FAKE_TOKEN_AREAS[0] + 2);
-        let all = engine
-            .run_task(&session.session_id, people(&[]))
-            .expect("all people");
-        assert_eq!(all.mask_area, both.mask_area);
+        assert!(
+            result
+                .people
+                .iter()
+                .all(|entry| entry.subject_fraction == 1.0 && entry.in_subject)
+        );
+        assert_eq!(calls.decoder_calls.lock().expect("calls").len(), 0);
+        assert_eq!(calls.subject_runs.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn run_task_people_shares_subject_alpha_with_subject_and_background() {
+        let (engine, calls) = loaded_engine();
+        set_head(&calls, two_people_head());
+        *calls.subject_alpha.lock().expect("alpha") = 0.7;
+        let session = start_pattern(&engine, "").expect("start");
+        let subject = engine
+            .run_task(&session.session_id, task(SegmentationTask::Subject))
+            .expect("subject");
+        engine
+            .run_task(&session.session_id, task(SegmentationTask::Background))
+            .expect("background");
+        let people = engine
+            .run_task(&session.session_id, task(SegmentationTask::People))
+            .expect("people");
+        assert_eq!(calls.subject_runs.load(Ordering::SeqCst), 1);
+        assert_eq!(people.model_ms, 0);
+        assert_eq!(alpha_of(&people), alpha_of(&subject));
+    }
+
+    #[test]
+    fn run_task_people_found_when_subject_alpha_is_empty() {
+        let (engine, calls) = loaded_engine();
+        set_head(&calls, two_people_head());
+        *calls.subject_alpha.lock().expect("alpha") = 0.2;
+        let session = start_pattern(&engine, "").expect("start");
+        let result = engine
+            .run_task(&session.session_id, task(SegmentationTask::People))
+            .expect("people");
+        assert!(result.mask.is_some());
+        assert!(result.message.is_empty());
+        assert_eq!(result.mask_area, 0);
+        assert_eq!(result.people.len(), 2);
+        assert!(
+            result
+                .people
+                .iter()
+                .all(|entry| entry.subject_fraction == 0.0 && !entry.in_subject)
+        );
     }
 
     #[test]
@@ -1530,45 +1800,220 @@ mod tests {
         );
         let session = start(&engine).expect("start");
         let result = engine
-            .run_task(&session.session_id, people(&[]))
+            .run_task(&session.session_id, task(SegmentationTask::People))
             .expect("people");
         assert_eq!(result.people.len(), 1);
         assert!((result.people[0].score - task_masks::sigmoid(-0.8)).abs() < 1e-6);
         assert!(result.mask.is_some());
+        assert_eq!(
+            entry_of(&engine, &session.session_id).people.persons.len(),
+            1
+        );
+    }
+
+    #[test]
+    fn run_task_person_runs_s3od_once_per_person() {
+        let (engine, calls) = loaded_engine();
+        set_head(&calls, two_people_head());
+        *calls.subject_alpha.lock().expect("alpha") = 0.8;
+        let session = start_pattern(&engine, "").expect("start");
+        engine
+            .run_task(&session.session_id, task(SegmentationTask::People))
+            .expect("people");
+        assert_eq!(calls.subject_runs.load(Ordering::SeqCst), 1);
+        let first = engine
+            .run_task(&session.session_id, person(1))
+            .expect("person 1");
+        let second = engine
+            .run_task(&session.session_id, person(1))
+            .expect("person 1 again");
+        assert_eq!(second.model_ms, 0);
+        assert_eq!(alpha_of(&second), alpha_of(&first));
+        engine
+            .run_task(&session.session_id, person(0))
+            .expect("person 0");
+        assert_eq!(calls.subject_runs.load(Ordering::SeqCst), 3);
+        // The S3OD inputs of the photo, person 1, and person 0 differ.
+        let inputs = calls.subject_center_inputs.lock().expect("inputs").clone();
+        assert_eq!(inputs.len(), 3);
+        assert!(
+            inputs[0] != inputs[1] && inputs[0] != inputs[2] && inputs[1] != inputs[2],
+            "{inputs:?}"
+        );
+        // The People list of a Person result carries the stored Subject fractions.
+        assert!(first.people.iter().all(|entry| entry.in_subject));
+        assert_eq!(first.subject_score, 0.95);
+        assert!(first.message.is_empty());
+    }
+
+    #[test]
+    fn run_task_person_returns_crop_grid_and_mask_box() {
+        let (engine, calls) = loaded_engine();
+        set_head(&calls, two_people_head());
+        *calls.subject_alpha.lock().expect("alpha") = 0.9;
+        let session = start_pattern(&engine, "").expect("start");
+        let result = engine
+            .run_task(&session.session_id, person(0))
+            .expect("person 0");
+        let mask = result.mask.as_ref().expect("person mask");
+        // The 48 x 72 crop resized to a long edge of 1024: 683 x 1024 (682.67 rounded).
+        assert_eq!((mask.width, mask.height), (683, 1024));
+        let (values, mask_box) = alpha_of(&result);
+        assert_eq!(values.len(), 683 * 1024);
+        assert_eq!(
+            mask_box,
+            MaskBox {
+                x0: 76.0 / 640.0,
+                y0: 39.0 / 480.0,
+                x1: 124.0 / 640.0,
+                y1: 111.0 / 480.0,
+            }
+        );
+        assert_eq!(result.mask_area, 683 * 1024);
+        // No Subject result yet: the People list has no fractions.
+        assert_eq!(result.people.len(), 2);
+        assert!(
+            result
+                .people
+                .iter()
+                .all(|entry| entry.subject_fraction == 0.0 && !entry.in_subject)
+        );
+        assert_eq!(calls.subject_runs.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn run_task_person_not_found_when_crop_alpha_below_half() {
+        let (engine, calls) = loaded_engine();
+        set_head(&calls, two_people_head());
+        *calls.subject_alpha.lock().expect("alpha") = 0.49;
+        let session = start_pattern(&engine, "").expect("start");
+        for _ in 0..2 {
+            let result = engine
+                .run_task(&session.session_id, person(1))
+                .expect("person 1");
+            assert!(result.mask.is_none());
+            assert_eq!(
+                result.message,
+                "No person found in the crop of person 1: no alpha value reaches 0.5 (S3OD score 0.950)."
+            );
+            assert_eq!(result.mask_area, 0);
+            assert_eq!(result.subject_score, 0.95);
+        }
+        assert_eq!(calls.subject_runs.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn run_task_person_failure_keeps_no_alpha() {
+        let (engine, calls) = loaded_engine();
+        set_head(&calls, two_people_head());
+        *calls.subject_alpha.lock().expect("alpha") = 0.8;
+        calls.subject_failures.store(1, Ordering::SeqCst);
+        let session = start_pattern(&engine, "").expect("start");
+        assert!(matches!(
+            engine.run_task(&session.session_id, person(0)),
+            Err(SegmentationError::Inference(message)) if message.contains("fake S3OD run failed")
+        ));
+        let result = engine
+            .run_task(&session.session_id, person(0))
+            .expect("person 0 after the failure");
+        assert!(result.mask.is_some());
+        assert_eq!(calls.subject_runs.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn run_task_rejects_person_index_rules() {
+        let (engine, calls) = loaded_engine();
+        set_head(&calls, two_people_head());
+        let session = start_pattern(&engine, "").expect("start");
+        let requests = [
+            TaskRequest {
+                task: SegmentationTask::Person,
+                person_index: None,
+            },
+            TaskRequest {
+                task: SegmentationTask::Sky,
+                person_index: Some(0),
+            },
+            TaskRequest {
+                task: SegmentationTask::People,
+                person_index: Some(0),
+            },
+            person(5),
+        ];
+        for request in requests {
+            assert!(
+                matches!(
+                    engine.run_task(&session.session_id, request.clone()),
+                    Err(SegmentationError::InvalidInput(_))
+                ),
+                "{request:?}"
+            );
+        }
+        assert!(matches!(
+            engine.run_task(&session.session_id, person(2)),
+            Err(SegmentationError::InvalidInput(message)) if message.contains("2 people")
+        ));
+        // A person index on another task fails before the session lookup.
+        assert!(matches!(
+            engine.run_task(
+                "missing",
+                TaskRequest {
+                    task: SegmentationTask::Subject,
+                    person_index: Some(0),
+                }
+            ),
+            Err(SegmentationError::InvalidInput(_))
+        ));
+        assert_eq!(calls.subject_runs.load(Ordering::SeqCst), 0);
+        assert_eq!(calls.decoder_calls.lock().expect("calls").len(), 0);
+        assert_eq!(calls.head_runs.load(Ordering::SeqCst), 1);
     }
 
     #[test]
     fn run_task_rejects_invalid_task_and_index() {
         let (engine, calls) = loaded_engine();
-        set_head(
-            &calls,
-            head_output([-5.0, 5.0], &[(10, 10, 3.0), (10, 40, 3.0)]),
-        );
+        set_head(&calls, two_people_head());
         let session = start(&engine).expect("start");
         assert!(matches!(
-            engine.run_task(
-                &session.session_id,
-                TaskRequest {
-                    task: SegmentationTask::Sky,
-                    person_indices: vec![0],
-                }
-            ),
-            Err(SegmentationError::InvalidInput(_))
-        ));
-        assert_eq!(calls.head_runs.load(Ordering::SeqCst), 0);
-        assert!(matches!(
-            engine.run_task(&session.session_id, people(&[5])),
-            Err(SegmentationError::InvalidInput(message)) if message.contains("2 people")
+            engine.run_task("missing", task(SegmentationTask::People)),
+            Err(SegmentationError::SessionNotFound(_))
         ));
         assert!(matches!(
-            engine.run_task("missing", task(SegmentationTask::Subject)),
+            engine.run_task("missing", person(0)),
             Err(SegmentationError::SessionNotFound(_))
         ));
         engine.unload().expect("unload");
         assert!(matches!(
-            engine.run_task(&session.session_id, task(SegmentationTask::Subject)),
+            engine.run_task(&session.session_id, task(SegmentationTask::People)),
             Err(SegmentationError::ModelNotReady(_))
         ));
+        assert_eq!(calls.subject_runs.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn cached_key_only_start_runs_person_from_stored_crop() {
+        let (engine, calls) = loaded_engine();
+        set_head(&calls, two_people_head());
+        *calls.subject_alpha.lock().expect("alpha") = 0.8;
+        let first = start_pattern(&engine, "photo-a").expect("start");
+        engine.end_session(&first.session_id).expect("end");
+        let cached = start_key_only(&engine, "photo-a").expect("cached start");
+        assert!(cached.from_cache);
+        let from_cache = engine
+            .run_task(&cached.session_id, person(0))
+            .expect("person 0 from the cached image");
+        assert_eq!(calls.subject_runs.load(Ordering::SeqCst), 1);
+
+        // A pixel start of the same image gives the same S3OD input and the same alpha.
+        let pixels = start_pattern(&engine, "").expect("pixel start");
+        let from_pixels = engine
+            .run_task(&pixels.session_id, person(0))
+            .expect("person 0 from the pixels");
+        let inputs = calls.subject_center_inputs.lock().expect("inputs").clone();
+        assert_eq!(inputs.len(), 2);
+        assert_eq!(inputs[0], inputs[1]);
+        assert_eq!(alpha_of(&from_cache), alpha_of(&from_pixels));
+        assert_eq!(calls.encoder_runs.load(Ordering::SeqCst), 2);
     }
 
     #[test]
@@ -1581,12 +2026,11 @@ mod tests {
         let subject = engine
             .run_task(&cached.session_id, task(SegmentationTask::Subject))
             .expect("subject");
-        let mask = subject.mask.expect("subject mask");
+        let mask = subject.mask.as_ref().expect("subject mask");
         // The 64 x 48 image resized to a long edge of 1024: 1024 x 768.
         assert_eq!((mask.width, mask.height), (1024, 768));
-        let TaskMaskValues::Alpha(values) = &mask.values else {
-            panic!("the Subject mask must be an alpha mask");
-        };
+        let (values, mask_box) = alpha_of(&subject);
+        assert_eq!(mask_box, MaskBox::FULL_IMAGE);
         assert!(values.iter().all(|value| *value == 0.8));
         assert_eq!(subject.subject_score, 0.95);
         assert_eq!(subject.mask_area, 1024 * 768);

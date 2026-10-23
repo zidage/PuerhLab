@@ -69,6 +69,8 @@ auto ToProtoTask(SegmentationTask task) -> alcedo::ai::SegmentationTask {
       return alcedo::ai::SEGMENTATION_TASK_SKY;
     case SegmentationTask::kPeople:
       return alcedo::ai::SEGMENTATION_TASK_PEOPLE;
+    case SegmentationTask::kPerson:
+      return alcedo::ai::SEGMENTATION_TASK_PERSON;
   }
   return alcedo::ai::SEGMENTATION_TASK_UNSPECIFIED;
 }
@@ -223,7 +225,7 @@ class GrpcSegmentationClient final : public SegmentationClient {
   }
 
   auto RunTask(const std::string& session_id, SegmentationTask task,
-               const std::vector<uint32_t>& person_indices, std::chrono::milliseconds timeout)
+               std::optional<uint32_t> person_index, std::chrono::milliseconds timeout)
       -> SegmentationTaskResult override {
     grpc::ClientContext context;
     context.set_deadline(DeadlineFromNow(timeout));
@@ -231,7 +233,9 @@ class GrpcSegmentationClient final : public SegmentationClient {
     FillHeader(request.mutable_header(), "segmentation.run_task", timeout);
     request.set_session_id(session_id);
     request.set_task(ToProtoTask(task));
-    request.mutable_person_indices()->Assign(person_indices.begin(), person_indices.end());
+    if (person_index.has_value()) {
+      request.set_person_index(*person_index);
+    }
     alcedo::ai::RunSegmentationTaskResponse response;
     const auto             status = stub_->RunSegmentationTask(&context, request, &response);
     SegmentationTaskResult result;
@@ -247,6 +251,10 @@ class GrpcSegmentationClient final : public SegmentationClient {
     result.mask_height        = response.mask_height();
     result.mask_r8            = {response.mask_r8().begin(), response.mask_r8().end()};
     result.alpha_values       = {response.alpha_values().begin(), response.alpha_values().end()};
+    result.mask_box           = {.x0 = response.mask_box().x0(),
+                                 .y0 = response.mask_box().y0(),
+                                 .x1 = response.mask_box().x1(),
+                                 .y1 = response.mask_box().y1()};
     result.presence           = response.presence();
     result.presence_threshold = response.presence_threshold();
     result.region_count       = response.region_count();
@@ -255,12 +263,14 @@ class GrpcSegmentationClient final : public SegmentationClient {
     result.model_ms           = response.model_ms();
     result.people.reserve(static_cast<size_t>(response.people_size()));
     for (const auto& person : response.people()) {
-      result.people.push_back(SegmentationPerson{.index = person.index(),
-                                                 .box   = {.x0 = person.box().x0(),
-                                                           .y0 = person.box().y0(),
-                                                           .x1 = person.box().x1(),
-                                                           .y1 = person.box().y1()},
-                                                 .score = person.score()});
+      result.people.push_back(SegmentationPerson{.index            = person.index(),
+                                                 .box              = {.x0 = person.box().x0(),
+                                                                      .y0 = person.box().y0(),
+                                                                      .x1 = person.box().x1(),
+                                                                      .y1 = person.box().y1()},
+                                                 .score            = person.score(),
+                                                 .subject_fraction = person.subject_fraction(),
+                                                 .in_subject       = person.in_subject()});
     }
     return result;
   }

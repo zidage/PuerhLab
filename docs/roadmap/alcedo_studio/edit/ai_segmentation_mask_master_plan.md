@@ -5,15 +5,17 @@ Date: 2026-10-19. Revised: 2026-10-22.
 Status: SM1 complete on 2026-10-22. The EfficientSAM3 quality review failed (section 8.1). The
 re-evaluation in the `alcedo-ai-mask-lab` repository accepted the model set SAM 2.1 Hiera tiny, the
 people and sky head, and S3OD `s3od-synth` (section 8.2). Alcedo Studio does not use EfficientSAM3
-or SAM3. SM3 is split into SM3.A, SM3.B, and SM3.C. SM3.A is complete on 2026-10-22
+or SAM3. SM3 is split into SM3.A, SM3.B, SM3.C, and SM3.D. SM3.A is complete on 2026-10-22
 ([phase plan](ai_segmentation_mask/phase_sm3a_segmentation_service_plan.md)); its macOS port check
 ran with the SM3.B macOS run. SM3.B is complete on Windows and macOS on 2026-10-22
 ([phase plan](ai_segmentation_mask/phase_sm3b_embedding_cache_plan.md)). SM4 is complete on Windows on
-2026-10-23 ([phase plan](ai_segmentation_mask/phase_sm4_analysis_render_plan.md)). On 2026-10-23 the
+2026-10-23 ([phase plan](ai_segmentation_mask/phase_sm4_analysis_render_plan.md)). SM3.C is complete
+on Windows and macOS on 2026-10-23 ([phase plan](ai_segmentation_mask/phase_sm3c_task_masks_plan.md));
+its macOS port check ran with SM3.D. On 2026-10-23 the
 user approved the SM5 design (D16 to D22): an AI Mask edit session with its own history stack, R8
-assets in the project database, and People masks from S3OD. SM3.D
-([phase plan](ai_segmentation_mask/phase_sm3d_people_masks_from_s3od_plan.md)) and SM5
-([phase plan](ai_segmentation_mask/phase_sm5_ai_mask_source_and_session_plan.md)) are planned. SM2 runs
+assets in the project database, and People masks from S3OD. SM3.D is complete on Windows and macOS
+on 2026-10-23 ([phase plan](ai_segmentation_mask/phase_sm3d_people_masks_from_s3od_plan.md)). SM5
+([phase plan](ai_segmentation_mask/phase_sm5_ai_mask_source_and_session_plan.md)) is planned. SM2 runs
 after SM9 (section 7).
 
 Target release: Alcedo Studio 0.3.4. The AI Segmentation Mask is the main feature of that release.
@@ -289,9 +291,9 @@ The project storage owns the R8 bytes. No owner keeps a copy of another owner's 
 | SM1 | Model selection, export, runtime feasibility, latency, and quality evidence | `alcedo-ai-mask-lab` | none | 900-1500 | complete 2026-10-22 (section 8) |
 | SM3.A | Segmentation service architecture: proto, Rust service with the Windows ONNX Runtime and macOS Core ML adapters, SAM 2.1 encode and decode, C++ client with a persistent channel, app session | proto, Rust service, `sidecar_client`, app | SM1 | 2400-2950 estimated, in two parts SM3.A.1 and SM3.A.2; actual about 4,500 | complete 2026-10-22; macOS port check passed with the SM3.B macOS run ([phase plan](ai_segmentation_mask/phase_sm3a_segmentation_service_plan.md)) |
 | SM3.B | Image embedding cache and first optimizations | Rust service, app session | SM3.A | 800-1400; actual about 1,800 code lines | complete 2026-10-22 on Windows and macOS ([phase plan](ai_segmentation_mask/phase_sm3b_embedding_cache_plan.md)) |
-| SM3.C | Task masks in the service: Subject (S3OD), Background, Sky and People (head) | Rust service, proto, C++ client | SM3.A | 1600-2050 in two parts SM3.C.1 and SM3.C.2; actual about 3,250 code lines | Windows verified 2026-10-23; macOS port check open ([phase plan](ai_segmentation_mask/phase_sm3c_task_masks_plan.md)) |
+| SM3.C | Task masks in the service: Subject (S3OD), Background, Sky and People (head) | Rust service, proto, C++ client | SM3.A | 1600-2050 in two parts SM3.C.1 and SM3.C.2; actual about 3,250 code lines | complete 2026-10-23 on Windows and macOS (macOS port check with SM3.D) ([phase plan](ai_segmentation_mask/phase_sm3c_task_masks_plan.md)) |
 | SM4 | Analysis render in ReferenceSpace, image key, and prompt coordinates | geometry, editor session, app, viewer geometry | none | 1600 in two parts SM4.1 and SM4.2; actual about 1,350 | complete 2026-10-23 on Windows; measurements with SM9 ([phase plan](ai_segmentation_mask/phase_sm4_analysis_render_plan.md)) |
-| SM3.D | People masks from S3OD on person crops (D21, D22) | lab pipeline, Rust service, proto, C++ client | SM3.C | 1,300-1,750 in two parts SM3.D.1 and SM3.D.2, plus 300-450 in the lab | planned ([phase plan](ai_segmentation_mask/phase_sm3d_people_masks_from_s3od_plan.md)) |
+| SM3.D | People masks from S3OD on person crops (D21, D22) | lab pipeline, Rust service, proto, C++ client | SM3.C | 1,300-1,750 in two parts SM3.D.1 and SM3.D.2, plus 300-450 in the lab; actual about 2,230 lines, plus 820 in the lab without the result JSON | complete 2026-10-23 on Windows and macOS ([phase plan](ai_segmentation_mask/phase_sm3d_people_masks_from_s3od_plan.md)) |
 | SM5.1 | AI Mask source kind, project mask asset table, read verification, reachability cleanup | `edit/mask`, storage, history, app | SM4 | 1,500-1,900 | planned ([phase plan](ai_segmentation_mask/phase_sm5_ai_mask_source_and_session_plan.md)) |
 | SM5.2 | AI Mask edit session: session history stack, composition, People toggles, edit of a stored AI Mask, Commit payload | app layer, segmentation service, proto | SM5.1, SM3.D | 1,300-1,700 | planned (same plan) |
 | SM5.3 | Editor integration: Open, Commit, Cancel, asset write; Paste skip and notice | editor session, Mask controller, transfer, album backend | SM5.1, SM5.2 | 1,000-1,400 | planned (same plan) |
@@ -538,7 +540,8 @@ Open decisions: none (closed by C1 to C4 of the SM3.C plan).
 #### 9.2.4 SM3.D — People masks from S3OD on person crops
 
 Detailed plan: [SM3.D People masks from S3OD on person crops](ai_segmentation_mask/phase_sm3d_people_masks_from_s3od_plan.md).
-The user decided D21 and D22 on 2026-10-23. Issue: #469. Tracking issue: #468.
+The user decided D21 and D22 on 2026-10-23. Issue: #469. Tracking issue: #468. Status: complete on
+Windows and macOS on 2026-10-23 (phase plan, section 12; issues #474 to #478).
 
 Scope:
 
