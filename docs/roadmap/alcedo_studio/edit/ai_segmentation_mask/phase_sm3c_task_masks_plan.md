@@ -2,7 +2,8 @@
 
 Date: 2026-10-23.
 
-Status: in progress (`feature/ai-segmentation-sm3c`).
+Status: implemented and verified on Windows on 2026-10-23 (`feature/ai-segmentation-sm3c`). The
+macOS port check with the Core ML models is open (section 13.2).
 
 Parent plan: [AI Segmentation Mask Master Plan](../ai_segmentation_mask_master_plan.md), section
 9.2.3.
@@ -381,5 +382,115 @@ Read `AGENTS.md` and the applicable skills again before implementation.
 
 ## 13. Completion record
 
-Not complete. The executor fills this section: status, revision and branch, changed modules,
-tests (pass, fail, skip, unavailable), measurements, macOS record, and remaining defects.
+### 13.1 SM3.C completion record (2026-10-23)
+
+**Status:** SM3.C.1 and SM3.C.2 are implemented and verified on Windows. macOS: the Core ML
+adapter type-checks for `aarch64-apple-darwin`; the macOS build and the C++ tests run in the
+`macOS arm64 Metal` CI job of the pull request. The macOS port check with the Core ML models is
+not done: the Mac was not reachable on 2026-10-23 (section 13.3).
+
+**Source revision and branch:** `be162dd8` (plan) and `cc7c7d31` (implementation) on `61d3f705`
+(`main` after #463), `feature/ai-segmentation-sm3c`.
+
+**Actual changed modules:** segmentation protocol (`RunSegmentationTask`); Rust model set,
+backend interface, ONNX Runtime and Core ML adapters (head and S3OD), task mask rules
+(`task_masks.rs`), image entry (`image_entry.rs`), engine (`run_task`), server handler, test
+fakes, port check; the port reference script; the C++ task DTOs, `SegmentationClient::RunTask`,
+and `AiMaskSegmentationService::RunTask`.
+
+**Actual diff:** about 3,250 code lines and 400 document lines: Rust production about 1,520,
+Rust unit tests and the port check about 1,180, C++ about 160 and its tests about 120, Python
+130. The estimate (1,600 to 2,050 in total) was too low: the unit tests of the task rules and of
+the engine are larger than planned. The phase stays one pull request, because the C++ part
+(about 280 lines) depends on the protocol of the Rust part.
+
+**Change of decision C5 during the implementation:** the first implementation made the union as
+the maximum of the 256 x 256 logits per cell. The first DirectML port check failed on five
+unions: People unions of 6 to 20 people had a photo IoU of 0.988 to 0.998 against the MVP union,
+and the 4-region Sky union of `P1024439` 0.9935; every member mask alone passed. The bilinear
+upsampling of the maximum mixes the positive corners of two adjacent members. C5 now returns the
+MVP union (the OR of the upsampled member masks) as an R8 mask at the session image size; all
+unions then pass with a photo IoU of at least 0.99998.
+
+**Primary call chains:** as in sections 5.3 and 5.4. Success: `AiMaskSegmentationService::RunTask`
+-> `SegmentationClient::RunTask` -> `RunSegmentationTask` -> `SegmentationEngine::run_task` ->
+image entry results (head, Sky regions, person masks, Subject alpha; each computed once) ->
+`task_masks::union_mask` or the alpha -> response. Failure: a model error ->
+`SegmentationError::Inference` -> header `INTERNAL` with the runtime message; the entry keeps no
+partial result.
+
+**Tests (Windows, release unless noted):**
+
+| Test | Result |
+| --- | --- |
+| `cargo test --release -- --skip live_` | 346 + 4 + 5 + 1 passed, 0 failed (`main`: 324 + 4 + 5 + 1). The port check skips without its environment. |
+| New Rust unit tests (`task_masks`: 12, `engine`: 9, `server`: 2, adapter missing-file case) | all passed; names in section 8 |
+| Port check, DirectML (`segmentation_port_check_matches_reference_masks`) | passed in 6 runs: 213 masks; minimum photo IoU 0.999591 (`DSC00562` person 5); Sky and People unions at least 0.999981; Subject grid IoU at least 0.998102 (`DSC00527`); Background at least 0.999834; Sky region counts, People list lengths, order, and boxes equal on all 14 photos |
+| Port check, ONNX Runtime CPU | passed: 213 masks; minimum photo IoU 0.999964; unions at least 0.999995; Subject grid IoU at least 0.998423; Background at least 0.999857 (S3OD float16 on the CPU: about 19 s per photo) |
+| C++ `SegmentationClientTest`, `AiMaskSegmentationServiceTest` (`win_debug`) | 21 of 21 passed (4 new) |
+| Real sidecar, Python gRPC client (`build/tmp/sm3c/e2e_client.py`) | passed: four models load; Sky, People, Subject, Background, a People selection, an index outside the list (`INVALID_INPUT`), an unspecified task (`INVALID_INPUT`), "not found" results with the presence values, a key-only start that reads the stored Subject result, unload |
+| `cargo clippy --release --all-targets` | no warning in the segmentation files |
+| Core ML adapter type check for `aarch64-apple-darwin` (shim crate of SM3.B) | passed, 0 warnings |
+
+The reference (`scripts/ai_models/sam2/make_segmentation_port_reference.py`, ONNX Runtime 1.31
+CPU, the functions of the lab repository) gives the Sky and People results of the MVP report on
+all 14 photos; the only difference is `2088064441`, which lists 1 person by C2 (the MVP list is
+empty).
+
+**Measurements (Windows, RTX 3080 Laptop 8 GB, DirectML, release; milliseconds):**
+
+| Item | Value |
+| --- | ---: |
+| Load: encoder, decoder, head, S3OD (port check, warm files) | 1,020 to 1,180; 920 to 1,090; 91 to 109; 795 to 1,005 |
+| Load round trip, first process after the build (real sidecar) | 5,888 |
+| First Sky request of a photo (head, region decodes, union), p50 | 15 to 23 |
+| First People request of a photo (person decodes, union), p50; `DSC00527` with 20 people | 11 to 19; 117 to 203 |
+| First Subject request of a photo (S3OD with pre- and postprocessing), p50; first in the process | 210 to 218; 250 to 361 |
+| Request from the stored results, p50 (engine, with the union at 4096 px) | 3.0 to 3.5 |
+| Real sidecar round trip: People selection change on `DSC00527` (10.7 MB R8 mask) | 36 to 58 |
+| Real sidecar round trip: Background after Subject (2.7 MB alpha) | 13 to 16 |
+| CPU work of a start: S3OD input image; SAM 2.1 preprocessing (for comparison) | 6.5; 60 |
+| Union of one full-image member at 4096 x 2730 | 6.5 |
+
+Dedicated GPU memory of the process (peak, port check; `Get-Counter "\GPU Process Memory"`):
+
+| State | MB |
+| --- | ---: |
+| Encoder, decoder, and head (S3OD not loaded; temporary local build) | 1,664 |
+| All four models, S3OD never run | 1,894 |
+| All four models after Subject requests | 2,955 |
+| Real sidecar: after load / after the task requests / after unload | 838 / 2,955 / 0 |
+
+The peak of 2,955 MB is inside the 3 GB budget of U6 (the SM3.B plan expected about 2,950 MB).
+
+**Effect of the resident S3OD session on SAM 2.1 (same day, back to back, port check p50):**
+
+| Build | Encoder (with preprocessing) | Decode, 1 / 2 / 3 / 4 points |
+| --- | ---: | --- |
+| `main` (SM3.B), 2 runs | 143, 144 | 8.3-8.8 / 8.1 / 8.0-8.6 / 8.4-8.5 |
+| SM3.C without S3OD loaded (temporary local build, prompts only), 2 runs | 145, 151 | 8.6-8.7 / 8.3-8.4 / 8.5-8.6 / 8.5-8.7 |
+| SM3.C, S3OD loaded and never run (prompts only), 3 runs | 169 to 222 | 8.9-10.2 / 9.0-11.3 / 8.4-10.8 / 10.0-11.3 |
+| SM3.C with the task requests, 5 runs | 206 to 215 | 8.7-9.7 / 11.3-11.9 / 9.8-11.2 / 10.7-11.5 |
+
+With the S3OD DirectML session resident, the SAM 2.1 encoder takes about 60 ms longer and a
+decode about 2 to 3 ms longer. The CPU work of SM3.C adds only about 7 ms to a start. The cause
+inside DirectML is not known. A user decision can trade this cost against the S3OD load time
+(load S3OD at the first Subject request of an image and unload it after the run: about 0.9 s of
+load and a first run for each new image; section 13.3).
+
+### 13.2 macOS record
+
+Not done on 2026-10-23: `yurunmac.local` did not resolve and the known addresses of the Mac did
+not answer. The macOS build of the Rust sidecar and the C++ tests run in the `macOS arm64 Metal`
+CI job of the pull request. The executor runs on the Mac: `cargo test --release -- --skip live_`
+and the port check with `point_encoder.mlmodelc`, `point_decoder.mlmodelc`,
+`people_sky_head.mlmodelc`, `people_sky_head.json`, and `s3od.mlmodelc`
+(`float16_embeddings_attention_float32`) against a copy of `build/tmp/sm3c/port_reference`, on
+the devices `""` and `cpu`.
+
+### 13.3 Remaining items
+
+- The macOS port check with the Core ML models (section 13.2). SM3.C is complete on macOS only
+  after it passes.
+- User decision: keep S3OD resident from load to unload (current, C6 and C10), or load it for
+  each Subject computation (section 13.1, last table).
