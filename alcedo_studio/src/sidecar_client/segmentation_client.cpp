@@ -104,7 +104,8 @@ class GrpcSegmentationClient final : public SegmentationClient {
     result.model_directory = response.model_directory();
     result.device          = response.device();
     result.backend         = response.backend();
-    result.session_count   = response.session_count();
+    result.session_count      = response.session_count();
+    result.cached_image_count = response.cached_image_count();
     result.models.reserve(static_cast<size_t>(response.models_size()));
     for (const auto& model : response.models()) {
       result.models.push_back(SegmentationModelResidency{
@@ -113,8 +114,8 @@ class GrpcSegmentationClient final : public SegmentationClient {
     return result;
   }
 
-  auto StartSession(const SegmentationRgb8Image& image, std::chrono::milliseconds timeout)
-      -> SegmentationSessionResult override {
+  auto StartSession(const SegmentationRgb8Image& image, const std::string& image_key,
+                    std::chrono::milliseconds timeout) -> SegmentationSessionResult override {
     grpc::ClientContext context;
     context.set_deadline(DeadlineFromNow(timeout));
     alcedo::ai::StartSegmentationSessionRequest request;
@@ -123,6 +124,7 @@ class GrpcSegmentationClient final : public SegmentationClient {
     request.set_height(image.height);
     request.set_rgb8_pixels(reinterpret_cast<const char*>(image.pixels.data()),
                             image.pixels.size());
+    request.set_image_key(image_key);
     alcedo::ai::StartSegmentationSessionResponse response;
     const auto status = stub_->StartSegmentationSession(&context, request, &response);
     SegmentationSessionResult result;
@@ -133,6 +135,9 @@ class GrpcSegmentationClient final : public SegmentationClient {
     result.status     = FromHeader(response.header());
     result.session_id = response.session_id();
     result.encoder_ms = response.encoder_ms();
+    result.from_cache = response.from_cache();
+    result.image_not_cached =
+        response.header().error_code() == alcedo::ai::AI_ERROR_IMAGE_NOT_CACHED;
     return result;
   }
 

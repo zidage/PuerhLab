@@ -37,7 +37,24 @@ auto AiMaskSegmentationService::LoadModels(const std::filesystem::path& model_di
   return client_->LoadModels(model_directory.string(), device, timeouts_.load);
 }
 
-auto AiMaskSegmentationService::StartImage(const SegmentationRgb8Image& image)
+auto AiMaskSegmentationService::StartImage(const SegmentationRgb8Image& image,
+                                           const std::string&           image_key)
+    -> SegmentationSessionResult {
+  return StartSession(image, image_key);
+}
+
+auto AiMaskSegmentationService::StartCachedImage(const std::string& image_key)
+    -> SegmentationSessionResult {
+  if (image_key.empty()) {
+    SegmentationSessionResult result;
+    result.status = LocalFailure("a cached segmentation start needs an image key");
+    return result;
+  }
+  return StartSession(SegmentationRgb8Image{}, image_key);
+}
+
+auto AiMaskSegmentationService::StartSession(const SegmentationRgb8Image& image,
+                                             const std::string&           image_key)
     -> SegmentationSessionResult {
   SegmentationSessionResult result;
   if (closed_) {
@@ -49,7 +66,7 @@ auto AiMaskSegmentationService::StartImage(const SegmentationRgb8Image& image)
     result.status = ended;
     return result;
   }
-  result = client_->StartSession(image, timeouts_.start);
+  result = client_->StartSession(image, image_key, timeouts_.start);
   if (result.status.ok) {
     session_id_ = result.session_id;
   }

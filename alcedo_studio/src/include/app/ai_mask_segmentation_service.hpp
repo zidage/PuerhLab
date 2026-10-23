@@ -24,7 +24,7 @@ struct AiMaskSegmentationTimeouts {
 };
 
 /**
- * @brief One activation of the AI Mask tool over the sidecar segmentation service (SM3.A).
+ * @brief One activation of the AI Mask tool over the sidecar segmentation service (SM3.A, SM3.B).
  *
  * The service holds a sidecar lease, so the sidecar process keeps running while the tool is
  * open, and one segmentation client with its own persistent channel. It owns the identity of the
@@ -52,9 +52,17 @@ class AiMaskSegmentationService {
   /// Loads the model set from @p model_directory on @p device ("" for the platform default).
   auto LoadModels(const std::filesystem::path& model_directory, const std::string& device = {})
       -> SegmentationCallStatus;
-  /// Ends the current session, then starts a session on @p image. When the end fails, no session
-  /// starts and the end failure is returned.
-  auto               StartImage(const SegmentationRgb8Image& image) -> SegmentationSessionResult;
+  /// Ends the current session, then starts a session on @p image. A non-empty @p image_key
+  /// names the image content (SM4 analysis render identity): the sidecar uses its cached
+  /// embedding of that key, or caches the new one. When the end fails, no session starts and the
+  /// end failure is returned.
+  auto StartImage(const SegmentationRgb8Image& image, const std::string& image_key = {})
+      -> SegmentationSessionResult;
+  /// Ends the current session, then starts a session from the cached embedding of @p image_key
+  /// without sending pixels. An uncached key returns `image_not_cached` and keeps no session; the
+  /// caller then renders the image and calls StartImage() with the same key. An empty key fails
+  /// without a sidecar call.
+  auto               StartCachedImage(const std::string& image_key) -> SegmentationSessionResult;
   /// Decodes @p prompt on the current session. Fails without a sidecar call when no session
   /// exists.
   auto               Decode(const SegmentationPrompt& prompt) -> SegmentationDecodeResult;
@@ -69,6 +77,8 @@ class AiMaskSegmentationService {
 
  private:
   [[nodiscard]] static auto LocalFailure(std::string message) -> SegmentationCallStatus;
+  auto StartSession(const SegmentationRgb8Image& image, const std::string& image_key)
+      -> SegmentationSessionResult;
 
   std::shared_ptr<void>     sidecar_lease_;
   std::unique_ptr<sidecar_client::SegmentationClient> client_;

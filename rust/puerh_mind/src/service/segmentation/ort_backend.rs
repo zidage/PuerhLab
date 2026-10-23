@@ -1,13 +1,18 @@
 //! ONNX Runtime adapter of the segmentation models: DirectML on Windows, CPU for development.
 //!
-//! Session settings follow the lab MVP (master plan section 8.17.3): graph optimization level 3,
+//! Session settings follow the lab MVP (master plan section 8.2.3): graph optimization level 3,
 //! 4 intra-op threads, 1 inter-op thread, CPU memory arena off, memory patterns off, sequential
 //! execution. A DirectML session registers DirectML with `error_on_failure`, so a registration
 //! failure is a load error and never a CPU session. The CPU entry of the list only applies the
 //! CPU memory arena setting (`DisableCpuMemArena`) to the CPU execution provider that ONNX Runtime
 //! always keeps for node placement.
+//!
+//! The encoder keeps its three output values as [`OrtImageFeatures`] (SM3.B decision B4); the
+//! decoder ([`super::ort_decoder`]) binds them without a host copy.
 
+use std::any::Any;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use anyhow::{Context, Result, anyhow, bail};
 use ort::{
@@ -16,14 +21,17 @@ use ort::{
         Session,
         builder::{GraphOptimizationLevel, SessionBuilder},
     },
-    value::TensorRef,
+    value::{DynValue, Tensor, TensorRef},
 };
 
 use super::backend::{
-    SegmentationBackend, SegmentationBackendFactory, SegmentationModel, SegmentationModelRole,
-    UnsupportedDevice,
+    ImageFeatures, SegmentationBackend, SegmentationBackendFactory, SegmentationDecoder,
+    SegmentationEncoder, SegmentationModelRole, UnsupportedDevice,
 };
-use super::model_set::{ModelSpec, spec};
+use super::model_set::{
+    DECODER, ENCODER, HIGH_RES_FEATS_0_SHAPE, HIGH_RES_FEATS_1_SHAPE, IMAGE_EMBED_SHAPE, ModelSpec,
+};
+use super::ort_decoder::OrtDecoder;
 use super::tensor::TensorF32;
 
 const INTRA_OP_THREADS: usize = 4;
@@ -90,30 +98,28 @@ pub struct OrtSegmentationBackend {
     device: OrtSegmentationDevice,
 }
 
-impl OrtSegmentationBackend {
-    fn session_builder(&self) -> Result<SessionBuilder> {
-        crate::service::ort_runtime::initialize_ort_environment()?;
-        let builder = Session::builder()
-            .map_err(|e| anyhow!("failed to create the ONNX Runtime session builder: {e}"))?
-            .with_optimization_level(GraphOptimizationLevel::Level3)
-            .map_err(|e| anyhow!("failed to set the graph optimization level: {e}"))?
-            .with_intra_threads(INTRA_OP_THREADS)
-            .map_err(|e| anyhow!("failed to set the intra-op thread count: {e}"))?
-            .with_inter_threads(INTER_OP_THREADS)
-            .map_err(|e| anyhow!("failed to set the inter-op thread count: {e}"))?
-            .with_memory_pattern(false)
-            .map_err(|e| anyhow!("failed to switch off memory patterns: {e}"))?
-            .with_parallel_execution(false)
-            .map_err(|e| anyhow!("failed to select sequential execution: {e}"))?;
-        builder
-            .with_execution_providers(execution_providers(self.device)?)
-            .map_err(|e| {
-                anyhow!(
-                    "failed to register the {} execution provider: {e}",
-                    self.device.label()
-                )
-            })
-    }
+fn session_builder(device: OrtSegmentationDevice) -> Result<SessionBuilder> {
+    crate::service::ort_runtime::initialize_ort_environment()?;
+    let builder = Session::builder()
+        .map_err(|e| anyhow!("failed to create the ONNX Runtime session builder: {e}"))?
+        .with_optimization_level(GraphOptimizationLevel::Level3)
+        .map_err(|e| anyhow!("failed to set the graph optimization level: {e}"))?
+        .with_intra_threads(INTRA_OP_THREADS)
+        .map_err(|e| anyhow!("failed to set the intra-op thread count: {e}"))?
+        .with_inter_threads(INTER_OP_THREADS)
+        .map_err(|e| anyhow!("failed to set the inter-op thread count: {e}"))?
+        .with_memory_pattern(false)
+        .map_err(|e| anyhow!("failed to switch off memory patterns: {e}"))?
+        .with_parallel_execution(false)
+        .map_err(|e| anyhow!("failed to select sequential execution: {e}"))?;
+    builder
+        .with_execution_providers(execution_providers(device)?)
+        .map_err(|e| {
+            anyhow!(
+                "failed to register the {} execution provider: {e}",
+                device.label()
+            )
+        })
 }
 
 fn cpu_arena_off() -> ep::ExecutionProviderDispatch {
@@ -146,50 +152,37 @@ fn execution_providers(
     }
 }
 
-impl SegmentationBackend for OrtSegmentationBackend {
-    fn backend_name(&self) -> &str {
-        match self.device {
-            OrtSegmentationDevice::Cpu => "onnxruntime-cpu",
-            OrtSegmentationDevice::DirectMl(_) => "onnxruntime-directml",
-        }
-    }
-
-    fn device_label(&self, _role: SegmentationModelRole) -> String {
-        self.device.label()
-    }
-
-    fn load(
-        &self,
-        directory: &Path,
-        role: SegmentationModelRole,
-    ) -> Result<Box<dyn SegmentationModel>> {
-        let spec = spec(role);
-        let path = model_path(directory, spec);
-        if !path.is_file() {
-            bail!(
-                "segmentation {} model {} does not exist",
-                role.as_str(),
-                path.display()
-            );
-        }
-        let session = self
-            .session_builder()?
-            .commit_from_file(&path)
-            .map_err(|e| {
-                anyhow!(
-                    "failed to load {} on {}: {e}",
-                    path.display(),
-                    self.device.label()
-                )
-            })?;
-        validate_session_names(&session, spec, &path)?;
-        Ok(Box::new(OrtSegmentationModel { session, spec }))
-    }
-}
-
 /// Path of the ONNX file of @p spec in @p directory.
 pub fn model_path(directory: &Path, spec: &ModelSpec) -> PathBuf {
     directory.join(spec.onnx_file)
+}
+
+/// Loads the ONNX file of @p spec from @p directory into a new session on @p device and checks
+/// the input and output names of the specification.
+pub(super) fn load_session(
+    directory: &Path,
+    spec: &ModelSpec,
+    device: OrtSegmentationDevice,
+) -> Result<Session> {
+    let path = model_path(directory, spec);
+    if !path.is_file() {
+        bail!(
+            "segmentation {} model {} does not exist",
+            spec.role.as_str(),
+            path.display()
+        );
+    }
+    let session = session_builder(device)?
+        .commit_from_file(&path)
+        .map_err(|e| {
+            anyhow!(
+                "failed to load {} on {}: {e}",
+                path.display(),
+                device.label()
+            )
+        })?;
+    validate_session_names(&session, spec, &path)?;
+    Ok(session)
 }
 
 fn validate_session_names(session: &Session, spec: &ModelSpec, path: &Path) -> Result<()> {
@@ -218,53 +211,109 @@ fn validate_session_names(session: &Session, spec: &ModelSpec, path: &Path) -> R
     Ok(())
 }
 
-struct OrtSegmentationModel {
-    session: Session,
-    spec: &'static ModelSpec,
+impl SegmentationBackend for OrtSegmentationBackend {
+    fn backend_name(&self) -> &str {
+        match self.device {
+            OrtSegmentationDevice::Cpu => "onnxruntime-cpu",
+            OrtSegmentationDevice::DirectMl(_) => "onnxruntime-directml",
+        }
+    }
+
+    fn device_label(&self, _role: SegmentationModelRole) -> String {
+        self.device.label()
+    }
+
+    fn load_encoder(&self, directory: &Path) -> Result<Box<dyn SegmentationEncoder>> {
+        Ok(Box::new(OrtEncoder {
+            session: load_session(directory, &ENCODER, self.device)?,
+        }))
+    }
+
+    fn load_decoder(&self, directory: &Path) -> Result<Box<dyn SegmentationDecoder>> {
+        Ok(Box::new(OrtDecoder::load(
+            directory,
+            &DECODER,
+            self.device,
+        )?))
+    }
 }
 
-impl SegmentationModel for OrtSegmentationModel {
-    fn run(&mut self, inputs: &[&TensorF32]) -> Result<Vec<TensorF32>> {
-        if inputs.len() != self.spec.inputs.len() {
-            bail!(
-                "segmentation {} expects {} inputs, got {}",
-                self.spec.role.as_str(),
-                self.spec.inputs.len(),
-                inputs.len()
-            );
-        }
-        let mut values = Vec::with_capacity(inputs.len());
-        for (name, tensor) in self.spec.inputs.iter().zip(inputs) {
-            let view = TensorRef::from_array_view((tensor.shape(), tensor.data()))
-                .map_err(|e| anyhow!("failed to bind input {name}: {e}"))?;
-            values.push((*name, view));
-        }
-        let outputs = self.session.run(values).map_err(|e| {
-            anyhow!(
-                "failed to run the segmentation {}: {e}",
-                self.spec.role.as_str()
-            )
-        })?;
-        self.spec
-            .onnx_outputs
-            .iter()
-            .map(|name| {
-                let value = outputs
-                    .get(*name)
-                    .with_context(|| format!("missing output {name}"))?;
-                let (shape, data) = value
-                    .try_extract_tensor::<f32>()
-                    .map_err(|e| anyhow!("output {name} is not a float32 tensor: {e}"))?;
-                let shape = shape
-                    .iter()
-                    .map(|&dim| {
-                        usize::try_from(dim)
-                            .map_err(|_| anyhow!("output {name} has a negative dimension"))
-                    })
-                    .collect::<Result<Vec<_>>>()?;
-                TensorF32::new(shape, data.to_vec())
-            })
-            .collect()
+/// The expected shapes of the encoder outputs, in the output order of the specification.
+const FEATURE_SHAPES: [&[usize]; 3] = [
+    &IMAGE_EMBED_SHAPE,
+    &HIGH_RES_FEATS_0_SHAPE,
+    &HIGH_RES_FEATS_1_SHAPE,
+];
+
+/// The encoder outputs of one image as ONNX Runtime values in CPU memory, in the output order of
+/// the encoder specification (`image_embed`, `high_res_feats_0`, `high_res_feats_1`). The values
+/// are not changed after the encoder run.
+pub struct OrtImageFeatures {
+    values: [DynValue; 3],
+}
+
+impl OrtImageFeatures {
+    /// Features with zero values, for the warm-up runs of the decoder sessions.
+    pub(super) fn zeros() -> Result<Self> {
+        let zero = |shape: &[usize]| -> Result<DynValue> {
+            let len = shape.iter().product();
+            Ok(Tensor::from_array((shape.to_vec(), vec![0.0f32; len]))
+                .map_err(|e| anyhow!("failed to allocate zero features: {e}"))?
+                .into_dyn())
+        };
+        Ok(Self {
+            values: [
+                zero(FEATURE_SHAPES[0])?,
+                zero(FEATURE_SHAPES[1])?,
+                zero(FEATURE_SHAPES[2])?,
+            ],
+        })
+    }
+
+    /// The values with their decoder input names.
+    pub(super) fn named_values(&self) -> impl Iterator<Item = (&'static str, &DynValue)> {
+        ENCODER.onnx_outputs.iter().copied().zip(self.values.iter())
+    }
+}
+
+impl ImageFeatures for OrtImageFeatures {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+struct OrtEncoder {
+    session: Session,
+}
+
+impl SegmentationEncoder for OrtEncoder {
+    fn encode(&mut self, pixel_values: &TensorF32) -> Result<Arc<dyn ImageFeatures>> {
+        let input_name = ENCODER.inputs[0];
+        let view = TensorRef::from_array_view((pixel_values.shape(), pixel_values.data()))
+            .map_err(|e| anyhow!("failed to bind input {input_name}: {e}"))?;
+        let mut outputs = self
+            .session
+            .run(vec![(input_name, view)])
+            .map_err(|e| anyhow!("failed to run the segmentation encoder: {e}"))?;
+        let mut take = |index: usize| -> Result<DynValue> {
+            let name = ENCODER.onnx_outputs[index];
+            let value = outputs
+                .remove(name)
+                .with_context(|| format!("missing encoder output {name}"))?;
+            let (shape, _) = value
+                .try_extract_tensor::<f32>()
+                .map_err(|e| anyhow!("encoder output {name} is not a float32 tensor: {e}"))?;
+            let shape: Vec<usize> = shape.iter().map(|&dim| dim.max(0) as usize).collect();
+            if shape != FEATURE_SHAPES[index] {
+                bail!(
+                    "encoder output {name} has shape {shape:?}, expected {:?}",
+                    FEATURE_SHAPES[index]
+                );
+            }
+            Ok(value)
+        };
+        let values = [take(0)?, take(1)?, take(2)?];
+        Ok(Arc::new(OrtImageFeatures { values }))
     }
 }
 
@@ -318,10 +367,15 @@ mod tests {
             device: OrtSegmentationDevice::Cpu,
         };
         let err = backend
-            .load(&directory, SegmentationModelRole::Encoder)
+            .load_encoder(&directory)
             .err()
-            .expect("missing file");
+            .expect("missing encoder file");
         assert!(err.to_string().contains("point_encoder.onnx"), "{err}");
+        let err = backend
+            .load_decoder(&directory)
+            .err()
+            .expect("missing decoder file");
+        assert!(err.to_string().contains("point_decoder.onnx"), "{err}");
         std::fs::remove_dir_all(&directory).expect("remove directory");
     }
 }
