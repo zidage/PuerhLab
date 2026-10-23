@@ -67,11 +67,15 @@ struct SamplingFootprint {
  * @brief How one render reads the document crop and rotation.
  *
  * Only editor viewport requests set @ref RotatedUncroppedSource, while the Geometry panel is
- * open. The document is never changed; the value selects which user geometry the frame binds.
+ * open. Only the AI Mask analysis render sets @ref ReferenceSource. The document is never
+ * changed; the value selects which user geometry the frame binds.
  */
 enum class DocumentGeometryUse : std::uint8_t {
   ApplyCropAndRotation,    ///< Default: every product render applies the document geometry.
   RotatedUncroppedSource,  ///< Geometry panel open: the whole source with the document rotation.
+  /// AI Mask analysis render: the whole source without crop and rotation. EditSpace is
+  /// ReferenceSpace, so `render_to_reference` is a pure scale.
+  ReferenceSource,
 };
 
 struct RenderRequest {

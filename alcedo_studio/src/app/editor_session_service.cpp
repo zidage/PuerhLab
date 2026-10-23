@@ -6,10 +6,14 @@
 
 #include <algorithm>
 #include <cassert>
+#include <exception>
 #include <iterator>
+#include <memory>
 #include <mutex>
+#include <string>
 #include <utility>
 
+#include "app/ai_mask_analysis_image.hpp"
 #include "app/editor_action_policy.hpp"
 #include "app/editor_mini_git_materializer.hpp"
 #include "app/editor_session_edit_controller.hpp"
@@ -2687,6 +2691,119 @@ auto EditorSessionService::RenderPreviewImages(RenderRequest geometry, EditorPre
                   error.empty() ? "The preview render could not be scheduled" : error);
   }
   accepted.message = "Preview images scheduled";
+  return accepted;
+}
+
+auto EditorSessionService::RenderAiMaskAnalysisImage(EditorAiMaskAnalysisContent    content,
+                                                     EditorAiMaskAnalysisCompletion on_complete)
+    -> EditorSessionResult {
+  if (!on_complete) {
+    return Reject("The AI Mask analysis image requires a completion");
+  }
+  if (!InOwnerReduction()) {
+    EditorSessionCommand command;
+    command.kind = EditorSessionCommandKind::RenderAiMaskAnalysisImage;
+    auto shared_completion =
+        std::make_shared<EditorAiMaskAnalysisCompletion>(std::move(on_complete));
+    return SubmitCommand(std::move(command),
+                         [this, content, shared_completion](const EditorSessionCommand&) {
+                           return RenderAiMaskAnalysisImage(content, std::move(*shared_completion));
+                         });
+  }
+  EditorSessionResult accepted;
+  accepted.kind     = EditorSessionResultKind::Accepted;
+  accepted.state    = lifecycle_.state();
+  accepted.identity = lifecycle_.identity();
+  const auto refuse = [&](EditorAiMaskAnalysisStatus status, std::string message) {
+    accepted.message = message;
+    EditorAiMaskAnalysisResult refused;
+    refused.status  = status;
+    refused.message = std::move(message);
+    on_complete(std::move(refused));
+    return accepted;
+  };
+  if (lifecycle_.state() != EditorSessionState::Interactive || !lifecycle_.has_image()) {
+    return refuse(EditorAiMaskAnalysisStatus::Rejected,
+                  "The AI Mask analysis image requires an interactive session");
+  }
+  if (!dependencies_.pipeline || !dependencies_.history || !lifecycle_.has_history_guard()) {
+    return refuse(EditorAiMaskAnalysisStatus::Rejected,
+                  "The AI Mask analysis image requires an open image history");
+  }
+  const bool with_pixels = content == EditorAiMaskAnalysisContent::KeyAndPixels;
+  if (with_pixels && !dependencies_.images) {
+    return refuse(EditorAiMaskAnalysisStatus::Rejected, "Image rendering is not available");
+  }
+  if (with_pixels && dependencies_.images->HasImageJob()) {
+    return refuse(EditorAiMaskAnalysisStatus::Busy, "The image renderer is running another job");
+  }
+  const auto identity = lifecycle_.identity();
+  auto       current  = dependencies_.pipeline->CurrentPreview(identity.element_id);
+  if (!current) {
+    return refuse(EditorAiMaskAnalysisStatus::Rejected,
+                  "The working state of the image is not available");
+  }
+  std::shared_ptr<const PipelineGraphSnapshot> analysis;
+  std::string                                  error;
+  if (!dependencies_.history->BuildAiMaskAnalysisDocument(lifecycle_.history_guard(), current,
+                                                          &analysis, &error) ||
+      !analysis) {
+    return refuse(EditorAiMaskAnalysisStatus::Failed,
+                  error.empty() ? "The AI Mask analysis document could not be prepared" : error);
+  }
+  auto image_key =
+      MakeAiMaskAnalysisImageKey(identity.element_id, identity.image_id, analysis->Document());
+  if (!with_pixels) {
+    accepted.message = "AI Mask analysis image key ready";
+    EditorAiMaskAnalysisResult result;
+    result.status    = EditorAiMaskAnalysisStatus::Completed;
+    result.image_key = std::move(image_key);
+    on_complete(std::move(result));
+    return accepted;
+  }
+
+  EditorImageRenderRequest request;
+  request.element_id            = identity.element_id;
+  request.image_id              = identity.image_id;
+  request.image_load_request_id = lifecycle_.active_image_load_request();
+  request.snapshots             = {std::move(analysis)};
+  request.geometry              = MakeAiMaskAnalysisRenderRequest();
+  // The port calls the completion only for an accepted job; a refused job keeps it here.
+  auto shared_completion = std::make_shared<EditorAiMaskAnalysisCompletion>(std::move(on_complete));
+  const auto job_id      = dependencies_.images->ScheduleImages(
+      std::move(request),
+      [shared_completion, image_key](EditorImageRenderResult rendered) {
+        EditorAiMaskAnalysisResult result;
+        result.message = std::move(rendered.message);
+        if (rendered.status == EditorImageRenderStatus::Completed && rendered.images.size() == 1u) {
+          // The completion runs on the editor render worker; the conversion is one pass over the
+          // pixels and keeps the RGBA32F download from leaving the worker.
+          try {
+            result.image                 = ConvertAiMaskAnalysisImage(rendered.images.front());
+            result.full_reference_extent = rendered.images.front().geometry.full_reference_extent;
+            result.image_key             = image_key;
+            result.status                = EditorAiMaskAnalysisStatus::Completed;
+          } catch (const std::exception& ex) {
+            result.status  = EditorAiMaskAnalysisStatus::Failed;
+            result.message = ex.what();
+          }
+        } else {
+          result.status = EditorAiMaskAnalysisStatus::Failed;
+          if (result.message.empty()) {
+            result.message = rendered.status == EditorImageRenderStatus::Cancelled
+                                      ? "The AI Mask analysis render was cancelled"
+                                      : "The AI Mask analysis render failed";
+          }
+        }
+        (*shared_completion)(std::move(result));
+      },
+      &error);
+  if (job_id == 0) {
+    on_complete = std::move(*shared_completion);
+    return refuse(EditorAiMaskAnalysisStatus::Failed,
+                  error.empty() ? "The AI Mask analysis render could not be scheduled" : error);
+  }
+  accepted.message = "AI Mask analysis image scheduled";
   return accepted;
 }
 

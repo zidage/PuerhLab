@@ -225,6 +225,7 @@ auto EditorActionPolicy::ActionForCommand(EditorSessionCommandKind kind)
       return std::nullopt;
     // Reads the open image only; the reducer reports its own refusal to the caller.
     case EditorSessionCommandKind::RenderPreviewImages:
+    case EditorSessionCommandKind::RenderAiMaskAnalysisImage:
       return std::nullopt;
     case EditorSessionCommandKind::SetPresentationTarget:
     case EditorSessionCommandKind::SetPresentationSize:

@@ -136,6 +136,19 @@ class PipelineDocument {
   void               UseSensorSettingsFrom(const PipelineDocument& current);
 
   /**
+   * @brief Give this document every Develop setting of @p current, including the white balance,
+   *        and keep every downstream node (DevelopParamsModel::UseAllSettingsFrom).
+   *
+   * For the private AI Mask analysis document: the import root look of the image that @p current
+   * shows, with its current Develop node. Geometry, Color Grades, Masks, DRT, and topology stay
+   * unchanged. Checks the preconditions of @ref UseSensorSettingsFrom before it writes.
+   *
+   * @throws std::invalid_argument under the conditions of @ref UseSensorSettingsFrom. This
+   *         document is unchanged.
+   */
+  void               UseDevelopSettingsFrom(const PipelineDocument& current);
+
+  /**
    * @brief Insert an adjustment on a ColorGrade node and record a topology change.
    */
   void InsertAdjustment(const NodeId& grade_id, std::size_t index, AdjustmentInstanceId instance_id,
@@ -145,6 +158,10 @@ class PipelineDocument {
   static auto        FromJson(const nlohmann::json& json) -> PipelineDocument;
 
  private:
+  /// Develop node of @p current after the checks of @ref UseSensorSettingsFrom; writes nothing.
+  [[nodiscard]] auto RequireDevelopOfSameImage(const PipelineDocument& current) const
+      -> const DevelopNodeModel&;
+
   /// Shares every node with @p other. Only @ref Freeze calls this.
   PipelineDocument(const PipelineDocument& other) = default;
 

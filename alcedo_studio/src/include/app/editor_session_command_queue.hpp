@@ -87,6 +87,8 @@ enum class EditorSessionCommandKind : std::uint8_t {
   CloseComparison,
   /// Render Root and the working values of the open image to host pixels for a client.
   RenderPreviewImages,
+  /// Render the AI Mask analysis image of the open image, or give only its image key.
+  RenderAiMaskAnalysisImage,
 };
 
 /// Worker messages that are delivered back to the session owner.

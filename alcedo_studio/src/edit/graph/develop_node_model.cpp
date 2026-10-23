@@ -269,6 +269,11 @@ void DevelopParamsModel::UseSensorSettingsFrom(const DevelopParamsModel& current
   });
 }
 
+void DevelopParamsModel::UseAllSettingsFrom(const DevelopParamsModel& current) {
+  TakeFieldsFromThenMutate(current,
+                           [](DevelopPayload&, const DevelopPayload&) { return DirtyFieldMask{}; });
+}
+
 auto DevelopParamsModel::DngProfile() const -> DngColorProfileRef {
   return Read([](const DevelopPayload& payload) { return payload.camera_profile.dng_profile; });
 }
