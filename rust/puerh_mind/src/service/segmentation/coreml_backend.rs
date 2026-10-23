@@ -1,22 +1,32 @@
 //! Native Core ML adapter of the segmentation models (macOS).
 //!
-//! The models are compiled `.mlmodelc` directories (master plan section 8.17.1), loaded with the
+//! The models are compiled `.mlmodelc` directories (master plan section 8.2.1), loaded with the
 //! `coreml` crate as the SigLIP2 encoders are (`coreml_clip.rs`). The ONNX Runtime Core ML
 //! execution provider is not used (lab decision U15). Compute units per model (U15): the encoder
 //! runs with `ComputeUnits::All`, the decoder with `ComputeUnits::CpuOnly` (about 30 ms per call
 //! and no new preparation when the point count changes). The `cpu` device runs every model with
 //! `ComputeUnits::CpuOnly`; it exists for development and tests only.
+//!
+//! The encoder keeps its output arrays as [`CoreMlImageFeatures`] (SM3.B decision B4). A Float16
+//! output is converted to Float32 once, at the encoder run. The decoder adds retained references
+//! to the same arrays to its input for each call, so a decode does not copy the features.
 
+use std::any::Any;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use anyhow::{Result, anyhow, bail};
 use coreml::{ComputeUnits, DataType, FeatureProvider, Model, ModelConfiguration, MultiArray};
 
 use super::backend::{
-    SegmentationBackend, SegmentationBackendFactory, SegmentationModel, SegmentationModelRole,
-    UnsupportedDevice,
+    DecoderOutput, DecoderPrompt, ImageFeatures, SegmentationBackend, SegmentationBackendFactory,
+    SegmentationDecoder, SegmentationEncoder, SegmentationModelRole, UnsupportedDevice,
+    features_of,
 };
-use super::model_set::{ModelSpec, spec};
+use super::model_set::{
+    DECODER, ENCODER, HIGH_RES_FEATS_0_SHAPE, HIGH_RES_FEATS_1_SHAPE, IMAGE_EMBED_SHAPE, ModelSpec,
+    spec,
+};
 use super::tensor::TensorF32;
 
 /// Device of the Core ML segmentation models.
@@ -80,22 +90,9 @@ pub fn model_path(directory: &Path, spec: &ModelSpec) -> PathBuf {
     directory.join(spec.coreml_directory)
 }
 
-impl SegmentationBackend for CoreMlSegmentationBackend {
-    fn backend_name(&self) -> &str {
-        "coreml-native"
-    }
-
-    fn device_label(&self, role: SegmentationModelRole) -> String {
-        self.device.compute_units_label(role).to_string()
-    }
-
-    fn load(
-        &self,
-        directory: &Path,
-        role: SegmentationModelRole,
-    ) -> Result<Box<dyn SegmentationModel>> {
-        let spec = spec(role);
-        let path = model_path(directory, spec);
+impl CoreMlSegmentationBackend {
+    fn load_model(&self, directory: &Path, role: SegmentationModelRole) -> Result<Model> {
+        let path = model_path(directory, spec(role));
         if !path.is_dir() {
             bail!(
                 "segmentation {} model {} does not exist",
@@ -105,66 +102,167 @@ impl SegmentationBackend for CoreMlSegmentationBackend {
         }
         let configuration =
             ModelConfiguration::new().with_compute_units(self.device.compute_units(role));
-        let model = Model::load_from_url(&path, &configuration).map_err(|e| {
+        Model::load_from_url(&path, &configuration).map_err(|e| {
             anyhow!(
                 "failed to load {} with {}: {e}",
                 path.display(),
                 self.device.compute_units_label(role)
             )
-        })?;
-        Ok(Box::new(CoreMlSegmentationModel { model, spec }))
+        })
     }
 }
 
-struct CoreMlSegmentationModel {
-    model: Model,
-    spec: &'static ModelSpec,
+impl SegmentationBackend for CoreMlSegmentationBackend {
+    fn backend_name(&self) -> &str {
+        "coreml-native"
+    }
+
+    fn device_label(&self, role: SegmentationModelRole) -> String {
+        self.device.compute_units_label(role).to_string()
+    }
+
+    fn load_encoder(&self, directory: &Path) -> Result<Box<dyn SegmentationEncoder>> {
+        Ok(Box::new(CoreMlEncoder {
+            model: self.load_model(directory, SegmentationModelRole::Encoder)?,
+        }))
+    }
+
+    fn load_decoder(&self, directory: &Path) -> Result<Box<dyn SegmentationDecoder>> {
+        Ok(Box::new(CoreMlDecoder {
+            model: self.load_model(directory, SegmentationModelRole::Decoder)?,
+        }))
+    }
 }
 
-// The Rust wrapper of MLModel does not declare Send. The engine calls each model under its own
-// mutex, so one thread at a time uses the handle.
-unsafe impl Send for CoreMlSegmentationModel {}
+/// The expected shapes of the encoder outputs, in the output order of the specification.
+const FEATURE_SHAPES: [&[usize]; 3] = [
+    &IMAGE_EMBED_SHAPE,
+    &HIGH_RES_FEATS_0_SHAPE,
+    &HIGH_RES_FEATS_1_SHAPE,
+];
 
-impl SegmentationModel for CoreMlSegmentationModel {
-    fn run(&mut self, inputs: &[&TensorF32]) -> Result<Vec<TensorF32>> {
-        if inputs.len() != self.spec.inputs.len() {
-            bail!(
-                "segmentation {} expects {} inputs, got {}",
-                self.spec.role.as_str(),
-                self.spec.inputs.len(),
-                inputs.len()
-            );
+/// The encoder outputs of one image as Float32 Core ML arrays, under their encoder output names
+/// (the decoder input names). The arrays are not changed after the encoder run.
+pub struct CoreMlImageFeatures {
+    arrays: FeatureProvider,
+}
+
+// The Rust wrapper of the feature provider does not declare Send or Sync. The provider and its
+// arrays are not changed after the encoder run; the decoder only reads them, under its mutex.
+unsafe impl Send for CoreMlImageFeatures {}
+unsafe impl Sync for CoreMlImageFeatures {}
+
+impl ImageFeatures for CoreMlImageFeatures {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+/// Adds a Float32 Core ML array with the values of @p tensor to @p provider as @p name.
+fn insert_tensor(provider: &mut FeatureProvider, name: &str, tensor: &TensorF32) -> Result<()> {
+    let mut array = MultiArray::new_f32(tensor.shape())
+        .map_err(|e| anyhow!("failed to allocate Core ML input {name}: {e}"))?;
+    array
+        .copy_from_f32_slice(tensor.data())
+        .map_err(|e| anyhow!("failed to fill Core ML input {name}: {e}"))?;
+    provider
+        .try_insert_multi_array(name, array)
+        .map_err(|e| anyhow!("failed to add Core ML input {name}: {e}"))
+}
+
+struct CoreMlEncoder {
+    model: Model,
+}
+
+// The Rust wrapper of MLModel does not declare Send. The engine calls the encoder under its own
+// mutex, so one thread at a time uses the handle.
+unsafe impl Send for CoreMlEncoder {}
+
+impl SegmentationEncoder for CoreMlEncoder {
+    fn encode(&mut self, pixel_values: &TensorF32) -> Result<Arc<dyn ImageFeatures>> {
+        let mut inputs = FeatureProvider::new();
+        insert_tensor(&mut inputs, ENCODER.inputs[0], pixel_values)?;
+        let outputs = self
+            .model
+            .predict(&inputs)
+            .map_err(|e| anyhow!("failed to run the segmentation encoder: {e}"))?;
+        let mut arrays = FeatureProvider::new();
+        for (name, expected) in ENCODER.coreml_outputs.iter().zip(FEATURE_SHAPES) {
+            let array = outputs.get_multi_array(name).ok_or_else(|| {
+                anyhow!(
+                    "missing Core ML encoder output {name:?}; available outputs: {:?}",
+                    outputs.keys()
+                )
+            })?;
+            if array.shape() != expected {
+                bail!(
+                    "Core ML encoder output {name} has shape {:?}, expected {expected:?}",
+                    array.shape()
+                );
+            }
+            if array.data_type() == DataType::Float32 {
+                arrays
+                    .try_insert_multi_array(name, array)
+                    .map_err(|e| anyhow!("failed to keep Core ML encoder output {name}: {e}"))?;
+            } else {
+                insert_tensor(&mut arrays, name, &read_multi_array(name, &array)?)?;
+            }
         }
-        let mut provider = FeatureProvider::new();
-        for (name, tensor) in self.spec.inputs.iter().zip(inputs) {
-            let mut array = MultiArray::new_f32(tensor.shape())
-                .map_err(|e| anyhow!("failed to allocate Core ML input {name}: {e}"))?;
-            array
-                .copy_from_f32_slice(tensor.data())
-                .map_err(|e| anyhow!("failed to fill Core ML input {name}: {e}"))?;
-            provider
+        Ok(Arc::new(CoreMlImageFeatures { arrays }))
+    }
+}
+
+struct CoreMlDecoder {
+    model: Model,
+}
+
+// See `CoreMlEncoder`: the engine calls the decoder under its own mutex.
+unsafe impl Send for CoreMlDecoder {}
+
+impl SegmentationDecoder for CoreMlDecoder {
+    fn decode(
+        &mut self,
+        features: &Arc<dyn ImageFeatures>,
+        prompt: &DecoderPrompt,
+    ) -> Result<DecoderOutput> {
+        let features = features_of::<CoreMlImageFeatures>(features.as_ref())?;
+        let mut inputs = FeatureProvider::new();
+        for name in ENCODER.coreml_outputs {
+            // A retained reference to the stored array: no copy of the features.
+            let array = features
+                .arrays
+                .get_multi_array(name)
+                .ok_or_else(|| anyhow!("the Core ML image features have no array {name}"))?;
+            inputs
                 .try_insert_multi_array(name, array)
                 .map_err(|e| anyhow!("failed to add Core ML input {name}: {e}"))?;
         }
-        let outputs = self.model.predict(&provider).map_err(|e| {
-            anyhow!(
-                "failed to run the segmentation {}: {e}",
-                self.spec.role.as_str()
-            )
-        })?;
-        self.spec
-            .coreml_outputs
-            .iter()
-            .map(|name| {
-                let array = outputs.get_multi_array(name).ok_or_else(|| {
-                    anyhow!(
-                        "missing Core ML output {name:?}; available outputs: {:?}",
-                        outputs.keys()
-                    )
-                })?;
-                read_multi_array(name, &array)
-            })
-            .collect()
+        let prompt_inputs = [
+            ("point_coords", &prompt.point_coords),
+            ("point_labels", &prompt.point_labels),
+            ("mask_input", &prompt.mask_input),
+            ("has_mask_input", &prompt.has_mask_input),
+        ];
+        for (name, tensor) in prompt_inputs {
+            insert_tensor(&mut inputs, name, tensor)?;
+        }
+        let outputs = self
+            .model
+            .predict(&inputs)
+            .map_err(|e| anyhow!("failed to run the segmentation decoder: {e}"))?;
+        let read = |name: &str| -> Result<TensorF32> {
+            let array = outputs.get_multi_array(name).ok_or_else(|| {
+                anyhow!(
+                    "missing Core ML decoder output {name:?}; available outputs: {:?}",
+                    outputs.keys()
+                )
+            })?;
+            read_multi_array(name, &array)
+        };
+        Ok(DecoderOutput {
+            mask_logits: read(DECODER.coreml_outputs[0])?,
+            iou_scores: read(DECODER.coreml_outputs[1])?,
+        })
     }
 }
 
@@ -246,5 +344,23 @@ mod tests {
         let storage = [0.0, 1.0, 2.0, -1.0, 3.0, 4.0, 5.0, -1.0];
         let values = gather_row_major(&[2, 3], &[4, 1], |offset| storage[offset]);
         assert_eq!(values, vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0]);
+    }
+
+    #[test]
+    fn coreml_features_keep_float32_array_without_copy() {
+        let mut array = MultiArray::new_f32(&[1, 2]).expect("array");
+        array.copy_from_f32_slice(&[1.5, -2.0]).expect("fill");
+        let mut provider = FeatureProvider::new();
+        provider
+            .try_insert_multi_array("image_embed", array)
+            .expect("insert");
+        let first = provider.get_multi_array("image_embed").expect("first");
+        let second = provider.get_multi_array("image_embed").expect("second");
+        // Both references read the storage of one array.
+        assert_eq!(
+            first.as_f32_slice().expect("f32").as_ptr(),
+            second.as_f32_slice().expect("f32").as_ptr()
+        );
+        assert_eq!(first.as_f32_slice().expect("f32"), &[1.5, -2.0]);
     }
 }

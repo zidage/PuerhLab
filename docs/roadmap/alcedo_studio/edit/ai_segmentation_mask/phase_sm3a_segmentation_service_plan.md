@@ -2,7 +2,7 @@
 
 Date: 2026-10-22.
 
-Status: complete on Windows on 2026-10-22 (`feature/ai-segmentation-sm3a-service-architecture`). The macOS build and run are not done (section 11).
+Status: complete on 2026-10-22 (`feature/ai-segmentation-sm3a-service-architecture`, #462). The macOS build and port check ran later with SM3.B (section 11.3).
 
 Parent plan: [AI Segmentation Mask Master Plan](../ai_segmentation_mask_master_plan.md), section
 9.2.1.
@@ -702,3 +702,10 @@ first-point-count effect of E3; the first-call cost and the per-count sessions b
 **Diff size:** about 1,300 lines, inside the 1,050-1,300 estimate.
 
 **Remaining defects or unavailable platforms:** macOS port check not run.
+
+### 11.3 macOS record (2026-10-22, with SM3.B)
+
+The SM3.A port check at `c016dea1` passed on an Apple Silicon Mac (macOS 27.0.1) with the native
+Core ML models (`point_encoder.mlmodelc`, `point_decoder.mlmodelc`): 128 masks, minimum photo IoU
+0.999964; encoder 241 ms p50, decoder 33 to 34 ms p50 for 1 to 4 decoder points. The SM3.B branch
+passed `cargo test` on the same Mac. Details: SM3.B plan, section 13.2.

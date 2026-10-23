@@ -5,9 +5,10 @@ Date: 2026-10-19. Revised: 2026-10-22.
 Status: SM1 complete on 2026-10-22. The EfficientSAM3 quality review failed (section 8.1). The
 re-evaluation in the `alcedo-ai-mask-lab` repository accepted the model set SAM 2.1 Hiera tiny, the
 people and sky head, and S3OD `s3od-synth` (section 8.2). Alcedo Studio does not use EfficientSAM3
-or SAM3. SM3 is split into SM3.A, SM3.B, and SM3.C. SM3.A is complete on Windows on 2026-10-22; its macOS
-build and run wait for the Mac
-([phase plan](ai_segmentation_mask/phase_sm3a_segmentation_service_plan.md)). SM2 runs after SM9
+or SAM3. SM3 is split into SM3.A, SM3.B, and SM3.C. SM3.A is complete on 2026-10-22
+([phase plan](ai_segmentation_mask/phase_sm3a_segmentation_service_plan.md)); its macOS port check
+ran with the SM3.B macOS run. SM3.B is complete on Windows and macOS on 2026-10-22
+([phase plan](ai_segmentation_mask/phase_sm3b_embedding_cache_plan.md)). SM2 runs after SM9
 (section 7).
 
 Target release: Alcedo Studio 0.3.4. The AI Segmentation Mask is the main feature of that release.
@@ -270,8 +271,8 @@ The project storage owns the R8 bytes. No owner keeps a copy of another owner's 
 | Phase | Result | Main modules | Dependency | Expected diff | Status |
 | --- | --- | --- | --- | ---: | --- |
 | SM1 | Model selection, export, runtime feasibility, latency, and quality evidence | `alcedo-ai-mask-lab` | none | 900-1500 | complete 2026-10-22 (section 8) |
-| SM3.A | Segmentation service architecture: proto, Rust service with the Windows ONNX Runtime and macOS Core ML adapters, SAM 2.1 encode and decode, C++ client with a persistent channel, app session | proto, Rust service, `sidecar_client`, app | SM1 | 2400-2950 estimated, in two parts SM3.A.1 and SM3.A.2; actual about 4,500 | complete on Windows 2026-10-22; macOS build and run open ([phase plan](ai_segmentation_mask/phase_sm3a_segmentation_service_plan.md)) |
-| SM3.B | Image embedding cache and first optimizations | Rust service, app session | SM3.A | 800-1400 | outline |
+| SM3.A | Segmentation service architecture: proto, Rust service with the Windows ONNX Runtime and macOS Core ML adapters, SAM 2.1 encode and decode, C++ client with a persistent channel, app session | proto, Rust service, `sidecar_client`, app | SM1 | 2400-2950 estimated, in two parts SM3.A.1 and SM3.A.2; actual about 4,500 | complete 2026-10-22; macOS port check passed with the SM3.B macOS run ([phase plan](ai_segmentation_mask/phase_sm3a_segmentation_service_plan.md)) |
+| SM3.B | Image embedding cache and first optimizations | Rust service, app session | SM3.A | 800-1400; actual about 1,800 code lines | complete 2026-10-22 on Windows and macOS ([phase plan](ai_segmentation_mask/phase_sm3b_embedding_cache_plan.md)) |
 | SM3.C | Task masks in the service: Subject (S3OD), Background, Sky and People (head) | Rust service, proto, C++ client | SM3.A | 1200-1800 | outline |
 | SM4 | Analysis render in ReferenceSpace | geometry, scheduler, app service | none | 600-1200 | outline |
 | SM5 | AI Mask source model, R8 persistence, history, and project format | `edit/mask`, history, storage | SM1 | over 2000, split before start | outline |
@@ -379,7 +380,8 @@ differ):
   sequential execution and memory patterns off.
 - On DirectML, a decoder session runs only the point count of its first run at about 10.5 ms; other
   counts take 22 to 34 ms. Padding to a fixed point count breaks the masks. One session per point
-  count gives 12 ms at about 90 MB each (E3). SM3.B owns this optimization.
+  count gives 12 ms at about 90 MB each (E3). SM3.B implements one session for each of the
+  counts 1, 2, and 4 and one general session, each run at load (SM3.B plan, decision B3).
 - Core ML prepares the decoder again for each new point count on the GPU (about 52 ms); on the CPU
   the decoder takes about 30 ms per call. Keep all Core ML calls of one model on one thread.
 - Decoder mask selection: one point without a box (a click) returns the token 1 to 3 with the best
@@ -469,6 +471,12 @@ that fits the largest message; the app-layer segmentation session; the ONNX Runt
 
 #### 9.2.2 SM3.B — Image embedding cache and first optimizations
 
+Detailed plan: [SM3.B Image embedding cache and first optimizations](ai_segmentation_mask/phase_sm3b_embedding_cache_plan.md).
+The user closed the open decisions on 2026-10-22: the cache key is an opaque host image key with
+a key-only start (B1; SM4 defines its content), the cache keeps 4 embeddings and unload clears it
+(B2), and DirectML loads decoder sessions for the point counts 1, 2, and 4 and one general
+session (B3).
+
 Scope:
 
 - Keep the image embedding of recent analysis renders, so that a new session on the same image
@@ -480,7 +488,7 @@ Scope:
   sessions and their memory.
 - Measure each change against the SM3.A latency record on Windows DirectML and macOS Core ML.
 
-Open decisions: the cache key, the cache size, and the session limit.
+Open decisions: none (closed by B1 to B3 of the SM3.B plan).
 
 #### 9.2.3 SM3.C — Task masks in the service
 
@@ -510,7 +518,9 @@ Scope:
 - Read the result back to the host with `require_host_output`.
 
 Open decisions: which pipeline stages the analysis render applies (for example Develop and the
-default display transform without Color Grade nodes), and the image embedding cache key.
+default display transform without Color Grade nodes), and the content of the image key of the
+SM3.B embedding cache (the key names the analysis render content and the model set; SM3.B plan,
+decision B1).
 
 ### 9.4 SM5 — AI Mask source model, R8 persistence, history, and project format
 

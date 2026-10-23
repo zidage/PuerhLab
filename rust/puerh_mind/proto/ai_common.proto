@@ -11,7 +11,7 @@ package alcedo.ai;
 // correlation, timeout, cancellation, and credential handling.
 //
 // See docs/roadmap/alcedo_studio/ai/ai_sidecar_phase0_requirements.md (section 1) for the frozen
-// field-by-field contract. Well-known types are intentionally not imported; the
+// field-by-field specification. Well-known types are intentionally not imported; the
 // Rust build (tonic_prost_build defaults) and the C++ generator both compile
 // only the `proto/` path with no WKT include, so timeouts are int64 scalars.
 
@@ -55,6 +55,7 @@ enum AiErrorCode {
   AI_ERROR_INTERNAL              = 12;
   AI_ERROR_INVALID_INPUT         = 13;  // a request field fails validation
   AI_ERROR_SESSION_NOT_FOUND     = 14;  // the named sidecar session does not exist
+  AI_ERROR_IMAGE_NOT_CACHED      = 15;  // a start request without pixels names an uncached image
 }
 
 enum AiInputKind {

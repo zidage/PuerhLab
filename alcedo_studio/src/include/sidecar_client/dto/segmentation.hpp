@@ -22,7 +22,8 @@ struct SegmentationCallStatus {
 };
 
 /// An RGB8 image for a segmentation session: row-major, 3 bytes per pixel, long edge at most
-/// 4096 px.
+/// 4096 px. A start request from the image embedding cache only sends an empty image (width 0,
+/// height 0, no pixels).
 struct SegmentationRgb8Image {
   uint32_t             width  = 0;
   uint32_t             height = 0;
@@ -78,7 +79,13 @@ struct SegmentationDecodeResult {
 struct SegmentationSessionResult {
   SegmentationCallStatus status;
   std::string            session_id;
-  int64_t                encoder_ms = 0;
+  /// Time of the preprocessing and the encoder; 0 for a cached image.
+  int64_t                encoder_ms       = 0;
+  /// True when the session uses the cached image embedding of the image key.
+  bool                   from_cache       = false;
+  /// True when a start without pixels names an image key that the sidecar does not cache
+  /// (AI_ERROR_IMAGE_NOT_CACHED). The caller renders the image and starts again with the pixels.
+  bool                   image_not_cached = false;
 };
 
 struct SegmentationModelResidency {
@@ -95,7 +102,8 @@ struct SegmentationStatus {
   std::string                             device;
   std::string                             backend;
   std::vector<SegmentationModelResidency> models;
-  uint32_t                                session_count = 0;
+  uint32_t                                session_count      = 0;
+  uint32_t                                cached_image_count = 0;
 };
 
 }  // namespace alcedo

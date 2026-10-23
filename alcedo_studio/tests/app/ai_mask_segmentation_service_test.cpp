@@ -2,7 +2,8 @@
 //  SPDX-License-Identifier: GPL-3.0-only
 //  Additional permission under GPLv3 section 7 applies; see the LICENSE file.
 
-// SM3.A: the AI Mask tool lifecycle of AiMaskSegmentationService over a fake segmentation client.
+// SM3.A and SM3.B: the AI Mask tool lifecycle of AiMaskSegmentationService over a fake
+// segmentation client.
 
 #include "app/ai_mask_segmentation_service.hpp"
 
@@ -50,17 +51,25 @@ class FakeSegmentationClient final : public sidecar_client::SegmentationClient {
     log_->push_back("status");
     return SegmentationStatus{.status = Ok()};
   }
-  auto StartSession(const SegmentationRgb8Image& image, std::chrono::milliseconds /*timeout*/)
-      -> SegmentationSessionResult override {
+  auto StartSession(const SegmentationRgb8Image& image, const std::string& image_key,
+                    std::chrono::milliseconds /*timeout*/) -> SegmentationSessionResult override {
     const auto session_id = "s" + std::to_string(++started_);
-    log_->push_back("start " + session_id + " " + std::to_string(image.width));
+    log_->push_back("start " + session_id + " " + std::to_string(image.width) + " " +
+                    std::to_string(image.pixels.size()) +
+                    (image_key.empty() ? std::string{} : " " + image_key));
     SegmentationSessionResult result;
     if (fail_start_) {
       result.status = Failed("encoder failed");
       return result;
     }
+    if (image.pixels.empty() && image_key != cached_key_) {
+      result.status           = Failed("the segmentation image is not cached");
+      result.image_not_cached = true;
+      return result;
+    }
     result.status     = Ok();
     result.session_id = session_id;
+    result.from_cache = image.pixels.empty();
     return result;
   }
   auto Decode(const std::string& session_id, const SegmentationPrompt& prompt,
@@ -74,8 +83,10 @@ class FakeSegmentationClient final : public sidecar_client::SegmentationClient {
     return fail_end_ ? Failed("transport closed") : Ok();
   }
 
-  bool fail_start_ = false;
-  bool fail_end_   = false;
+  bool        fail_start_ = false;
+  bool        fail_end_   = false;
+  /// The image key that a key-only start finds in the cache.
+  std::string cached_key_ = "cached";
 
  private:
   std::shared_ptr<CallLog> log_;
@@ -113,7 +124,7 @@ TEST(AiMaskSegmentationServiceTest, StartImageEndsPreviousSession) {
   ASSERT_TRUE(under_test.service->StartImage(Image(8)).status.ok);
   ASSERT_TRUE(under_test.service->StartImage(Image(16)).status.ok);
 
-  EXPECT_EQ(*under_test.log, (CallLog{"start s1 8", "end s1", "start s2 16"}));
+  EXPECT_EQ(*under_test.log, (CallLog{"start s1 8 96", "end s1", "start s2 16 192"}));
   EXPECT_TRUE(under_test.service->HasSession());
 }
 
@@ -126,7 +137,7 @@ TEST(AiMaskSegmentationServiceTest, StartImageReportsEndFailureWithoutStarting) 
 
   EXPECT_FALSE(result.status.ok);
   EXPECT_EQ(result.status.error, "transport closed");
-  EXPECT_EQ(*under_test.log, (CallLog{"start s1 8", "end s1"}));
+  EXPECT_EQ(*under_test.log, (CallLog{"start s1 8 96", "end s1"}));
   EXPECT_TRUE(under_test.service->HasSession());
 }
 
@@ -137,7 +148,7 @@ TEST(AiMaskSegmentationServiceTest, FailedStartKeepsNoSession) {
   EXPECT_FALSE(under_test.service->StartImage(Image(8)).status.ok);
   EXPECT_FALSE(under_test.service->HasSession());
   EXPECT_TRUE(under_test.service->EndImage().ok);
-  EXPECT_EQ(*under_test.log, (CallLog{"start s1 8"}));
+  EXPECT_EQ(*under_test.log, (CallLog{"start s1 8 96"}));
 }
 
 TEST(AiMaskSegmentationServiceTest, DecodeWithoutSessionFailsWithoutCall) {
@@ -160,8 +171,8 @@ TEST(AiMaskSegmentationServiceTest, CloseEndsSessionUnloadsAndReleasesLease) {
   ASSERT_TRUE(under_test.service->StartImage(Image(8)).status.ok);
 
   EXPECT_TRUE(under_test.service->Close().ok);
-  EXPECT_EQ(*under_test.log,
-            (CallLog{"load models directml", "start s1 8", "end s1", "unload", "lease released"}));
+  EXPECT_EQ(*under_test.log, (CallLog{"load models directml", "start s1 8 96", "end s1", "unload",
+                                      "lease released"}));
   EXPECT_TRUE(under_test.service->IsClosed());
 
   EXPECT_TRUE(under_test.service->Close().ok);
@@ -176,7 +187,52 @@ TEST(AiMaskSegmentationServiceTest, DestructorClosesService) {
   under_test.client = nullptr;
   under_test.service.reset();
 
-  EXPECT_EQ(*under_test.log, (CallLog{"start s1 8", "end s1", "unload", "lease released"}));
+  EXPECT_EQ(*under_test.log, (CallLog{"start s1 8 96", "end s1", "unload", "lease released"}));
+}
+
+TEST(AiMaskSegmentationServiceTest, StartImageSendsImageKey) {
+  ServiceUnderTest under_test;
+
+  const auto       result = under_test.service->StartImage(Image(8), "photo-a");
+
+  ASSERT_TRUE(result.status.ok);
+  EXPECT_FALSE(result.from_cache);
+  EXPECT_EQ(*under_test.log, (CallLog{"start s1 8 96 photo-a"}));
+}
+
+TEST(AiMaskSegmentationServiceTest, StartCachedImageEndsPreviousSessionAndSendsKeyOnly) {
+  ServiceUnderTest under_test;
+  ASSERT_TRUE(under_test.service->StartImage(Image(8)).status.ok);
+
+  const auto result = under_test.service->StartCachedImage("cached");
+
+  ASSERT_TRUE(result.status.ok);
+  EXPECT_TRUE(result.from_cache);
+  EXPECT_TRUE(under_test.service->HasSession());
+  EXPECT_EQ(*under_test.log, (CallLog{"start s1 8 96", "end s1", "start s2 0 0 cached"}));
+  ASSERT_TRUE(under_test.service->Decode(SegmentationPrompt{}).status.ok);
+  EXPECT_EQ(under_test.log->back(), "decode s2 0");
+}
+
+TEST(AiMaskSegmentationServiceTest, StartCachedImageMissKeepsNoSession) {
+  ServiceUnderTest under_test;
+
+  const auto       miss = under_test.service->StartCachedImage("photo-b");
+
+  EXPECT_FALSE(miss.status.ok);
+  EXPECT_TRUE(miss.image_not_cached);
+  EXPECT_FALSE(under_test.service->HasSession());
+  // The caller renders the image and starts again with the pixels and the same key.
+  ASSERT_TRUE(under_test.service->StartImage(Image(8), "photo-b").status.ok);
+  EXPECT_EQ(*under_test.log, (CallLog{"start s1 0 0 photo-b", "start s2 8 96 photo-b"}));
+  EXPECT_TRUE(under_test.service->HasSession());
+}
+
+TEST(AiMaskSegmentationServiceTest, StartCachedImageWithEmptyKeyFailsWithoutCall) {
+  ServiceUnderTest under_test;
+
+  EXPECT_FALSE(under_test.service->StartCachedImage("").status.ok);
+  EXPECT_TRUE(under_test.log->empty());
 }
 
 }  // namespace

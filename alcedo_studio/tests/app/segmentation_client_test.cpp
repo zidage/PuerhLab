@@ -2,7 +2,7 @@
 //  SPDX-License-Identifier: GPL-3.0-only
 //  Additional permission under GPLv3 section 7 applies; see the LICENSE file.
 
-// SM3.A: the gRPC segmentation client against an in-process SegmentationService.
+// SM3.A and SM3.B: the gRPC segmentation client against an in-process SegmentationService.
 
 #include "sidecar_client/segmentation_client.hpp"
 
@@ -62,6 +62,7 @@ class RecordingSegmentationService final : public alcedo::ai::SegmentationServic
     model->set_device("directml:0");
     model->set_load_ms(2900);
     response->set_session_count(1);
+    response->set_cached_image_count(3);
     return grpc::Status::OK;
   }
 
@@ -75,10 +76,20 @@ class RecordingSegmentationService final : public alcedo::ai::SegmentationServic
       received_width_       = request->width();
       received_height_      = request->height();
       received_pixel_bytes_ = request->rgb8_pixels().size();
+      received_image_key_   = request->image_key();
+    }
+    // A key-only start: "cached" is a cached image, any other key is not cached.
+    if (request->rgb8_pixels().empty() && request->image_key() != "cached") {
+      auto* header = response->mutable_header();
+      header->set_status(alcedo::ai::AI_STATUS_INVALID_ARGUMENT);
+      header->set_error_code(alcedo::ai::AI_ERROR_IMAGE_NOT_CACHED);
+      header->set_error_message("the segmentation image is not cached; send its pixels");
+      return grpc::Status::OK;
     }
     SetOkHeader(response->mutable_header());
     response->set_session_id("session-1");
-    response->set_encoder_ms(70);
+    response->set_encoder_ms(request->rgb8_pixels().empty() ? 0 : 70);
+    response->set_from_cache(request->rgb8_pixels().empty());
     return grpc::Status::OK;
   }
 
@@ -113,6 +124,10 @@ class RecordingSegmentationService final : public alcedo::ai::SegmentationServic
     std::lock_guard lock(mutex_);
     return received_pixel_bytes_;
   }
+  [[nodiscard]] auto ReceivedImageKey() -> std::string {
+    std::lock_guard lock(mutex_);
+    return received_image_key_;
+  }
   [[nodiscard]] auto ReceivedSize() -> std::pair<uint32_t, uint32_t> {
     std::lock_guard lock(mutex_);
     return {received_width_, received_height_};
@@ -133,6 +148,7 @@ class RecordingSegmentationService final : public alcedo::ai::SegmentationServic
   uint32_t                                    received_width_       = 0;
   uint32_t                                    received_height_      = 0;
   size_t                                      received_pixel_bytes_ = 0;
+  std::string                                 received_image_key_;
   alcedo::ai::DecodeSegmentationPromptRequest decode_request_;
 };
 
@@ -169,11 +185,13 @@ TEST_F(SegmentationClientTest, StartSessionSendsImageLargerThanDefaultLimit) {
   image.height = 2731;
   image.pixels.assign(static_cast<size_t>(image.width) * image.height * 3, 127);
 
-  const auto result = client_->StartSession(image, kTimeout);
+  const auto result = client_->StartSession(image, "photo-a", kTimeout);
 
   ASSERT_TRUE(result.status.ok) << result.status.error;
   EXPECT_EQ(result.session_id, "session-1");
   EXPECT_EQ(result.encoder_ms, 70);
+  EXPECT_FALSE(result.from_cache);
+  EXPECT_EQ(service_.ReceivedImageKey(), "photo-a");
   EXPECT_EQ(service_.ReceivedPixelBytes(), image.pixels.size());
   EXPECT_EQ(service_.ReceivedSize(), (std::pair<uint32_t, uint32_t>{4096, 2731}));
 }
@@ -186,8 +204,33 @@ TEST_F(SegmentationClientTest, SequentialCallsUseOneConnection) {
     ASSERT_EQ(status.models.size(), 1U);
     EXPECT_EQ(status.models[0].device, "directml:0");
     EXPECT_EQ(status.models[0].load_ms, 2900);
+    EXPECT_EQ(status.cached_image_count, 3U);
   }
   EXPECT_EQ(service_.Peers().size(), 1U);
+}
+
+TEST_F(SegmentationClientTest, StartSessionSendsImageKeyWithoutPixels) {
+  const auto result = client_->StartSession(SegmentationRgb8Image{}, "cached", kTimeout);
+
+  ASSERT_TRUE(result.status.ok) << result.status.error;
+  EXPECT_TRUE(result.from_cache);
+  EXPECT_FALSE(result.image_not_cached);
+  EXPECT_EQ(result.encoder_ms, 0);
+  EXPECT_EQ(result.session_id, "session-1");
+  EXPECT_EQ(service_.ReceivedImageKey(), "cached");
+  EXPECT_EQ(service_.ReceivedPixelBytes(), 0U);
+  EXPECT_EQ(service_.ReceivedSize(), (std::pair<uint32_t, uint32_t>{0, 0}));
+}
+
+TEST_F(SegmentationClientTest, ImageNotCachedHeaderSetsImageNotCached) {
+  const auto result = client_->StartSession(SegmentationRgb8Image{}, "photo-b", kTimeout);
+
+  EXPECT_FALSE(result.status.ok);
+  EXPECT_TRUE(result.image_not_cached);
+  EXPECT_FALSE(result.from_cache);
+  EXPECT_TRUE(result.session_id.empty());
+  EXPECT_EQ(result.status.error_code, static_cast<int>(alcedo::ai::AI_ERROR_IMAGE_NOT_CACHED));
+  EXPECT_EQ(result.status.error, "the segmentation image is not cached; send its pixels");
 }
 
 TEST_F(SegmentationClientTest, FailureHeaderMapsToFailedStatus) {

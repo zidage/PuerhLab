@@ -7,6 +7,11 @@
 //! each mask (logits > 0 after bilinear upsampling to the photo size) must be at least 0.999. The
 //! test also prints the model load, encoder, and decoder times.
 //!
+//! Image embedding cache (SM3.B): every photo starts with its name as the image key. After all
+//! photos, the photos that the cache keeps (the last 4) start again with the key only and decode
+//! their first prompt; the masks must match the reference with the same rules. The first photo
+//! has left the cache, so its key-only start must fail with `ImageNotCached`.
+//!
 //! Environment:
 //! - `ALCEDO_SEGMENTATION_MODEL_DIR`: the model directory of the platform (SM3.A plan, 2.1);
 //! - `ALCEDO_SEGMENTATION_PORT_REFERENCE_DIR`: the output directory of the reference script;
@@ -17,8 +22,12 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::Instant;
 
-use alcedo_mind::service::segmentation::engine::{RgbImageView, SegmentationEngine};
+use alcedo_mind::service::segmentation::engine::{
+    IMAGE_EMBEDDING_CACHE_CAPACITY, RgbImageView, SegmentationEngine, SegmentationError,
+    StartSessionRequest,
+};
 use alcedo_mind::service::segmentation::model_set::LOGIT_SIZE;
 use alcedo_mind::service::segmentation::platform_backend_factory;
 use alcedo_mind::service::segmentation::sam2::{
@@ -27,6 +36,8 @@ use alcedo_mind::service::segmentation::sam2::{
 use serde_json::Value;
 
 const MIN_PHOTO_IOU: f64 = 0.999;
+/// Number of decodes of one prompt on one session for the steady-state decode time.
+const REPEATED_DECODES: usize = 20;
 
 fn read_f32(path: &Path) -> Vec<f32> {
     let bytes = std::fs::read(path).unwrap_or_else(|err| panic!("{}: {err}", path.display()));
@@ -121,6 +132,89 @@ fn median(values: &mut [u64]) -> u64 {
     values[values.len() / 2]
 }
 
+/// Results of the mask comparisons of the whole check.
+struct Comparison {
+    failures: Vec<String>,
+    minimum_iou: f64,
+    compared: usize,
+}
+
+/// Decodes @p record on @p session_id and compares the masks with the reference. Returns the
+/// time of the engine decode call in microseconds and the decoder point count.
+fn decode_and_compare(
+    engine: &SegmentationEngine,
+    session_id: &str,
+    record: &Value,
+    reference_dir: &Path,
+    (width, height): (usize, usize),
+    label: &str,
+    comparison: &mut Comparison,
+) -> (u64, usize) {
+    let prompt = prompt_from(record, reference_dir);
+    let point_count = prompt.points.len() + if prompt.prompt_box.is_some() { 2 } else { 0 };
+    let started = Instant::now();
+    let result = engine
+        .decode(session_id, prompt)
+        .unwrap_or_else(|err| panic!("{label}: {err}"));
+    let decode_us = started.elapsed().as_micros() as u64;
+    let reference_masks = record["masks"].as_array().expect("masks");
+    if reference_masks.len() != result.masks.masks.len() {
+        comparison.failures.push(format!(
+            "{label}: {} masks, reference {}",
+            result.masks.masks.len(),
+            reference_masks.len()
+        ));
+        return (decode_us, point_count);
+    }
+    if record["selected_index"].as_u64() != Some(result.masks.selected_index as u64) {
+        comparison.failures.push(format!(
+            "{label}: selected index {}, reference {}",
+            result.masks.selected_index, record["selected_index"]
+        ));
+    }
+    for (level, reference) in result.masks.masks.iter().zip(reference_masks) {
+        if reference["token"].as_u64() != Some(u64::from(level.token)) {
+            comparison.failures.push(format!(
+                "{label}: token {}, reference {}",
+                level.token, reference["token"]
+            ));
+            continue;
+        }
+        let reference_logits =
+            read_f32(&reference_dir.join(reference["logits"].as_str().expect("logits")));
+        let max_difference = level
+            .logits
+            .iter()
+            .zip(&reference_logits)
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0f32, f32::max);
+        let photo_iou = iou(
+            &mask_at_photo_size(&level.logits, width, height),
+            &mask_at_photo_size(&reference_logits, width, height),
+        );
+        comparison.compared += 1;
+        comparison.minimum_iou = comparison.minimum_iou.min(photo_iou);
+        println!(
+            "{label} token {}: photo IoU {photo_iou:.6}, max |logit difference| {max_difference:.5}",
+            level.token
+        );
+        if photo_iou < MIN_PHOTO_IOU {
+            comparison.failures.push(format!(
+                "{label} token {}: photo IoU {photo_iou:.6}",
+                level.token
+            ));
+        }
+    }
+    (decode_us, point_count)
+}
+
+fn photo_size(photo: &Value) -> (usize, usize) {
+    (
+        photo["width"].as_u64().expect("width") as usize,
+        photo["height"].as_u64().expect("height") as usize,
+    )
+}
+
 #[test]
 fn segmentation_port_check_matches_reference_masks() {
     let (Some(model_dir), Some(reference_dir)) = (
@@ -138,12 +232,13 @@ fn segmentation_port_check_matches_reference_masks() {
     )
     .expect("manifest JSON");
 
-    let engine = SegmentationEngine::new(platform_backend_factory());
-    let engine = Arc::new(engine);
+    let engine = Arc::new(SegmentationEngine::new(platform_backend_factory()));
+    let load_started = Instant::now();
     engine.load(&model_dir, &device).expect("load models");
+    let load_ms = load_started.elapsed().as_millis();
     let status = engine.status().expect("status");
     println!(
-        "backend {} device {} load ms {:?}",
+        "backend {} device {} load ms {load_ms} {:?}",
         status.backend,
         status.device,
         status
@@ -153,106 +248,135 @@ fn segmentation_port_check_matches_reference_masks() {
             .collect::<Vec<_>>()
     );
 
-    let mut failures = Vec::new();
+    let photos = manifest["photos"].as_array().expect("photos");
+    let mut comparison = Comparison {
+        failures: Vec::new(),
+        minimum_iou: 1.0,
+        compared: 0,
+    };
     let mut encoder_ms = Vec::new();
-    let mut decoder_ms: BTreeMap<usize, Vec<u64>> = BTreeMap::new();
-    let mut minimum_iou = 1.0f64;
-    let mut compared = 0usize;
-    for photo in manifest["photos"].as_array().expect("photos") {
+    let mut decode_us: BTreeMap<usize, Vec<u64>> = BTreeMap::new();
+    let mut first_decode_us = None;
+    for photo in photos {
         let name = photo["name"].as_str().expect("name");
-        let width = photo["width"].as_u64().expect("width") as u32;
-        let height = photo["height"].as_u64().expect("height") as u32;
+        let size = photo_size(photo);
         let pixels = std::fs::read(reference_dir.join(photo["pixels"].as_str().expect("pixels")))
             .expect("pixels");
         let session = engine
-            .start_session(RgbImageView {
-                width,
-                height,
-                rgb8: &pixels,
+            .start_session(StartSessionRequest {
+                image: Some(RgbImageView {
+                    width: size.0 as u32,
+                    height: size.1 as u32,
+                    rgb8: &pixels,
+                }),
+                image_key: name,
             })
             .expect("start session");
+        assert!(
+            !session.from_cache,
+            "{name}: the first start must run the encoder"
+        );
         encoder_ms.push(session.encoder_ms);
         for record in photo["prompts"].as_array().expect("prompts") {
-            let prompt_name = record["name"].as_str().expect("prompt name");
-            let prompt = prompt_from(record, &reference_dir);
-            let point_count = prompt.points.len() + if prompt.prompt_box.is_some() { 2 } else { 0 };
-            let result = engine
-                .decode(&session.session_id, prompt)
-                .unwrap_or_else(|err| panic!("{name} {prompt_name}: {err}"));
-            decoder_ms
-                .entry(point_count)
-                .or_default()
-                .push(result.decoder_ms);
-            let reference_masks = record["masks"].as_array().expect("masks");
-            let label = format!("{name} {prompt_name}");
-            if reference_masks.len() != result.masks.masks.len() {
-                failures.push(format!(
-                    "{label}: {} masks, reference {}",
-                    result.masks.masks.len(),
-                    reference_masks.len()
-                ));
-                continue;
-            }
-            if record["selected_index"].as_u64() != Some(result.masks.selected_index as u64) {
-                failures.push(format!(
-                    "{label}: selected index {}, reference {}",
-                    result.masks.selected_index, record["selected_index"]
-                ));
-            }
-            for (level, reference) in result.masks.masks.iter().zip(reference_masks) {
-                if reference["token"].as_u64() != Some(u64::from(level.token)) {
-                    failures.push(format!(
-                        "{label}: token {}, reference {}",
-                        level.token, reference["token"]
-                    ));
-                    continue;
-                }
-                let reference_logits =
-                    read_f32(&reference_dir.join(reference["logits"].as_str().expect("logits")));
-                let max_difference = level
-                    .logits
-                    .iter()
-                    .zip(&reference_logits)
-                    .map(|(a, b)| (a - b).abs())
-                    .fold(0.0f32, f32::max);
-                let photo_iou = iou(
-                    &mask_at_photo_size(&level.logits, width as usize, height as usize),
-                    &mask_at_photo_size(&reference_logits, width as usize, height as usize),
-                );
-                compared += 1;
-                minimum_iou = minimum_iou.min(photo_iou);
-                println!(
-                    "{label} token {}: photo IoU {photo_iou:.6}, max |logit difference| {max_difference:.5}",
-                    level.token
-                );
-                if photo_iou < MIN_PHOTO_IOU {
-                    failures.push(format!(
-                        "{label} token {}: photo IoU {photo_iou:.6}",
-                        level.token
-                    ));
-                }
+            let label = format!("{name} {}", record["name"].as_str().expect("prompt name"));
+            let (microseconds, point_count) = decode_and_compare(
+                &engine,
+                &session.session_id,
+                record,
+                &reference_dir,
+                size,
+                &label,
+                &mut comparison,
+            );
+            first_decode_us.get_or_insert(microseconds);
+            decode_us.entry(point_count).or_default().push(microseconds);
+        }
+        engine
+            .end_session(&session.session_id)
+            .expect("end session");
+    }
+
+    // Image embedding cache: the last photos are cached, the first photo has left the cache.
+    assert!(photos.len() > IMAGE_EMBEDDING_CACHE_CAPACITY);
+    let first_name = photos[0]["name"].as_str().expect("name");
+    assert!(matches!(
+        engine.start_session(StartSessionRequest {
+            image: None,
+            image_key: first_name,
+        }),
+        Err(SegmentationError::ImageNotCached(_))
+    ));
+    let mut cached_start_us = Vec::new();
+    let mut repeated_decode_us = Vec::new();
+    for photo in &photos[photos.len() - IMAGE_EMBEDDING_CACHE_CAPACITY..] {
+        let name = photo["name"].as_str().expect("name");
+        let started = Instant::now();
+        let session = engine
+            .start_session(StartSessionRequest {
+                image: None,
+                image_key: name,
+            })
+            .expect("cached start");
+        cached_start_us.push(started.elapsed().as_micros() as u64);
+        assert!(
+            session.from_cache,
+            "{name}: the key-only start must use the cache"
+        );
+        let record = &photo["prompts"][0];
+        let label = format!(
+            "{name} {} (cached)",
+            record["name"].as_str().expect("prompt name")
+        );
+        decode_and_compare(
+            &engine,
+            &session.session_id,
+            record,
+            &reference_dir,
+            photo_size(photo),
+            &label,
+            &mut comparison,
+        );
+        // The same prompt on the same features: the decoder session keeps the features bound.
+        if repeated_decode_us.is_empty() {
+            for _ in 0..REPEATED_DECODES {
+                let started = Instant::now();
+                engine
+                    .decode(&session.session_id, prompt_from(record, &reference_dir))
+                    .expect("repeated decode");
+                repeated_decode_us.push(started.elapsed().as_micros() as u64);
             }
         }
         engine
             .end_session(&session.session_id)
             .expect("end session");
     }
+
     println!(
-        "compared masks {compared}, minimum photo IoU {minimum_iou:.6}, encoder ms p50 {} (first {})",
+        "compared masks {}, minimum photo IoU {:.6}, encoder ms p50 {} (first {}), first decode us {}",
+        comparison.compared,
+        comparison.minimum_iou,
         median(&mut encoder_ms.clone()),
-        encoder_ms[0]
+        encoder_ms[0],
+        first_decode_us.unwrap_or_default()
     );
-    for (points, values) in &mut decoder_ms {
+    for (points, values) in &mut decode_us {
         println!(
-            "decoder ms p50 with {points} decoder points: {} ({} calls)",
+            "decode us p50 with {points} decoder points: {} ({} calls)",
             median(values),
             values.len()
         );
     }
+    println!(
+        "cached start us p50 {} ({} starts); repeated decode us p50 {} ({} calls)",
+        median(&mut cached_start_us),
+        IMAGE_EMBEDDING_CACHE_CAPACITY,
+        median(&mut repeated_decode_us),
+        REPEATED_DECODES
+    );
     engine.unload().expect("unload");
     assert!(
-        failures.is_empty(),
+        comparison.failures.is_empty(),
         "port check failures:\n{}",
-        failures.join("\n")
+        comparison.failures.join("\n")
     );
 }

@@ -1,4 +1,4 @@
-//! `SegmentationService` server (master plan section 9.2.1, SM3.A).
+//! `SegmentationService` server (master plan sections 9.2.1 and 9.2.2, SM3.A and SM3.B).
 //!
 //! Converts the proto messages to engine values, runs the engine on the blocking thread pool, and
 //! reports each outcome in the `AiResponseHeader`: the gRPC status stays OK, and a failed
@@ -21,7 +21,9 @@ use crate::proto::alcedo::ai::{
     UnloadSegmentationModelsRequest, UnloadSegmentationModelsResponse,
     segmentation_service_server::SegmentationService,
 };
-use crate::service::segmentation::engine::{RgbImageView, SegmentationEngine, SegmentationError};
+use crate::service::segmentation::engine::{
+    RgbImageView, SegmentationEngine, SegmentationError, StartSessionRequest,
+};
 use crate::service::segmentation::model_set::LOGIT_SIZE;
 use crate::service::segmentation::sam2::{PointLabel, PromptBox, PromptPoint, SegmentationPrompt};
 
@@ -82,6 +84,10 @@ fn response_header(
                 SegmentationError::SessionNotFound(_) => (
                     AiResponseStatus::AiStatusInvalidArgument,
                     AiErrorCode::AiErrorSessionNotFound,
+                ),
+                SegmentationError::ImageNotCached(_) => (
+                    AiResponseStatus::AiStatusInvalidArgument,
+                    AiErrorCode::AiErrorImageNotCached,
                 ),
                 SegmentationError::Inference(_) => (
                     AiResponseStatus::AiStatusInternal,
@@ -224,6 +230,7 @@ impl SegmentationService for SegmentationServiceImpl {
                 })
                 .collect();
             response.session_count = status.session_count as u32;
+            response.cached_image_count = status.cached_image_count as u32;
         }
         Ok(Response::new(response))
     }
@@ -236,12 +243,19 @@ impl SegmentationService for SegmentationServiceImpl {
         let request = request.into_inner();
         let header = header_of(request.header);
         let (width, height, pixels) = (request.width, request.height, request.rgb8_pixels);
+        let image_key = request.image_key;
         let result = self
             .run_blocking(move |engine| {
-                engine.start_session(RgbImageView {
-                    width,
-                    height,
-                    rgb8: &pixels,
+                // Width, height, and pixels all empty: the request starts from the cache only.
+                // Any other combination is an image that the engine validates.
+                let has_image = width != 0 || height != 0 || !pixels.is_empty();
+                engine.start_session(StartSessionRequest {
+                    image: has_image.then_some(RgbImageView {
+                        width,
+                        height,
+                        rgb8: &pixels,
+                    }),
+                    image_key: &image_key,
                 })
             })
             .await;
@@ -257,6 +271,7 @@ impl SegmentationService for SegmentationServiceImpl {
         if let Ok(session) = result {
             response.session_id = session.session_id;
             response.encoder_ms = session.encoder_ms as i64;
+            response.from_cache = session.from_cache;
         }
         Ok(Response::new(response))
     }
@@ -327,7 +342,7 @@ impl SegmentationService for SegmentationServiceImpl {
 mod tests {
     use super::*;
     use crate::proto::alcedo::ai::SegmentationPoint;
-    use crate::service::segmentation::engine::test_support::{FakeFactory, model_directory};
+    use crate::service::segmentation::test_support::{FakeFactory, model_directory};
 
     fn service() -> SegmentationServiceImpl {
         SegmentationServiceImpl::new(Arc::new(SegmentationEngine::new(Arc::new(
@@ -352,6 +367,7 @@ mod tests {
                 width: 2,
                 height: 2,
                 rgb8_pixels: vec![0; 12],
+                ..Default::default()
             }))
             .await
             .expect("transport ok")
@@ -394,6 +410,7 @@ mod tests {
                 width: 4,
                 height: 4,
                 rgb8_pixels: vec![0; 10],
+                ..Default::default()
             }))
             .await
             .expect("transport ok")
@@ -461,6 +478,7 @@ mod tests {
                 width: 8,
                 height: 4,
                 rgb8_pixels: vec![50; 8 * 4 * 3],
+                ..Default::default()
             }))
             .await
             .expect("transport ok")
@@ -500,5 +518,65 @@ mod tests {
             .expect("transport ok")
             .into_inner();
         assert!(ended.ended);
+    }
+
+    async fn start_with_key(
+        service: &SegmentationServiceImpl,
+        image_key: &str,
+        with_pixels: bool,
+    ) -> StartSegmentationSessionResponse {
+        let (width, height) = if with_pixels { (8, 4) } else { (0, 0) };
+        service
+            .start_segmentation_session(Request::new(StartSegmentationSessionRequest {
+                header: None,
+                width,
+                height,
+                rgb8_pixels: vec![50; (width * height * 3) as usize],
+                image_key: image_key.to_string(),
+            }))
+            .await
+            .expect("transport ok")
+            .into_inner()
+    }
+
+    #[tokio::test]
+    async fn server_maps_image_not_cached_to_invalid_argument() {
+        let service = loaded_service().await;
+        let response = start_with_key(&service, "photo-a", false).await;
+        assert_eq!(
+            header_status(&response.header),
+            (
+                AiResponseStatus::AiStatusInvalidArgument as i32,
+                AiErrorCode::AiErrorImageNotCached as i32
+            )
+        );
+        assert!(response.session_id.is_empty());
+        assert!(!response.from_cache);
+    }
+
+    #[tokio::test]
+    async fn server_reports_from_cache_and_cached_image_count() {
+        let service = loaded_service().await;
+        let first = start_with_key(&service, "photo-a", true).await;
+        assert_eq!(
+            header_status(&first.header).0,
+            AiResponseStatus::AiStatusOk as i32
+        );
+        assert!(!first.from_cache);
+        let second = start_with_key(&service, "photo-a", false).await;
+        assert_eq!(
+            header_status(&second.header).0,
+            AiResponseStatus::AiStatusOk as i32
+        );
+        assert!(second.from_cache);
+        assert_eq!(second.encoder_ms, 0);
+        assert_ne!(first.session_id, second.session_id);
+        let status = service
+            .get_segmentation_status(Request::new(GetSegmentationStatusRequest::default()))
+            .await
+            .expect("transport ok")
+            .into_inner();
+        assert_eq!(status.cached_image_count, 1);
+        assert_eq!(status.session_count, 2);
     }
 }

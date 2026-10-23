@@ -4,12 +4,16 @@ package alcedo.ai;
 
 import "ai_common.proto";
 
-// Local AI Mask segmentation (master plan section 9.2.1, SM3.A).
+// Local AI Mask segmentation (master plan sections 9.2.1 and 9.2.2, SM3.A and SM3.B).
 //
 // The sidecar loads the SAM 2.1 tiny encoder and decoder from a model directory that the host
 // names in LoadSegmentationModels. Windows runs ONNX Runtime with DirectML; macOS runs compiled
 // Core ML models. A segmentation session holds the image embedding of one image. The host keeps
 // the selection (points, box, previous logits) and sends all of it with each decode request.
+//
+// The sidecar caches the image embeddings of the 4 most recently used image keys (SM3.B). The
+// image key is an opaque host value that names the image content. Unload and a model change clear
+// the cache.
 //
 // Each response carries an AiResponseHeader. The gRPC status is OK unless the transport fails;
 // a failed operation sets the header status, the error code, and the real error message.
@@ -23,7 +27,8 @@ service SegmentationService {
   // Ends all sessions and unloads the models. Idempotent.
   rpc UnloadSegmentationModels(UnloadSegmentationModelsRequest) returns (UnloadSegmentationModelsResponse);
   rpc GetSegmentationStatus(GetSegmentationStatusRequest) returns (GetSegmentationStatusResponse);
-  // Runs the encoder once on an RGB8 image and keeps its outputs as a new session.
+  // Starts a session. A cached image key uses the cached embedding; otherwise the encoder runs
+  // once on the RGB8 image, and a non-empty image key caches the embedding.
   rpc StartSegmentationSession(StartSegmentationSessionRequest) returns (StartSegmentationSessionResponse);
   // Runs the decoder once on the embedding of a session.
   rpc DecodeSegmentationPrompt(DecodeSegmentationPromptRequest) returns (DecodeSegmentationPromptResponse);
@@ -70,20 +75,26 @@ message GetSegmentationStatusResponse {
   string backend = 6;  // "onnxruntime-directml", "onnxruntime-cpu", or "coreml-native"
   repeated SegmentationModelResidency models = 7;
   uint32 session_count = 8;
+  uint32 cached_image_count = 9;
 }
 
 message StartSegmentationSessionRequest {
   AiRequestHeader header = 1;
+  // Width, height, and pixels are all 0 or empty when the request starts from the cache only.
   uint32 width = 2;
   uint32 height = 3;
   // Row-major RGB8 pixels, width * height * 3 bytes. The long edge is at most 4096.
   bytes rgb8_pixels = 4;
+  // Opaque key of the image content, at most 256 bytes. Empty: the session is not cached. A
+  // request without pixels and with an uncached key fails with AI_ERROR_IMAGE_NOT_CACHED.
+  string image_key = 5;
 }
 
 message StartSegmentationSessionResponse {
   AiResponseHeader header = 1;
   string session_id = 2;
-  int64 encoder_ms = 3;
+  int64 encoder_ms = 3;  // 0 for a cached image
+  bool from_cache = 4;
 }
 
 enum SegmentationPointLabel {

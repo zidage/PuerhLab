@@ -13,7 +13,7 @@
 namespace alcedo::sidecar_client {
 
 /**
- * @brief Client of the sidecar `SegmentationService` (AI Mask, SM3.A).
+ * @brief Client of the sidecar `SegmentationService` (AI Mask, SM3.A and SM3.B).
  *
  * Each call blocks until the sidecar answers or the timeout passes. A failed operation returns
  * `ok = false` with the real error of the sidecar or of the transport. The client keeps no
@@ -30,9 +30,11 @@ class SegmentationClient {
   /// Ends all sessions and unloads the models.
   virtual auto UnloadModels(std::chrono::milliseconds timeout) -> SegmentationCallStatus = 0;
   virtual auto GetStatus(std::chrono::milliseconds timeout) -> SegmentationStatus        = 0;
-  /// Runs the encoder once on @p image and returns the new session identity.
-  virtual auto StartSession(const SegmentationRgb8Image& image, std::chrono::milliseconds timeout)
-      -> SegmentationSessionResult                                                   = 0;
+  /// Starts a session. A cached @p image_key uses the cached image embedding; otherwise the
+  /// encoder runs once on @p image, and a non-empty @p image_key caches the embedding. An empty
+  /// @p image starts from the cache only and fails with `image_not_cached` for an unknown key.
+  virtual auto StartSession(const SegmentationRgb8Image& image, const std::string& image_key,
+                            std::chrono::milliseconds timeout) -> SegmentationSessionResult = 0;
   /// Runs the decoder once on the session embedding with the full prompt of the selection.
   virtual auto Decode(const std::string& session_id, const SegmentationPrompt& prompt,
                       std::chrono::milliseconds timeout) -> SegmentationDecodeResult = 0;
