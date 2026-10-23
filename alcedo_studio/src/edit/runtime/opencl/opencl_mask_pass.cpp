@@ -175,6 +175,11 @@ auto ExecuteOpenClMask(OpenClRenderDevice& device, const ExecutionPlan& plan,
     EncodeAnalytic(device, output.Texture(), mask_model, plan);
     return result;
   }
+  if (std::holds_alternative<AiSegmentationMaskSource>(mask_model.source)) {
+    throw std::runtime_error(
+        "ExecuteOpenClMask: AI Segmentation Mask raster evaluation is not available in this "
+        "build");
+  }
   throw std::runtime_error("ExecuteOpenClMask: compiled mask does not match document");
 }
 

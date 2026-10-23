@@ -222,6 +222,24 @@ class Database {
       "author VARCHAR NOT NULL,"
       "note VARCHAR);";
 
+  // R8 coverage of AI Segmentation Masks: one content-addressed row per asset key (MaskAssetStore).
+  // `data` is the zlib stream of the tightly packed pixels. A row never changes after its first
+  // write; the clean-close cleanup deletes rows that no stored history refers to. CREATE IF NOT
+  // EXISTS adds the table to an existing project database without a version change.
+  constexpr static const char* mask_asset_table_query =
+      "CREATE TABLE IF NOT EXISTS MaskAsset ("
+      "asset_key VARCHAR PRIMARY KEY,"
+      "format_version INTEGER NOT NULL,"
+      "width INTEGER NOT NULL,"
+      "height INTEGER NOT NULL,"
+      "bounds_x FLOAT NOT NULL,"
+      "bounds_y FLOAT NOT NULL,"
+      "bounds_w FLOAT NOT NULL,"
+      "bounds_h FLOAT NOT NULL,"
+      "pixel_byte_count BIGINT NOT NULL,"
+      "codec VARCHAR NOT NULL,"
+      "data BLOB NOT NULL);";
+
   // Phase 5f: AI image understanding + rating annotation tables. CREATE IF NOT EXISTS
   // so this runs migration-safely on BOTH the fresh-DB and existing-DB paths (see
   // InitializeDB). Foreign key is file_id = the Sleeve element id / inode, the same key

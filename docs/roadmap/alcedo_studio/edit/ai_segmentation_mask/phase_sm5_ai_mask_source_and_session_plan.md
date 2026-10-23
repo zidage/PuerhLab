@@ -2,7 +2,7 @@
 
 Date: 2026-10-23.
 
-Status: planned. No implementation evidence exists.
+Status: SM5.1 complete (2026-10-23, section 13.1). SM5.2 and SM5.3 planned.
 
 Parent plan: [AI Segmentation Mask Master Plan](../ai_segmentation_mask_master_plan.md), section
 9.4. Issues: SM5.1 #470, SM5.2 #471, SM5.3 #472. Tracking issue: #468.
@@ -379,7 +379,7 @@ auto CommitAiMaskSource(const NodeId& grade_id, const std::optional<MaskId>& mas
 
 | Phase | Result | Main modules | Dependency | Expected diff | Status |
 | --- | --- | --- | --- | ---: | --- |
-| SM5.1 | AI Mask source kind, recipe JSON, asset table and store, reachability cleanup, explicit dispatch | `edit/mask`, `edit/runtime`, `storage`, `app/pipeline_service`, album backend | SM4 | 1,500-1,900 | planned |
+| SM5.1 | AI Mask source kind, recipe JSON, asset table and store, reachability cleanup, explicit dispatch | `edit/mask`, `edit/runtime`, `storage`, `app/pipeline_service`, album backend | SM4 | 1,500-1,900 | complete (13.1) |
 | SM5.2 | AI Mask edit session: stack, output map, composition, People toggles, reopen, commit payload; session size in the start response | `app/ai_mask_edit_session`, segmentation service, proto | SM5.1, SM3.D | 1,300-1,700 | planned |
 | SM5.3 | Editor integration: lease, Open, Commit, Cancel, asset port; Paste exclusion and notice | `app/editor_session_service`, policy, mask controller, transfer, album backend | SM5.1, SM5.2 | 1,000-1,400 | planned |
 
@@ -443,10 +443,10 @@ mismatch". A missing row gives the missing error. A failed delete rolls back; no
 
 **Exit criteria.**
 
-- [ ] The tests of section 8.1 pass.
-- [ ] The existing tests of the touched targets pass, or each failure also fails on `main`.
-- [ ] `AlbumBackendLib` and `alcedo_main` build.
-- [ ] The Radial and Linear Gradient JSON bytes are unchanged (test 8.1).
+- [x] The tests of section 8.1 pass.
+- [x] The existing tests of the touched targets pass, or each failure also fails on `main` (#480).
+- [x] `AlbumBackendLib` and `alcedo_main` build.
+- [x] The Radial and Linear Gradient JSON bytes are unchanged (test 8.1).
 
 **Expected diff.** 1,500-1,900 lines (production 800-950, tests 650-850, build files 30, plan
 50).
@@ -729,20 +729,129 @@ Stop implementation when a condition of master plan section 12 applies.
 ### 13.1 SM5.1
 
 ```text
-Phase / date / status:
-Source revision and branch:
-Actual changed modules:
-Implemented behavior:
-Explicitly unimplemented items:
-Primary success call chain:
-Primary failure and restore call chain:
-Build and test commands with exit codes:
-Discovered / passed / failed / skipped counts:
-Manual verification:
-Performance or resource evidence, if required:
-Evidence path:
-Remaining defects or unavailable platforms:
+Phase / date / status: SM5.1 / 2026-10-23 / complete.
+Source revision and branch: base dc3ad438 (main); branch
+  feature/ai-segmentation-sm5-1-source-asset-store.
+Actual changed modules: edit/mask (recipe, AI source, key walk, mask_asset.cpp in EditMaskCore),
+  edit/runtime (content key, compile error, CUDA/OpenCL/Metal mask pass branches),
+  storage/store (MaskAsset DDL, MaskAssetStore, CommitGraphStore history JSON read),
+  app/pipeline_service, app/ai_mask_analysis_image, app mask thumbnail and creation sites,
+  album_backend (cleanup call, journal directory, kind keys), Mask row QML labels, DESIGN.md.
+Implemented behavior: M1, M2, M8, M10, M11, M12 (store side), M13, M18 (PipelineMgmtService
+  part), M19, M20, M21; the steps 1 to 11 of section 7.1.
+Explicitly unimplemented items: none of SM5.1. The editor port, session, lease, and Paste
+  exclusion belong to SM5.2 and SM5.3.
+Primary success call chain: section 13.1.1.
+Primary failure and restore call chain: section 13.1.1.
+Build and test commands with exit codes: section 13.1.2.
+Discovered / passed / failed / skipped counts: section 13.1.2.
+Manual verification: none; SM5.1 has no producer of AI Masks in the product (SM9).
+Performance or resource evidence, if required: not required for SM5.1 (section 9 is for the
+  session); a 1024 x 768 two-region asset stores less than 1/20 of its pixel bytes (test).
+Evidence path: build/tmp/sm5/ (removed at completion).
+Remaining defects or unavailable platforms: the Metal mask pass change was not compiled (no
+  macOS build in this run).
 ```
+
+#### 13.1.1 Call chains
+
+```text
+PipelineMgmtService::PutMaskAsset(asset)
+  -> Database::GetConnectionGuard -> Lock -> MaskAssetStore::Put
+     -> ValidateMaskAsset -> MakeMaskAssetKey == asset.key -> compress2 (zlib)
+     -> INSERT ... ON CONFLICT (asset_key) DO NOTHING      (true when a row was written)
+PipelineMgmtService::ReadMaskAsset(key)
+  -> MaskAssetStore::Read -> SELECT -> format, codec, dimension checks -> uncompress
+     -> byte count -> MakeMaskAssetKey == key -> MaskAsset
+ProjectHandler::PersistProjectForClose
+  -> PipelineMgmtService::Sync -> CollectUnreachableEditCommits
+  -> CollectUnreferencedMaskAssets(ProjectHandler::editor_journal_directory())
+     -> one guard + lock; MaskAssetStore::ListKeys (empty: return 0)
+     -> CommitGraphStore::VisitStoredHistoryJsonContaining("ai_segmentation")
+        (EditCommit.edit_payload, ImageEditState and PipelineRoot serialized_pipeline_state)
+        -> CollectAiMaskAssetKeys
+     -> each *.mini-git.wal: MiniGitJournal::Load -> record commit payload -> CollectAiMaskAssetKeys
+     -> MaskAssetStore::DeleteKeysNotIn (one transaction)
+GraphCompiler::Compile (document with an AI Mask)
+  -> CompileMaskStack -> throws "GraphCompiler: AI Segmentation Mask raster evaluation is not
+     available in this build"
+```
+
+```text
+Put with a key that does not match the pixels -> runtime_error; no row.
+Read of an unknown key -> "Mask asset <key> is missing from the project".
+Read of a changed row -> "Mask asset <key> is corrupt: <reason>" (key mismatch, byte count,
+  dimensions, codec, or zlib inflate failure); the row stays unchanged.
+Cleanup: a query, a journal read, or a delete fails -> rollback, no row deleted ->
+  PersistProjectForClose returns the error, as for commit cleanup.
+```
+
+#### 13.1.2 Evidence
+
+Commands (PowerShell, repository root):
+
+```powershell
+cmd /c scripts\msvc_env.cmd --preset win_debug -DCMAKE_PREFIX_PATH="D:/Qt/6.9.3/msvc2022_64/lib/cmake"   # exit 0
+cmd /c scripts\msvc_env.cmd --build --preset win_debug --parallel 4 --target GpuDagModelGraphTest PipelineEditBatchTest GpuDagRawInputTest MaskAssetStoreTest   # exit 0
+cmd /c scripts\msvc_env.cmd --build --preset win_debug --parallel 4 --target EditorComparisonInputsTest ProjectCompatibilityTest PipelineMapperTest AlbumBackendLib alcedo_main   # exit 0
+ctest --test-dir build/debug -j 1 -R "^(GpuDagModelGraphTest|PipelineEditBatchTest|GpuDagRawInputTest|MaskAssetStoreTest)\."   # exit 0, 367/367 passed
+ctest --test-dir build/debug -j 1 --output-on-failure -R "^(GpuDagModelGraphTest|PipelineEditBatchTest|GpuDagRawInputTest|MaskAssetStoreTest|EditorComparisonInputsTest|ProjectCompatibilityTest|PipelineMapperTest)\."   # after formatting and a rebuild of all the targets above: exit 8, 420/421 passed (the failure is #480, see below)
+```
+
+| Test (section 8.1) | Target | Result |
+| --- | --- | --- |
+| `AiSegmentationSourceJsonRoundTripKeepsAllFields` | `GpuDagModelGraphTest` | PASS |
+| `AiSegmentationSourceRejectsInvalidFields` | `GpuDagModelGraphTest` | PASS |
+| `ExistingMaskJsonBytesAreUnchanged` | `GpuDagModelGraphTest` | PASS |
+| `CollectAiMaskAssetKeysFindsKeysInEveryBatchType` | `PipelineEditBatchTest` | PASS |
+| `GeometryFingerprintTracksLensAndRawDecodeOnly` | `EditorComparisonInputsTest` | PASS |
+| `AiSegmentationMaskContentKeyTracksAssetAndEdge` | `GpuDagRawInputTest` | PASS |
+| `AiSegmentationMaskCompileReportsMissingRasterEvaluation` | `GpuDagRawInputTest` | PASS |
+| `MaskAssetPutThenReadReturnsVerifiedPixels` | `MaskAssetStoreTest` | PASS |
+| `MaskAssetPutOfExistingKeyWritesNothing` | `MaskAssetStoreTest` | PASS |
+| `MaskAssetPutRejectsWrongKey` | `MaskAssetStoreTest` | PASS |
+| `MaskAssetReadReportsMissingAndCorruptRows` | `MaskAssetStoreTest` | PASS |
+| `DeleteKeysNotInRemovesOnlyUnlistedRows` (added) | `MaskAssetStoreTest` | PASS |
+| `ExistingProjectDatabaseGetsTheMaskAssetTable` | `ProjectCompatibilityTest` | PASS |
+| `PackedProjectKeepsMaskAssetRows` | `ProjectCompatibilityTest` | PASS |
+| `CleanupKeepsAssetsOfReachableHistory` | `PipelineMapperTest` | PASS |
+| `CleanupRemovesUnreferencedAssets` | `PipelineMapperTest` | PASS |
+
+Suite totals of the final run: `GpuDagModelGraphTest` 145/145, `PipelineEditBatchTest` 21/21, `GpuDagRawInputTest` 196/196, `MaskAssetStoreTest` 5/5, `EditorComparisonInputsTest` 16/16, `PipelineMapperTest` 34/34, `ProjectCompatibilityTest` 3/4. The one failure is
+`ProjectCompatibilityTest.ProjectWrittenByCurrentMainOpensAndRendersUnchanged`: the CUDA render
+hash is `4331927259852930198`, the fixture records `4717977625645122346`. Clean `main`
+(`dc3ad438`, changes stashed, only that target rebuilt) fails with the same hashes; issue #480.
+The full suite was not run (only the user starts it).
+
+#### 13.1.3 Implementation decisions
+
+- The point label of a prompt step uses `AiMaskComponentOperation` (the type list of section 6.2
+  has no label type). A new `AiMaskBox {x0, y0, x1, y1}` holds the prompt box and the person box;
+  the reader requires ordered corners in [0, 1].
+- `AiSegmentationMaskSource` has no `format_version` member. The writer writes 1 and the reader
+  requires 1 (`kAiSegmentationSourceFormatVersion`).
+- `x + w <= 1` and `y + h <= 1` of `reference_bounds` allow 1e-6 for float rounding of the M9
+  crop.
+- A changed `data` byte reports a zlib inflate failure, not "key mismatch": zlib checks the
+  Adler-32 of the stream before the key check. The test accepts any "corrupt" reason for that
+  case and checks the exact "key mismatch" text for a changed `bounds_x` column.
+- The table columns are `NOT NULL`. `PipelineMgmtService::PutMaskAsset` returns `void` (section
+  6.3); `MaskAssetStore::Put` returns whether it wrote a row.
+- The cleanup mark reads the history tables through a new owner operation,
+  `CommitGraphStore::VisitStoredHistoryJsonContaining`. SQL keeps only the values whose text
+  contains `ai_segmentation`, so the values without an AI Mask are not parsed. The cleanup
+  returns at once when the table has no row. An unreadable journal file is an error, because a
+  mark without it can delete an asset that only that journal refers to.
+- `ProjectHandler::editor_journal_directory()` is the one function that builds the journal
+  directory; the module host builds each journal path from it (risk table row 4).
+- Explicit M21 branches: the compiler, the CUDA, OpenCL, and Metal mask passes, the host
+  `GradeMaskCoverage`, `ApplyAnalyticMaskHandle`, and `MakeSingleMaskThumbnailSpec` throw the
+  "<owner>: AI Segmentation Mask <operation> is not available in this build" text.
+  `AnalyticKindFromMask` throws for a source that is not analytic. The node graph and Mask list
+  key is `aiSegmentation` with the label "AI"; the AI Mask icon comes with SM9.
+- `MaskAssetStoreTest` is registered beside the other storage tests in
+  `tests/sleeve/CMakeLists.txt`. `GeometryFingerprintTracksLensAndRawDecodeOnly` lives in
+  `ai_mask_analysis_image_test.cpp`, which `EditorComparisonInputsTest` compiles.
 
 ### 13.2 SM5.2
 

@@ -23,6 +23,9 @@ Item {
         if (root.sourceKind === "radial") {
             return qsTr("Radial")
         }
+        if (root.sourceKind === "aiSegmentation") {
+            return qsTr("AI")
+        }
         return ""
     }
 

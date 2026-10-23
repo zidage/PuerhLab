@@ -234,6 +234,51 @@ TEST(GpuDagResultContentKey, MaskParamChangeInvalidatesMaskAndGradeNotSensor) {
   EXPECT_NE(edited.primary_grade, base.primary_grade);
 }
 
+TEST(GpuDagResultContentKey, AiSegmentationMaskContentKeyTracksAssetAndEdge) {
+  // The compiler rejects an AI Segmentation Mask until raster evaluation exists, so the plan is
+  // compiled with a Radial Mask of the same id and the document source is then replaced.
+  auto prepared = MakePrepared();
+  auto document = CreateDefaultPipelineDocument();
+  ConnectRadialMask(document);
+  const auto plan     = GraphCompiler::Compile(document, prepared.CompileSource(), RenderRequest{});
+  const auto key_with = [&](const AiSegmentationMaskSource& source) {
+    document.PrimaryGrade()->ReplaceMaskSource(MaskId{"mask.radial"}, source);
+    return BuildFrameResultContentKeys(plan, prepared, document);
+  };
+  const auto base_source = grade_mask_test::MakeAiSegmentationSource();
+  const auto base        = key_with(base_source);
+  EXPECT_EQ(key_with(base_source).mask, base.mask);
+
+  auto other_asset      = base_source;
+  other_asset.asset_key = MaskAssetKey{std::string(32, 'b')};
+  EXPECT_NE(key_with(other_asset).mask, base.mask);
+
+  auto other_bounds                          = base_source;
+  other_bounds.descriptor.reference_bounds.x = 0.5f;
+  EXPECT_NE(key_with(other_bounds).mask, base.mask);
+
+  auto other_feather            = base_source;
+  other_feather.edge.feather_px = 3.0f;
+  EXPECT_NE(key_with(other_feather).mask, base.mask);
+
+  auto other_expand           = base_source;
+  other_expand.edge.expand_px = 1;
+  const auto expanded         = key_with(other_expand);
+  EXPECT_NE(expanded.mask, base.mask);
+  EXPECT_NE(expanded.primary_grade, base.primary_grade);
+  EXPECT_EQ(expanded.develop_image, base.develop_image);
+
+  // The recipe, the model set, and the fingerprint describe how the stored coverage was made;
+  // they do not change pixels.
+  auto other_recipe = base_source;
+  other_recipe.recipe.components.pop_back();
+  other_recipe.model_set_id         = "sam2.1-small";
+  other_recipe.geometry_fingerprint = std::string(32, 'c');
+  const auto same_pixels            = key_with(other_recipe);
+  EXPECT_EQ(same_pixels.mask, base.mask);
+  EXPECT_EQ(same_pixels.primary_grade, base.primary_grade);
+}
+
 TEST(GpuDagResultContentKey, IdenticalInputsProduceIdenticalKeys) {
   auto       prepared = MakePrepared();
   auto       document = CreateDefaultPipelineDocument();

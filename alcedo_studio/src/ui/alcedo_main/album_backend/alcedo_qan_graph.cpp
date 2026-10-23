@@ -1306,6 +1306,8 @@ auto AlcedoQanGraph::SourceKindKey(MaskSourceKind kind) -> QString {
       return QStringLiteral("radial");
     case MaskSourceKind::LinearGradient:
       return QStringLiteral("linearGradient");
+    case MaskSourceKind::AiSegmentation:
+      return QStringLiteral("aiSegmentation");
   }
   return QStringLiteral("radial");
 }

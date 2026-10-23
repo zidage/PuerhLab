@@ -53,6 +53,14 @@ gtest_discover_tests(DuckDbExtensionTest TEST_PREFIX "DuckDbExtensionTest.")
 alcedo_copy_duckdb_extensions(DuckDbExtensionTest)
 alcedo_register_test_target(DuckDbExtensionTest storage)
 
+# AI Segmentation Mask R8 assets in the project database (put once per key, zlib, verified read).
+add_executable(MaskAssetStoreTest ${ALCEDO_TEST_ROOT}/storage/mask_asset_store_test.cpp)
+target_include_directories(MaskAssetStoreTest PUBLIC ${ALCEDO_INCLUDE_DIR})
+target_link_libraries(MaskAssetStoreTest PRIVATE GTest::gtest_main Storage)
+gtest_discover_tests(MaskAssetStoreTest TEST_PREFIX "MaskAssetStoreTest."
+  PROPERTIES LABELS "storage;ai_mask")
+alcedo_register_test_target(MaskAssetStoreTest storage)
+
 # AI annotation and semantic model/embedding stores against a real project database.
 add_executable(AiStorageControllerTest ${ALCEDO_TEST_ROOT}/storage/ai_storage_controller_test.cpp)
 target_include_directories(AiStorageControllerTest PUBLIC ${ALCEDO_INCLUDE_DIR})

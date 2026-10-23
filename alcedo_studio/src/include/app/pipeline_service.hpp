@@ -6,6 +6,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <memory>
 #include <mutex>
 #include <span>
@@ -20,6 +21,7 @@
 #include "edit/graph/pipeline_graph_snapshot.hpp"
 #include "edit/history/commit_graph.hpp"
 #include "edit/history/commit_types.hpp"
+#include "edit/mask/mask_asset.hpp"
 #include "edit/pipeline/pipeline_accelerator.hpp"
 #include "edit/runtime/lut_resource_resolver.hpp"
 #include "sleeve/storage.hpp"
@@ -284,6 +286,39 @@ class PipelineMgmtService final {
   /// successful save; abnormal shutdown must not call this.
   /// @return number of deleted commit rows.
   auto               CollectUnreachableEditCommits() -> std::size_t;
+
+  /**
+   * @brief Store the R8 asset of an AI Segmentation Mask in the project database.
+   *
+   * Takes the database connection lock for the call. The insert commits its own transaction, so
+   * a later history publish never refers to a missing row. A stored key is not written again.
+   *
+   * @throws std::runtime_error when the asset is invalid, its key does not match its pixels, or
+   *         the write fails; then no row changes.
+   */
+  void               PutMaskAsset(const MaskAsset& asset);
+
+  /**
+   * @brief Read and verify the R8 asset of @p key.
+   * @throws std::runtime_error "Mask asset <key> is missing from the project" or "Mask asset
+   *         <key> is corrupt: <reason>".
+   */
+  [[nodiscard]] auto ReadMaskAsset(const MaskAssetKey& key) -> MaskAsset;
+
+  /**
+   * @brief Clean-close cleanup: delete every Mask asset that no stored history refers to.
+   *
+   * Marks the asset keys of every EditCommit payload, ImageEditState and PipelineRoot pipeline
+   * state, and every record of each `*.mini-git.wal` journal in @p journal_directory, then deletes
+   * the other rows in one transaction. Mark and delete hold one database connection lock. Run it
+   * after CollectUnreachableEditCommits, so the assets of deleted commits are also deleted.
+   *
+   * @param journal_directory Editor journal directory; a missing directory has no journals.
+   * @return Number of deleted asset rows.
+   * @throws std::runtime_error when a query, a journal read, or the delete fails; then no row is
+   *         deleted.
+   */
+  auto CollectUnreferencedMaskAssets(const std::filesystem::path& journal_directory) -> std::size_t;
 
   void               DeletePipeline(sl_element_id_t id);
   void               DeletePipelines(std::span<const sl_element_id_t> ids);

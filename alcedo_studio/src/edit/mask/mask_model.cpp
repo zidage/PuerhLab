@@ -4,8 +4,10 @@
 
 #include "edit/mask/mask_model.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <initializer_list>
 #include <limits>
 #include <span>
 #include <stdexcept>
@@ -23,6 +25,9 @@ namespace alcedo {
 namespace {
 
 constexpr float kMinLinearGradientNormalLength = 1.0e-6f;
+/// Float rounding allowance of `x + w <= 1` and `y + h <= 1` for AI Mask reference bounds.
+constexpr float       kAiReferenceBoundsTolerance    = 1.0e-6f;
+constexpr std::size_t kHex128Digits                  = 32;
 
 [[noreturn]] void Fail(std::string_view message) {
   throw std::runtime_error(std::string{message});
@@ -160,6 +165,50 @@ void ValidateLinearGradient(const LinearGradientMaskSource& gradient) {
   }
 }
 
+auto IsLowercaseHex128(std::string_view text) -> bool {
+  return text.size() == kHex128Digits && std::all_of(text.begin(), text.end(), [](char ch) {
+           return (ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f');
+         });
+}
+
+void RequireAxis(std::uint32_t value, std::string_view name) {
+  if (value < 1 || value > kMaximumRasterMaskAxis) {
+    Fail(std::string{name} + " must be in [1, 4096]");
+  }
+}
+
+void ValidateAiSegmentation(const AiSegmentationMaskSource& ai) {
+  if (!IsLowercaseHex128(ai.asset_key.Value())) {
+    Fail("AI Mask asset_key must be 32 lowercase hexadecimal digits");
+  }
+  RequireAxis(ai.analysis_extent.width, "AI Mask analysis_width");
+  RequireAxis(ai.analysis_extent.height, "AI Mask analysis_height");
+  RequireAxis(ai.descriptor.extent.width, "AI Mask asset_width");
+  RequireAxis(ai.descriptor.extent.height, "AI Mask asset_height");
+  if (ai.descriptor.extent.width > ai.analysis_extent.width ||
+      ai.descriptor.extent.height > ai.analysis_extent.height) {
+    Fail("AI Mask asset extent must not exceed the analysis extent");
+  }
+  const auto& bounds = ai.descriptor.reference_bounds;
+  RequireFinite(bounds.x, "AI Mask reference_bounds.x");
+  RequireFinite(bounds.y, "AI Mask reference_bounds.y");
+  RequireFinite(bounds.w, "AI Mask reference_bounds.w");
+  RequireFinite(bounds.h, "AI Mask reference_bounds.h");
+  if (bounds.x < 0.0f || bounds.y < 0.0f || !(bounds.w > 0.0f) || !(bounds.h > 0.0f) ||
+      bounds.x + bounds.w > 1.0f + kAiReferenceBoundsTolerance ||
+      bounds.y + bounds.h > 1.0f + kAiReferenceBoundsTolerance) {
+    Fail("AI Mask reference_bounds must lie inside [0, 1]");
+  }
+  ValidateAiMaskEdgeAdjustment(ai.edge);
+  if (ai.model_set_id.empty()) {
+    Fail("AI Mask model_set_id must not be empty");
+  }
+  if (!IsLowercaseHex128(ai.geometry_fingerprint)) {
+    Fail("AI Mask geometry_fingerprint must be 32 lowercase hexadecimal digits");
+  }
+  ValidateAiMaskRecipe(ai.recipe);
+}
+
 void ValidateRange(const std::optional<ColorRangeModel>& range, std::string_view name) {
   if (!range.has_value()) {
     return;
@@ -209,6 +258,24 @@ auto LinearGradientToJson(const LinearGradientMaskSource& gradient) -> nlohmann:
           {"transition_distance", gradient.transition_distance},
           {"start_value", gradient.start_value},
           {"end_value", gradient.end_value}};
+}
+
+auto AiSegmentationToJson(const AiSegmentationMaskSource& ai) -> nlohmann::json {
+  const auto& bounds = ai.descriptor.reference_bounds;
+  return {
+      {"kind", "ai_segmentation"},
+      {"format_version", kAiSegmentationSourceFormatVersion},
+      {"asset_key", std::string{ai.asset_key.Value()}},
+      {"asset_width", ai.descriptor.extent.width},
+      {"asset_height", ai.descriptor.extent.height},
+      {"reference_bounds", {{"x", bounds.x}, {"y", bounds.y}, {"w", bounds.w}, {"h", bounds.h}}},
+      {"analysis_width", ai.analysis_extent.width},
+      {"analysis_height", ai.analysis_extent.height},
+      {"feather_px", ai.edge.feather_px},
+      {"expand_px", ai.edge.expand_px},
+      {"model_set_id", ai.model_set_id},
+      {"geometry_fingerprint", ai.geometry_fingerprint},
+      {"components", AiMaskRecipeToJson(ai.recipe)}};
 }
 
 auto RangeToJson(const std::optional<ColorRangeModel>& range) -> nlohmann::json {
@@ -278,6 +345,66 @@ auto LinearGradientFromJson(const nlohmann::json& json) -> LinearGradientMaskSou
   return gradient;
 }
 
+void RequireOnlyKeys(const nlohmann::json& json, std::string_view owner,
+                     std::initializer_list<std::string_view> keys) {
+  for (const auto& [key, value] : json.items()) {
+    if (std::find(keys.begin(), keys.end(), key) == keys.end()) {
+      Fail(std::string{owner} + " contains unsupported field " + key);
+    }
+  }
+}
+
+auto ReadRequiredString(const nlohmann::json& json, const char* key, std::string_view owner)
+    -> std::string {
+  if (!json.contains(key) || !json[key].is_string()) {
+    Fail(std::string{owner} + " is missing string " + key);
+  }
+  return json[key].get<std::string>();
+}
+
+auto AiSegmentationFromJson(const nlohmann::json& json) -> AiSegmentationMaskSource {
+  constexpr std::string_view kOwner = "ai_segmentation";
+  RequireOnlyKeys(json, kOwner,
+                  {"kind", "format_version", "asset_key", "asset_width", "asset_height",
+                   "reference_bounds", "analysis_width", "analysis_height", "feather_px",
+                   "expand_px", "model_set_id", "geometry_fingerprint", "components"});
+  if (ReadRequiredUint32(json, "format_version", kOwner) != kAiSegmentationSourceFormatVersion) {
+    Fail("ai_segmentation format_version must be 1");
+  }
+  AiSegmentationMaskSource ai;
+  ai.asset_key                = MaskAssetKey{ReadRequiredString(json, "asset_key", kOwner)};
+  ai.descriptor.extent.width  = ReadRequiredUint32(json, "asset_width", kOwner);
+  ai.descriptor.extent.height = ReadRequiredUint32(json, "asset_height", kOwner);
+  if (!json.contains("reference_bounds")) {
+    Fail("ai_segmentation is missing reference_bounds");
+  }
+  const auto& bounds = json["reference_bounds"];
+  RequireObject(bounds, "ai_segmentation reference_bounds");
+  RequireOnlyKeys(bounds, "ai_segmentation reference_bounds", {"x", "y", "w", "h"});
+  ai.descriptor.reference_bounds.x = ReadRequiredFloat(bounds, "x", "reference_bounds");
+  ai.descriptor.reference_bounds.y = ReadRequiredFloat(bounds, "y", "reference_bounds");
+  ai.descriptor.reference_bounds.w = ReadRequiredFloat(bounds, "w", "reference_bounds");
+  ai.descriptor.reference_bounds.h = ReadRequiredFloat(bounds, "h", "reference_bounds");
+  ai.analysis_extent.width         = ReadRequiredUint32(json, "analysis_width", kOwner);
+  ai.analysis_extent.height        = ReadRequiredUint32(json, "analysis_height", kOwner);
+  ai.edge.feather_px               = ReadRequiredFloat(json, "feather_px", kOwner);
+  if (!json.contains("expand_px") || !json["expand_px"].is_number_integer()) {
+    Fail("ai_segmentation expand_px must be an integer");
+  }
+  const auto expand = json["expand_px"].get<std::int64_t>();
+  if (expand < -kAiMaskMaximumExpandPx || expand > kAiMaskMaximumExpandPx) {
+    Fail("AI Mask expand_px must be in [-50, 50]");
+  }
+  ai.edge.expand_px       = static_cast<std::int32_t>(expand);
+  ai.model_set_id         = ReadRequiredString(json, "model_set_id", kOwner);
+  ai.geometry_fingerprint = ReadRequiredString(json, "geometry_fingerprint", kOwner);
+  if (!json.contains("components")) {
+    Fail("ai_segmentation is missing components");
+  }
+  ai.recipe = AiMaskRecipeFromJson(json["components"]);
+  return ai;
+}
+
 auto ColorRangeFromJson(const nlohmann::json& json) -> std::optional<ColorRangeModel> {
   if (json.is_null()) {
     return std::nullopt;
@@ -312,7 +439,13 @@ auto GetMaskSourceKind(const MaskSource& source) -> MaskSourceKind {
   if (std::holds_alternative<RadialMaskSource>(source)) {
     return MaskSourceKind::Radial;
   }
-  return MaskSourceKind::LinearGradient;
+  if (std::holds_alternative<LinearGradientMaskSource>(source)) {
+    return MaskSourceKind::LinearGradient;
+  }
+  if (std::holds_alternative<AiSegmentationMaskSource>(source)) {
+    return MaskSourceKind::AiSegmentation;
+  }
+  Fail("Mask source holds no value");
 }
 
 auto MaskSourceKindText(MaskSourceKind kind) -> std::string_view {
@@ -325,6 +458,8 @@ auto MaskSourceKindText(MaskSourceKind kind) -> std::string_view {
       return "radial";
     case MaskSourceKind::LinearGradient:
       return "linear_gradient";
+    case MaskSourceKind::AiSegmentation:
+      return "ai_segmentation";
   }
   return "unknown";
 }
@@ -347,8 +482,12 @@ void ValidateMaskModel(const MaskModel& mask) {
 #endif
             if constexpr (std::is_same_v<Source, RadialMaskSource>) {
           ValidateRadial(source);
-        } else {
+        } else if constexpr (std::is_same_v<Source, LinearGradientMaskSource>) {
           ValidateLinearGradient(source);
+        } else {
+          static_assert(std::is_same_v<Source, AiSegmentationMaskSource>,
+                        "ValidateMaskModel misses a Mask source kind");
+          ValidateAiSegmentation(source);
         }
       },
       mask.source);
@@ -369,8 +508,12 @@ auto MaskModelToJson(const MaskModel& mask) -> nlohmann::json {
 #endif
             if constexpr (std::is_same_v<Source, RadialMaskSource>) {
           source = RadialToJson(value);
-        } else {
+        } else if constexpr (std::is_same_v<Source, LinearGradientMaskSource>) {
           source = LinearGradientToJson(value);
+        } else {
+          static_assert(std::is_same_v<Source, AiSegmentationMaskSource>,
+                        "MaskModelToJson misses a Mask source kind");
+          source = AiSegmentationToJson(value);
         }
       },
       mask.source);
@@ -423,6 +566,8 @@ auto MaskModelFromJson(const nlohmann::json& json) -> MaskModel {
     mask.source = RadialFromJson(source_json);
   } else if (kind == "linear_gradient") {
     mask.source = LinearGradientFromJson(source_json);
+  } else if (kind == "ai_segmentation") {
+    mask.source = AiSegmentationFromJson(source_json);
   } else {
     Fail("Unknown Mask source kind: " + kind);
   }
@@ -455,8 +600,15 @@ auto FirstEnabledMask(MaskListView masks) -> const MaskModel* {
 }
 
 auto AnalyticKindFromMask(const MaskModel& mask) -> AnalyticMaskKind {
-  return std::holds_alternative<RadialMaskSource>(mask.source) ? AnalyticMaskKind::Radial
-                                                               : AnalyticMaskKind::LinearGradient;
+  if (std::holds_alternative<RadialMaskSource>(mask.source)) {
+    return AnalyticMaskKind::Radial;
+  }
+  if (std::holds_alternative<LinearGradientMaskSource>(mask.source)) {
+    return AnalyticMaskKind::LinearGradient;
+  }
+  throw std::invalid_argument("AnalyticKindFromMask: Mask source " +
+                              std::string{MaskSourceKindText(GetMaskSourceKind(mask.source))} +
+                              " is not analytic");
 }
 
 auto RadialParamsFromMask(const MaskModel& mask) -> RadialMaskParams {

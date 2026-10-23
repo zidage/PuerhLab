@@ -76,6 +76,28 @@ auto MakeAiMaskAnalysisImageKey(sl_element_id_t element_id, image_id_t image_id,
   return text.str();
 }
 
+auto MakeAiMaskGeometryFingerprint(const DevelopParamsModel& develop) -> std::string {
+  const nlohmann::json fields    = {{"demosaic_method", develop.DemosaicMethod()},
+                                    {"highlights_reconstruct", develop.HighlightsReconstruct()},
+                                    {"lens_enabled", develop.LensEnabled()},
+                                    {"apply_distortion", develop.ApplyDistortion()},
+                                    {"apply_tca", develop.ApplyTca()},
+                                    {"apply_crop", develop.ApplyCrop()},
+                                    {"auto_scale", develop.AutoScale()},
+                                    {"use_user_scale", develop.UseUserScale()},
+                                    {"user_scale", develop.UserScale()},
+                                    {"projection_enabled", develop.ProjectionEnabled()},
+                                    {"target_projection", develop.TargetProjection()},
+                                    {"lens_maker", develop.LensMaker()},
+                                    {"lens_model", develop.LensModel()}};
+  const auto           canonical = fields.dump();
+  const XXH128_hash_t  digest    = XXH3_128bits(canonical.data(), canonical.size());
+  std::ostringstream   text;
+  text << std::hex << std::setfill('0') << std::setw(16) << digest.high64 << std::setw(16)
+       << digest.low64;
+  return text.str();
+}
+
 auto MakeAiMaskAnalysisRenderRequest() -> RenderRequest {
   RenderRequest request;
   request.document_geometry   = DocumentGeometryUse::ReferenceSource;

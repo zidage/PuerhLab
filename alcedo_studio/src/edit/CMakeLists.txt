@@ -27,13 +27,18 @@ def_library(EditGeometry
         ${ALCEDO_SRC_ROOT}/edit/geometry/texture_sampling_plan.cpp
 )
 
-# GPU-free Mask model: analytic sources, common fields, and host Mix coverage.
+# GPU-free Mask model: analytic and AI Segmentation sources, common fields, raster Mask asset
+# keys, and host Mix coverage.
 def_library(EditMaskCore
     SOURCES
         ${ALCEDO_SRC_ROOT}/edit/mask/mask_model.cpp
+        ${ALCEDO_SRC_ROOT}/edit/mask/mask_asset.cpp
+        ${ALCEDO_SRC_ROOT}/edit/mask/ai_mask_recipe.cpp
+        ${ALCEDO_SRC_ROOT}/edit/mask/ai_mask_asset_references.cpp
         ${ALCEDO_SRC_ROOT}/edit/mask/analytic_mask_edit.cpp
         ${ALCEDO_SRC_ROOT}/edit/mask/grade_mask_coverage.cpp
     PUBLIC_DEPS EditGeometry JSON
+    PRIVATE_DEPS xxHash
 )
 
 # Detached Brush module: model types, canonical sampling, and spatial/feather
@@ -41,7 +46,6 @@ def_library(EditMaskCore
 if(ALCEDO_ENABLE_BRUSH_MASK)
     def_library(EditMaskBrush
         SOURCES
-            ${ALCEDO_SRC_ROOT}/edit/mask/mask_asset.cpp
             ${ALCEDO_SRC_ROOT}/edit/mask/brush_stroke.cpp
             ${ALCEDO_SRC_ROOT}/edit/mask/brush_raster_encoding.cpp
             ${ALCEDO_SRC_ROOT}/edit/mask/brush_canonical_sampler.cpp

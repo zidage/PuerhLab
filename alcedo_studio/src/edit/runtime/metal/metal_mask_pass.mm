@@ -171,6 +171,10 @@ auto ExecuteMetalMask(MetalRenderDevice& device, const ExecutionPlan& plan,
     EncodeAnalytic(device, output.Texture(), mask_model, plan);
     return result;
   }
+  if (std::holds_alternative<AiSegmentationMaskSource>(mask_model.source)) {
+    throw std::runtime_error(
+        "ExecuteMetalMask: AI Segmentation Mask raster evaluation is not available in this build");
+  }
   throw std::runtime_error("ExecuteMetalMask: compiled mask does not match document");
 }
 

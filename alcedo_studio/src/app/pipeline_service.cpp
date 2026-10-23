@@ -6,9 +6,11 @@
 
 #include <cstddef>
 #include <exception>
+#include <filesystem>
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <set>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -21,9 +23,13 @@
 #include "edit/graph/develop_color_transform.hpp"
 #include "edit/history/commit_graph.hpp"
 #include "edit/history/edit_commit.hpp"
+#include "edit/history/mini_git_working_history.hpp"
 #include "edit/history/pipeline_document_checkpoint.hpp"
+#include "edit/mask/ai_mask_asset_references.hpp"
+#include "edit/mask/mask_model.hpp"
 #include "storage/mapper/pipeline/pipeline_mapper.hpp"
 #include "storage/store/edit_history/commit_graph_store.hpp"
+#include "storage/store/mask_asset/mask_asset_store.hpp"
 #include "type/type.hpp"
 
 namespace alcedo {
@@ -333,6 +339,58 @@ auto PipelineMgmtService::CollectUnreachableEditCommits() -> std::size_t {
   auto             db_lock  = db_guard.Lock();
   CommitGraphStore graph_service(db_guard.conn_);
   return graph_service.DeleteUnreachableCommitsForProject();
+}
+
+void PipelineMgmtService::PutMaskAsset(const MaskAsset& asset) {
+  auto           db_guard = storage_->GetDatabase().GetConnectionGuard();
+  auto           db_lock  = db_guard.Lock();
+  MaskAssetStore store(db_guard.conn_);
+  (void)store.Put(asset);
+}
+
+auto PipelineMgmtService::ReadMaskAsset(const MaskAssetKey& key) -> MaskAsset {
+  auto           db_guard = storage_->GetDatabase().GetConnectionGuard();
+  auto           db_lock  = db_guard.Lock();
+  MaskAssetStore store(db_guard.conn_);
+  return store.Read(key);
+}
+
+auto PipelineMgmtService::CollectUnreferencedMaskAssets(
+    const std::filesystem::path& journal_directory) -> std::size_t {
+  auto           db_guard = storage_->GetDatabase().GetConnectionGuard();
+  auto           db_lock  = db_guard.Lock();
+  MaskAssetStore store(db_guard.conn_);
+  if (store.ListKeys().empty()) {
+    return 0;
+  }
+  std::set<MaskAssetKey> referenced;
+  const auto             mark = [&referenced](const nlohmann::json& value) {
+    CollectAiMaskAssetKeys(value, referenced);
+  };
+  CommitGraphStore graph_store(db_guard.conn_);
+  graph_store.VisitStoredHistoryJsonContaining(MaskSourceKindText(MaskSourceKind::AiSegmentation),
+                                               mark);
+  std::error_code directory_error;
+  if (std::filesystem::is_directory(journal_directory, directory_error)) {
+    for (const auto& entry : std::filesystem::directory_iterator(journal_directory)) {
+      const auto name = entry.path().filename().string();
+      if (!entry.is_regular_file() || !name.ends_with(".mini-git.wal")) {
+        continue;
+      }
+      MiniGitJournal journal(entry.path());
+      std::string    journal_error;
+      if (!journal.Load(&journal_error)) {
+        throw std::runtime_error("PipelineMgmtService: editor journal " + name +
+                                 " cannot be read for Mask asset cleanup: " + journal_error);
+      }
+      for (const auto& record : journal.records()) {
+        if (record.edit_commit.has_value()) {
+          mark(record.edit_commit->GetPayloadJSON());
+        }
+      }
+    }
+  }
+  return store.DeleteKeysNotIn(referenced);
 }
 
 void PipelineMgmtService::DeletePipeline(sl_element_id_t id) {

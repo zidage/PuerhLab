@@ -5,6 +5,8 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <cstddef>
+#include <functional>
 #include <limits>
 #include <stdexcept>
 #include <string>
@@ -248,6 +250,141 @@ TEST(GpuDagModelGraph, MoveMaskForDisplayDoesNotChangeMaskIdentity) {
   EXPECT_EQ(grade->MaskAt(1).id, MaskId{"mask.a"});
   EXPECT_NE(grade->FindMask(MaskId{"mask.a"}), nullptr);
   EXPECT_NE(grade->FindMask(MaskId{"mask.b"}), nullptr);
+}
+
+TEST(GpuDagModelGraph, AiSegmentationSourceJsonRoundTripKeepsAllFields) {
+  const auto mask = grade_mask_test::MakeAiSegmentationMask(MaskId{"mask.ai"});
+  const auto json = MaskModelToJson(mask);
+  EXPECT_EQ(json.at("source").at("kind"), "ai_segmentation");
+  EXPECT_EQ(json.at("source").at("format_version"), 1);
+  EXPECT_EQ(json.at("source").at("components").size(), 3u);
+
+  const auto restored = MaskModelFromJson(json);
+  EXPECT_EQ(restored, mask);
+  EXPECT_EQ(GetMaskSourceKind(restored.source), MaskSourceKind::AiSegmentation);
+  EXPECT_EQ(MaskSourceKindText(MaskSourceKind::AiSegmentation), "ai_segmentation");
+  const auto& ai = std::get<AiSegmentationMaskSource>(restored.source);
+  ASSERT_EQ(ai.recipe.components.size(), 3u);
+  const auto& people = std::get<AiMaskTaskComponent>(ai.recipe.components[0].content);
+  ASSERT_EQ(people.person_toggles.size(), 1u);
+  EXPECT_EQ(people.person_toggles[0].index, 2u);
+  EXPECT_EQ(people.person_toggles[0].operation, AiMaskComponentOperation::Subtract);
+  const auto& stroke = std::get<AiMaskPromptGroup>(ai.recipe.components[2].content);
+  ASSERT_EQ(stroke.steps.size(), 2u);
+  EXPECT_TRUE(stroke.steps[1].box.has_value());
+  EXPECT_EQ(stroke.steps[1].points[0].label, AiMaskComponentOperation::Subtract);
+  // A second serialization gives the same bytes.
+  EXPECT_EQ(MaskModelToJson(restored).dump(), json.dump());
+}
+
+TEST(GpuDagModelGraph, AiSegmentationSourceRejectsInvalidFields) {
+  const auto valid = MaskModelToJson(grade_mask_test::MakeAiSegmentationMask(MaskId{"mask.ai"}));
+  ASSERT_NO_THROW((void)MaskModelFromJson(valid));
+
+  const auto point_list = [](std::size_t count) {
+    auto points = nlohmann::json::array();
+    for (std::size_t index = 0; index < count; ++index) {
+      points.push_back({{"x", 0.5}, {"y", 0.5}, {"label", "add"}});
+    }
+    return points;
+  };
+  // The stroke group has one point in its second step; 63 more points give the limit of 64.
+  auto at_limit                                                    = valid;
+  at_limit["source"]["components"][2]["prompt_steps"][0]["points"] = point_list(63);
+  EXPECT_NO_THROW((void)MaskModelFromJson(at_limit));
+
+  struct Case {
+    const char*                          name;
+    std::function<void(nlohmann::json&)> change;
+  };
+  const std::vector<Case> cases = {
+      {"key with 31 digits",
+       [](nlohmann::json& source) { source["asset_key"] = std::string(31, 'a'); }},
+      {"key with upper case digits",
+       [](nlohmann::json& source) { source["asset_key"] = std::string(32, 'A'); }},
+      {"asset extent 4097", [](nlohmann::json& source) { source["asset_width"] = 4097; }},
+      {"analysis extent 4097", [](nlohmann::json& source) { source["analysis_height"] = 4097; }},
+      {"asset larger than the analysis image",
+       [](nlohmann::json& source) { source["analysis_width"] = 512; }},
+      {"bounds past the right edge",
+       [](nlohmann::json& source) { source["reference_bounds"]["x"] = 0.9; }},
+      {"negative bounds", [](nlohmann::json& source) { source["reference_bounds"]["y"] = -0.1; }},
+      {"empty bounds", [](nlohmann::json& source) { source["reference_bounds"]["h"] = 0.0; }},
+      {"65 points in a group",
+       [&point_list](nlohmann::json& source) {
+         source["components"][2]["prompt_steps"][0]["points"] = point_list(64);
+       }},
+      {"level 1 with a box",
+       [](nlohmann::json& source) { source["components"][2]["prompt_steps"][1]["level"] = 1; }},
+      {"level 3",
+       [](nlohmann::json& source) { source["components"][1]["prompt_steps"][0]["level"] = 3; }},
+      {"step without points and box",
+       [](nlohmann::json& source) {
+         source["components"][1]["prompt_steps"][0]["points"] = nlohmann::json::array();
+       }},
+      {"point outside the image",
+       [](nlohmann::json& source) {
+         source["components"][1]["prompt_steps"][0]["points"][0]["x"] = 1.25;
+       }},
+      {"toggles on sky", [](nlohmann::json& source) { source["components"][0]["task"] = "sky"; }},
+      {"unknown task", [](nlohmann::json& source) { source["components"][0]["task"] = "cat"; }},
+      {"task and prompt steps",
+       [](nlohmann::json& source) { source["components"][1]["task"] = "subject"; }},
+      {"unknown operation",
+       [](nlohmann::json& source) { source["components"][0]["operation"] = "multiply"; }},
+      {"feather_px 51", [](nlohmann::json& source) { source["feather_px"] = 51.0; }},
+      {"expand_px 1.5", [](nlohmann::json& source) { source["expand_px"] = 1.5; }},
+      {"expand_px -51", [](nlohmann::json& source) { source["expand_px"] = -51; }},
+      {"empty model set id", [](nlohmann::json& source) { source["model_set_id"] = ""; }},
+      {"fingerprint with 33 digits",
+       [](nlohmann::json& source) { source["geometry_fingerprint"] = std::string(33, 'b'); }},
+      {"empty components",
+       [](nlohmann::json& source) { source["components"] = nlohmann::json::array(); }},
+      {"format version 2", [](nlohmann::json& source) { source["format_version"] = 2; }},
+      {"unknown source field", [](nlohmann::json& source) { source["brush_strokes"] = 1; }},
+      {"unknown component field",
+       [](nlohmann::json& source) { source["components"][0]["weight"] = 1; }},
+      {"unknown point field",
+       [](nlohmann::json& source) {
+         source["components"][1]["prompt_steps"][0]["points"][0]["z"] = 0.0;
+       }},
+      {"missing recipe", [](nlohmann::json& source) { source.erase("components"); }},
+  };
+  for (const auto& test_case : cases) {
+    auto json = valid;
+    test_case.change(json["source"]);
+    EXPECT_THROW((void)MaskModelFromJson(json), std::runtime_error) << test_case.name;
+  }
+}
+
+TEST(GpuDagModelGraph, ExistingMaskJsonBytesAreUnchanged) {
+  // The serialized bytes of existing sources set the root id and the history byte comparison of
+  // stored projects; adding a source kind must not change them.
+  RadialMaskSource radial;
+  radial.center_x          = 0.25f;
+  radial.center_y          = 0.75f;
+  radial.major_radius      = 0.5f;
+  radial.minor_radius      = 0.125f;
+  radial.inner_feather     = 0.0625f;
+  radial.outer_feather     = 0.5f;
+  auto radial_mask         = grade_mask_test::MakeRadialMask(MaskId{"mask.radial"}, radial);
+  radial_mask.display_name = "Radial";
+  radial_mask.opacity      = 0.75f;
+  EXPECT_EQ(MaskModelToJson(radial_mask).dump(),
+            R"({"color_range":null,"deletion_protected":false,"display_name":"Radial",)"
+            R"("enabled":true,"id":"mask.radial","invert":false,"luminance_range":null,)"
+            R"("opacity":0.75,"source":{"center_x":0.25,"center_y":0.75,"inner_feather":0.0625,)"
+            R"("kind":"radial","major_radius":0.5,"minor_radius":0.125,"outer_feather":0.5,)"
+            R"("rotation":0.0}})");
+
+  auto linear_mask = grade_mask_test::MakeLinearGradientMask(MaskId{"mask.linear"}, {}, true);
+  linear_mask.display_name = "Gradient";
+  EXPECT_EQ(MaskModelToJson(linear_mask).dump(),
+            R"({"color_range":null,"deletion_protected":false,"display_name":"Gradient",)"
+            R"("enabled":true,"id":"mask.linear","invert":true,"luminance_range":null,)"
+            R"("opacity":1.0,"source":{"end_value":0.0,"kind":"linear_gradient","normal_x":0.0,)"
+            R"("normal_y":1.0,"origin_x":0.5,"origin_y":0.5,"start_value":1.0,)"
+            R"("transition_distance":0.20000000298023224}})");
 }
 
 }  // namespace alcedo

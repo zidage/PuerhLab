@@ -152,7 +152,16 @@ auto GradeMaskCoverage::AnalyticCoverage(const MaskModel& mask, std::uint32_t x,
     const float outer  = 1.0f + radial->outer_feather;
     return 1.0f - std::clamp((rho - inner) / std::max(outer - inner, kAnalyticEpsilon), 0.0f, 1.0f);
   }
-  const auto& linear        = std::get<LinearGradientMaskSource>(mask.source);
+  if (std::holds_alternative<AiSegmentationMaskSource>(mask.source)) {
+    FailCoverage(
+        "GradeMaskCoverage: AI Segmentation Mask coverage evaluation is not available in this "
+        "build");
+  }
+  const auto* linear_source = std::get_if<LinearGradientMaskSource>(&mask.source);
+  if (linear_source == nullptr) {
+    FailCoverage("GradeMaskCoverage: Mask source kind is not analytic");
+  }
+  const auto& linear        = *linear_source;
   const float normal_length = std::hypot(linear.normal_x, linear.normal_y);
   const float normal_x      = linear.normal_x / std::max(normal_length, kAnalyticEpsilon);
   const float normal_y      = linear.normal_y / std::max(normal_length, kAnalyticEpsilon);

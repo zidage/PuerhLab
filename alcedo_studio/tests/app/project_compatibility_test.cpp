@@ -15,6 +15,8 @@
 #include <gtest/gtest.h>
 
 #include <QString>
+#include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -28,6 +30,7 @@
 #include "edit/history/edit_commit_attribution.hpp"
 #include "edit/history/mini_git_working_history.hpp"
 #include "edit/history/pipeline_edit_batch.hpp"
+#include "edit/mask/mask_asset.hpp"
 #include "json.hpp"
 #include "storage/store/edit_history/commit_graph_store.hpp"
 #include "support/project_compat_render.hpp"
@@ -181,5 +184,132 @@ TEST(ProjectCompatibilityTest, OldProjectCommitsReadAsUserAndSaveAnAgentCommit) 
   std::filesystem::remove_all(workspace, ec);
 }
 
+/// Value of a one-cell query on the database file at @p db_path, opened without the project.
+auto QueryDatabaseFileInt64(const std::filesystem::path& db_path, const std::string& sql)
+    -> std::int64_t {
+  duckdb_database   database;
+  duckdb_connection connection;
+  EXPECT_EQ(duckdb_open(db_path.string().c_str(), &database), DuckDBSuccess);
+  EXPECT_EQ(duckdb_connect(database, &connection), DuckDBSuccess);
+  duckdb_result result;
+  EXPECT_EQ(duckdb_query(connection, sql.c_str(), &result), DuckDBSuccess) << sql;
+  const auto value = duckdb_value_int64(&result, 0, 0);
+  duckdb_destroy_result(&result);
+  duckdb_disconnect(&connection);
+  duckdb_close(&database);
+  return value;
+}
+
+constexpr const char* kMaskAssetTableCountSql =
+    "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'MaskAsset';";
+
+/// 32 x 24 two-region R8 asset.
+auto MakeCompatMaskAsset() -> MaskAsset {
+  MaskAsset asset;
+  asset.descriptor.extent           = {32, 24};
+  asset.descriptor.reference_bounds = NormalizedRect{0.125f, 0.25f, 0.5f, 0.5f};
+  asset.pixels.assign(32 * 24, 0);
+  for (std::size_t y = 2; y < 10; ++y) {
+    for (std::size_t x = 3; x < 12; ++x) {
+      asset.pixels[y * 32 + x] = 255;
+    }
+  }
+  for (std::size_t y = 14; y < 22; ++y) {
+    for (std::size_t x = 18; x < 30; ++x) {
+      asset.pixels[y * 32 + x] = 128;
+    }
+  }
+  asset.key = MakeMaskAssetKey(asset.descriptor, asset.pixels);
+  return asset;
+}
+
+// SM5.1 M10 and D19: a project database written before the MaskAsset table gains the table at
+// open and keeps its rows; no project version change is needed.
+TEST(ProjectCompatibilityTest, ExistingProjectDatabaseGetsTheMaskAssetTable) {
+  TimeProvider::Refresh();
+  const auto workspace =
+      std::filesystem::temp_directory_path() / "alcedo_project_compat_mask_asset";
+  std::error_code ec;
+  std::filesystem::remove_all(workspace, ec);
+  std::filesystem::path db_path;
+  std::filesystem::path meta_path;
+  QString               error;
+  ASSERT_TRUE(project_pack::UnpackProjectToWorkspace(CompatDir() / "raw_project_abdb000c8.alcd",
+                                                     workspace, QStringLiteral("Compat"), &db_path,
+                                                     &meta_path, &error))
+      << error.toStdString();
+  ASSERT_EQ(QueryDatabaseFileInt64(db_path, kMaskAssetTableCountSql), 0)
+      << "the fixture must predate the MaskAsset table";
+  const auto commit_count = QueryDatabaseFileInt64(db_path, "SELECT COUNT(*) FROM EditCommit;");
+  const auto image_count  = QueryDatabaseFileInt64(db_path, "SELECT COUNT(*) FROM Image;");
+  ASSERT_GT(commit_count, 0);
+
+  const auto asset = MakeCompatMaskAsset();
+  {
+    ProjectService      project(db_path, meta_path);
+    PipelineMgmtService pipelines(project.GetStorage());
+    pipelines.PutMaskAsset(asset);
+    EXPECT_EQ(pipelines.ReadMaskAsset(asset.key).pixels, asset.pixels);
+  }
+  EXPECT_EQ(QueryDatabaseFileInt64(db_path, kMaskAssetTableCountSql), 1);
+  EXPECT_EQ(QueryDatabaseFileInt64(db_path, "SELECT COUNT(*) FROM MaskAsset;"), 1);
+  EXPECT_EQ(QueryDatabaseFileInt64(db_path, "SELECT COUNT(*) FROM EditCommit;"), commit_count);
+  EXPECT_EQ(QueryDatabaseFileInt64(db_path, "SELECT COUNT(*) FROM Image;"), image_count);
+  std::filesystem::remove_all(workspace, ec);
+}
+
+// SM5.1 M10: Save packs the DuckDB file, so the asset rows travel with the .alcd package.
+TEST(ProjectCompatibilityTest, PackedProjectKeepsMaskAssetRows) {
+  TimeProvider::Refresh();
+  const auto source_workspace =
+      std::filesystem::temp_directory_path() / "alcedo_project_compat_mask_pack_source";
+  const auto unpacked_workspace =
+      std::filesystem::temp_directory_path() / "alcedo_project_compat_mask_pack_unpacked";
+  const auto packed_path =
+      std::filesystem::temp_directory_path() / "alcedo_project_compat_mask_pack.alcd";
+  std::error_code ec;
+  std::filesystem::remove_all(source_workspace, ec);
+  std::filesystem::remove_all(unpacked_workspace, ec);
+  std::filesystem::remove(packed_path, ec);
+  std::filesystem::path db_path;
+  std::filesystem::path meta_path;
+  QString               error;
+  ASSERT_TRUE(project_pack::UnpackProjectToWorkspace(CompatDir() / "raw_project_abdb000c8.alcd",
+                                                     source_workspace, QStringLiteral("Compat"),
+                                                     &db_path, &meta_path, &error))
+      << error.toStdString();
+
+  const auto asset = MakeCompatMaskAsset();
+  {
+    auto                project = std::make_shared<ProjectService>(db_path, meta_path);
+    PipelineMgmtService pipelines(project->GetStorage());
+    pipelines.PutMaskAsset(asset);
+    std::filesystem::path snapshot_path;
+    ASSERT_TRUE(project_pack::BuildTempDbSnapshotPath(&snapshot_path, &error))
+        << error.toStdString();
+    ASSERT_TRUE(project_pack::CreateLiveDbSnapshot(project, snapshot_path, &error))
+        << error.toStdString();
+    ASSERT_TRUE(project_pack::WritePackedProject(packed_path, meta_path, snapshot_path, &error))
+        << error.toStdString();
+    std::filesystem::remove(snapshot_path, ec);
+  }
+
+  std::filesystem::path unpacked_db_path;
+  std::filesystem::path unpacked_meta_path;
+  ASSERT_TRUE(project_pack::UnpackProjectToWorkspace(packed_path, unpacked_workspace,
+                                                     QStringLiteral("Compat"), &unpacked_db_path,
+                                                     &unpacked_meta_path, &error))
+      << error.toStdString();
+  {
+    ProjectService      project(unpacked_db_path, unpacked_meta_path);
+    PipelineMgmtService pipelines(project.GetStorage());
+    const auto          read = pipelines.ReadMaskAsset(asset.key);
+    EXPECT_EQ(read.descriptor, asset.descriptor);
+    EXPECT_EQ(read.pixels, asset.pixels);
+  }
+  std::filesystem::remove_all(source_workspace, ec);
+  std::filesystem::remove_all(unpacked_workspace, ec);
+  std::filesystem::remove(packed_path, ec);
+}
 }  // namespace
 }  // namespace alcedo

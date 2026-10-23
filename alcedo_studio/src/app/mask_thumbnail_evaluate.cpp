@@ -60,7 +60,12 @@ constexpr float kAnalyticEpsilon = 1.0e-6f;
   if (layer.kind == MaskSourceKind::Radial) {
     return RadialCoverage(std::get<RadialMaskParams>(layer.params), nx, ny);
   }
-  return LinearCoverage(std::get<LinearGradientMaskParams>(layer.params), nx, ny);
+  if (layer.kind == MaskSourceKind::LinearGradient) {
+    return LinearCoverage(std::get<LinearGradientMaskParams>(layer.params), nx, ny);
+  }
+  throw std::runtime_error(
+      "RenderMaskThumbnail: Mask thumbnail layers support Radial and Linear "
+      "Gradient only");
 }
 
 }  // namespace

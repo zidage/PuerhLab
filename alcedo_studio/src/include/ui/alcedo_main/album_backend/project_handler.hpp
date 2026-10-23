@@ -108,6 +108,9 @@ class ProjectHandler {
   [[nodiscard]] auto workspace_dir() const -> const std::filesystem::path& {
     return project_workspace_dir_;
   }
+  /// Directory of the editor Mini-Git journals (`image-<id>.mini-git.wal`): `editor-journal`
+  /// beside the runtime database, else in the workspace directory. Empty without either path.
+  [[nodiscard]] auto editor_journal_directory() const -> std::filesystem::path;
   [[nodiscard]] bool project_loading() const { return project_loading_; }
   [[nodiscard]] auto project_loading_message() const -> QString {
     return project_loading_message_text_.Render();

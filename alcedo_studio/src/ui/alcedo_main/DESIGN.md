@@ -779,6 +779,7 @@ graph Grade deletion. Parameter editors stay in the Masks body.
 | --- | --- | --- |
 | `MaskSourceKind::LinearGradient` | `Gradient` | `mask_icons/gradient.svg` |
 | `MaskSourceKind::Radial` | `Radial` | `mask_icons/radial.svg` |
+| `MaskSourceKind::AiSegmentation` | `AI` | none until the AI Mask tool (SM9) adds its icon |
 
 Use these approved paths:
 

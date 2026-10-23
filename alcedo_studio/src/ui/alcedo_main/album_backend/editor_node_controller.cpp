@@ -73,6 +73,8 @@ auto SameProjectionContent(const EditorNodeGraphSnapshot& lhs, const EditorNodeG
       return QStringLiteral("radial");
     case alcedo::MaskSourceKind::LinearGradient:
       return QStringLiteral("linearGradient");
+    case alcedo::MaskSourceKind::AiSegmentation:
+      return QStringLiteral("aiSegmentation");
   }
   return {};
 }

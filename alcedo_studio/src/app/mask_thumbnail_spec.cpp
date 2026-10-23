@@ -166,6 +166,10 @@ void MixLinear(std::uint64_t& hash, const LinearGradientMaskParams& params) {
     layer.params = RadialParamsFromMask(mask);
   } else if (layer.kind == MaskSourceKind::LinearGradient) {
     layer.params = LinearGradientParamsFromMask(mask);
+  } else if (layer.kind == MaskSourceKind::AiSegmentation) {
+    throw std::invalid_argument(
+        "MaskThumbnailSpec: AI Segmentation Mask thumbnail evaluation is not available in this "
+        "build");
   } else {
     throw std::invalid_argument("Mask thumbnail specs support Radial and Linear Gradient only");
   }

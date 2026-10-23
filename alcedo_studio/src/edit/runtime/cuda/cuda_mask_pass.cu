@@ -118,6 +118,9 @@ auto ExecuteCudaMask(CudaRenderDevice& device, const ExecutionPlan& plan,
         plan.geometry.render_to_reference, plan.geometry.full_reference_extent,
         AnalyticKindFromMask(mask_model), RadialParamsFromMask(mask_model),
         LinearGradientParamsFromMask(mask_model));
+  } else if (std::holds_alternative<AiSegmentationMaskSource>(mask_model.source)) {
+    throw std::runtime_error(
+        "ExecuteCudaMask: AI Segmentation Mask raster evaluation is not available in this build");
   } else {
     throw std::runtime_error("ExecuteCudaMask: compiled mask does not match document");
   }
