@@ -9,8 +9,12 @@ or SAM3. SM3 is split into SM3.A, SM3.B, and SM3.C. SM3.A is complete on 2026-10
 ([phase plan](ai_segmentation_mask/phase_sm3a_segmentation_service_plan.md)); its macOS port check
 ran with the SM3.B macOS run. SM3.B is complete on Windows and macOS on 2026-10-22
 ([phase plan](ai_segmentation_mask/phase_sm3b_embedding_cache_plan.md)). SM4 is complete on Windows on
-2026-10-23 ([phase plan](ai_segmentation_mask/phase_sm4_analysis_render_plan.md)). SM2 runs after SM9
-(section 7).
+2026-10-23 ([phase plan](ai_segmentation_mask/phase_sm4_analysis_render_plan.md)). On 2026-10-23 the
+user approved the SM5 design (D16 to D22): an AI Mask edit session with its own history stack, R8
+assets in the project database, and People masks from S3OD. SM3.D
+([phase plan](ai_segmentation_mask/phase_sm3d_people_masks_from_s3od_plan.md)) and SM5
+([phase plan](ai_segmentation_mask/phase_sm5_ai_mask_source_and_session_plan.md)) are planned. SM2 runs
+after SM9 (section 7).
 
 Target release: Alcedo Studio 0.3.4. The AI Segmentation Mask is the main feature of that release.
 
@@ -63,6 +67,13 @@ decision.
 | D13 | 2026-10-22. SM2 (model download) runs after SM9. Until SM2, the sidecar reads the model files from a local model directory that the developer fills. SM3, SM7, SM8, and SM9 do not depend on SM2. |
 | D14 | 2026-10-22. SM3 is split by function, not by language: SM3.A is the service architecture (Rust and C++), SM3.B is the image embedding cache and the first optimizations, and SM3.C adds the task masks (Subject, Background, Sky, People) to the service. |
 | D15 | 2026-10-22. The lab decisions U1 (interaction not worse than Lightroom and Capture One), U3 (no edge post-processing: the edge comes from the model output), U6 (model memory budget 3 GB on Windows, 3.5 GB on macOS; models unload when the user goes back to adjusting), U7 (no interaction that follows the pointer), and U8 (float16 models are acceptable) apply to this plan. The lab MVP UI has known defects; SM9 replans the interaction instead of porting the MVP UI as it is. |
+| D16 | 2026-10-23. Two-level history. An AI Mask edit session keeps its own in-memory history stack: strokes, add and subtract points, boxes, task selections, a change of the selection mode, Feather, and Expand are session steps. Undo and Redo go to the session stack while the session is open. The live document does not change during the session. Commit publishes one `AddMask` or `ReplaceMaskSource` history operation. Cancel publishes nothing. The main history Undo and Redo do not change. |
+| D17 | 2026-10-23. Only Commit writes R8 bytes: one content-addressed `MaskAsset` per Commit, in a table of the project database. The asset is the composed model coverage before Feather and Expand, over its bounding rectangle (P3). A session step writes nothing. A reachability cleanup with the commit cleanup removes the assets that no stored commit, Version, root or checkpoint document, or open editor journal refers to. |
+| D18 | 2026-10-23. Paste to another image does not copy AI Masks. The paste result names the Masks that it skipped. An AI Mask describes the content of its own image. |
+| D19 | 2026-10-23. The format change is additive: one new project table and one new Mask source kind. The project metadata version and the Pipeline document JSON version do not change, so older projects open without change. An older build reports the real "unknown Mask source kind" error for an image with an AI Mask. |
+| D20 | 2026-10-23. Feather and Expand are fields of the AI Mask source. They apply when the runtime makes the coverage texture (SM6). The stored R8 does not contain them, so a Feather or Expand change writes no asset. |
+| D21 | 2026-10-23. People uses S3OD. The People task starts with the full-image S3OD alpha (the Subject result), because S3OD usually selects all people of a group. The person boxes of the head show at the same time. A click on a box adds or removes one person: the person alpha comes from S3OD on the crop of the person box plus a margin. The session applies the clicks as ordered Add and Subtract steps, with no special rule for overlapping neighbors. People does not use SAM 2.1 box prompts. Sky does not change. (SM3.D) |
+| D22 | 2026-10-23. S3OD stays loaded from model load to unload, because Subject, Background, and People all use it. This closes the S3OD residency item of section 8.2.6. |
 
 ### 1.3 Proposed decisions that need user approval
 
@@ -72,11 +83,11 @@ must close it.
 | ID | Proposal | Closed by |
 | --- | --- | --- |
 | P1 | Closed by D12 (2026-10-22): the sidecar runs inference; the C++ process has no ONNX Runtime. | SM1, closed |
-| P2 | Store prompts and Mask coverage in normalized ReferenceSpace. | SM5 |
-| P3 | Store the R8 coverage only over the bounding rectangle of the Mask content, plus a margin. The maximum axis is `kMaximumRasterMaskAxis` (4096). | SM5 |
+| P2 | Approved 2026-10-23: store prompts and Mask coverage in normalized ReferenceSpace. | SM5, closed |
+| P3 | Approved 2026-10-23: store the R8 coverage only over the bounding rectangle of the Mask content, plus a margin. The maximum axis is `kMaximumRasterMaskAxis` (4096). | SM5, closed |
 | P4 | Closed by U3 (D15): no edge refinement. SM7 stores the model mask after the Feather and Edge adjustment (lab function F8). | SM1, closed |
 | P5 | Draw the temporary prompt result in the QSG layer. Show committed coverage through a pipeline coverage preview request. | SM8 and SM9 |
-| P6 | Store a geometry fingerprint with each AI Mask. Mark only the Masks whose fingerprint differs from the current Lens and RAW decode geometry. | SM5 |
+| P6 | Approved 2026-10-23: store a geometry fingerprint with each AI Mask. Mark only the Masks whose fingerprint differs from the current Lens and RAW decode geometry. | SM5 (field), SM7 (notice), closed |
 | P7 | Use one persistent gRPC channel per segmentation session. SM3.A implements the channel (Ping evidence in section 8.1). The second part ("keep only the newest pending decode request while the pointer moves") is dropped: U7 removed decoding during pointer movement, and the tool decodes once per stroke, click, or box. | SM3.A |
 | P8 | Ship Luminance Range and Color Range Masks in 0.3.4, because the coverage preview of SM8 also serves them. | User decision before SM8 |
 
@@ -121,11 +132,13 @@ refined.
    the download size, and the license name. The user starts the download from that panel.
 4. When the model is installed, Alcedo Studio starts a segmentation session for the current image.
    The viewport shows a busy state until the image embedding exists.
-5. The user adds prompts. Each prompt change produces a new Candidate Mask. The viewport shows the
-   Candidate Mask over the photo.
-6. The user commits the Candidate Mask. Alcedo Studio applies Feather and Edge, stores the R8
-   coverage, and adds one Mask to the selected Color Grade node in one history operation. There is
-   no edge refinement stage (D15, U3).
+5. The user adds prompts and task masks. Each change is one step of the AI Mask edit session (D16)
+   and produces a new Candidate Mask. The viewport shows the Candidate Mask over the photo. Undo
+   and Redo move through the session steps.
+6. The user commits the Candidate Mask. Alcedo Studio stores the composed R8 coverage as one
+   project asset (D17) and adds one Mask, or replaces the source of the edited Mask, in one history
+   operation. Feather and Expand are fields of the Mask (D20). There is no edge refinement stage
+   (D15, U3).
 7. The user can cancel. Cancel leaves the document unchanged.
 
 ### 3.2 Coordinate behavior
@@ -154,6 +167,7 @@ refined.
 - Blend modes and blending between DAG nodes are excluded from this plan.
 - Luminance Range and Color Range Masks are excluded until the user closes P8.
 - Automatic Mask correction after a Lens or RAW decode change is excluded (D9).
+- Paste of an AI Mask to another image is excluded (D18).
 
 ---
 
@@ -225,8 +239,8 @@ Related plans:
 
 `include/edit/history/pipeline_history_format.hpp` states that loaders accept only the current
 format identities. The current project metadata version is `0.10.0`, and the Pipeline document JSON
-version is 7. A new Mask source kind changes the Pipeline document JSON. SM5 must state the format
-change and the result for older projects before implementation.
+version is 7. D19 closes the format change: one additive project table and one new Mask source
+kind, with no version change. Older projects open without change.
 
 ### 5.6 External model facts
 
@@ -251,9 +265,10 @@ Viewport pointer (QML)
        │    -> sidecar StartSegmentationSession(image) -> image embedding stays in the sidecar
        ├─ stroke, click, or box: sidecar DecodeSegmentationPrompt(session, prompts, mask_input)
        │    -> Candidate Mask logits -> QSG presentation over the photo
-       ├─ Subject, Background, Sky, People (SM3.C): task mask request -> Candidate Mask
-       └─ commit: Feather and Edge -> MaskAsset (R8, reference_bounds)
-            -> Color Grade owner AddMask operation -> one history operation
+       ├─ Subject, Background, Sky (SM3.C), People (SM3.D): task mask request -> Candidate Mask
+       ├─ session steps: in-memory session history stack, host composition (D16)
+       └─ commit: MaskAsset (R8, reference_bounds) -> project mask asset table (D17)
+            -> AddMask or ReplaceMaskSource -> one history operation
   -> close (back to adjusting): sidecar UnloadSegmentationModels (U6)
 Sidecar model execution
   Windows: ONNX Runtime 1.28+, DirectML    macOS: native Core ML (.mlmodelc), compute units per model
@@ -276,16 +291,19 @@ The project storage owns the R8 bytes. No owner keeps a copy of another owner's 
 | SM3.B | Image embedding cache and first optimizations | Rust service, app session | SM3.A | 800-1400; actual about 1,800 code lines | complete 2026-10-22 on Windows and macOS ([phase plan](ai_segmentation_mask/phase_sm3b_embedding_cache_plan.md)) |
 | SM3.C | Task masks in the service: Subject (S3OD), Background, Sky and People (head) | Rust service, proto, C++ client | SM3.A | 1600-2050 in two parts SM3.C.1 and SM3.C.2; actual about 3,250 code lines | Windows verified 2026-10-23; macOS port check open ([phase plan](ai_segmentation_mask/phase_sm3c_task_masks_plan.md)) |
 | SM4 | Analysis render in ReferenceSpace, image key, and prompt coordinates | geometry, editor session, app, viewer geometry | none | 1600 in two parts SM4.1 and SM4.2; actual about 1,350 | complete 2026-10-23 on Windows; measurements with SM9 ([phase plan](ai_segmentation_mask/phase_sm4_analysis_render_plan.md)) |
-| SM5 | AI Mask source model, R8 persistence, history, and project format | `edit/mask`, history, storage | SM1 | over 2000, split before start | outline |
-| SM6 | Raster `MaskEvaluate` on CUDA, OpenCL, and Metal | `edit/runtime` | SM5 | 1000-1800 | outline |
-| SM7 | Commit: Feather and Edge, asset publication, misalignment notice | app layer, `edit/mask` | SM3.A, SM4, SM5 | 800-1500 | outline |
+| SM3.D | People masks from S3OD on person crops (D21, D22) | lab pipeline, Rust service, proto, C++ client | SM3.C | 1,300-1,750 in two parts SM3.D.1 and SM3.D.2, plus 300-450 in the lab | planned ([phase plan](ai_segmentation_mask/phase_sm3d_people_masks_from_s3od_plan.md)) |
+| SM5.1 | AI Mask source kind, project mask asset table, read verification, reachability cleanup | `edit/mask`, storage, history, app | SM4 | 1,500-1,900 | planned ([phase plan](ai_segmentation_mask/phase_sm5_ai_mask_source_and_session_plan.md)) |
+| SM5.2 | AI Mask edit session: session history stack, composition, People toggles, edit of a stored AI Mask, Commit payload | app layer, segmentation service, proto | SM5.1, SM3.D | 1,300-1,700 | planned (same plan) |
+| SM5.3 | Editor integration: Open, Commit, Cancel, asset write; Paste skip and notice | editor session, Mask controller, transfer, album backend | SM5.1, SM5.2 | 1,000-1,400 | planned (same plan) |
+| SM6 | Raster `MaskEvaluate` on CUDA, OpenCL, and Metal; Feather and Expand at texture creation (D20) | `edit/runtime` | SM5.1 | 1000-1800 | outline |
+| SM7 | Misalignment notice from the geometry fingerprint (D9, P6) | app layer, `edit/mask` | SM5.1 | 300-600 | outline |
 | SM8 | Coverage preview request | render intent, compiler, three backends | SM6 | 1000-1800 | outline |
 | SM9 | AI Mask tool UI and interaction | QML, app controllers | SM3.A-C, SM4, SM7, SM8 | over 2000, split before start | outline |
 | SM2 | Segmentation model download from R2 or Hugging Face | model catalog, download service, settings | SM9 | 800-1400 | outline (moved after SM9, D13) |
 | SM10 | Product qualification | all | SM1-SM9, SM2 | 300-800 | outline |
 
-Order of work: SM3.A, SM3.B, SM3.C, SM4, SM5, SM6, SM7, SM8, SM9, SM2, SM10. SM4 and SM5 do not
-depend on SM3 and can start earlier. Until SM2, the developer fills the local model directory by
+Order of work: SM3.A, SM3.B, SM3.C, SM4, SM5.1, SM3.D, SM5.2, SM5.3, SM6, SM7, SM8, SM9, SM2, SM10. SM5.1
+does not depend on SM3 and can start before SM3.D. Until SM2, the developer fills the local model directory by
 hand (D13); the phase plans state the directory and the files.
 
 "Outline" means that the phase has a scope and an estimate only. Each outline phase receives a
@@ -421,10 +439,10 @@ rules of SM3.A and SM3.C: the port is correct when it gives the MVP results on t
 | The user check of the interaction by eye on Windows and macOS (U1) | SM9 |
 | Subject "not found" rule (F1); People list threshold and order (F4a) | SM3.C; closed by C1 to C3 of the SM3.C plan |
 | Decoder point limit of a long selection (the Core ML decoder takes 1 to 64 points; each stroke adds 4) | SM3.A rejects more than 64 points; SM9 decides the tool behavior at the limit |
-| Combination across mask types (F7) and recipe storage (F9), lab decision O1 | SM5 and SM9, after a user decision |
+| Combination across mask types (F7) and recipe storage (F9), lab decision O1 | Closed 2026-10-23 by D16 and the SM5 plan: ordered Add and Subtract components, recipe stored in the AI Mask source |
 | Training data rule U13 and the S3OD float32 tolerance (lab acceptance record, section 6) | User decision before SM2 publishes files |
 | Model unload when the user goes back to adjusting (U6) | SM3.A provides the operation; SM9 calls it |
-| S3OD residency: resident from load to unload (SM3.C C6, C10; slows the SAM 2.1 encoder by about 60 ms and a decode by 2 to 3 ms on DirectML) or loaded for each Subject computation (about 0.9 s per new image); SM3.C plan section 13.1 | SM9, with the AI Mask tool interaction |
+| S3OD residency | Closed 2026-10-23 by D22: resident from load to unload |
 
 ---
 
@@ -517,6 +535,21 @@ Scope:
 
 Open decisions: none (closed by C1 to C4 of the SM3.C plan).
 
+#### 9.2.4 SM3.D — People masks from S3OD on person crops
+
+Detailed plan: [SM3.D People masks from S3OD on person crops](ai_segmentation_mask/phase_sm3d_people_masks_from_s3od_plan.md).
+The user decided D21 and D22 on 2026-10-23. Issue: #469. Tracking issue: #468.
+
+Scope:
+
+- Change the lab MVP pipeline first. The user checks the people photos by eye.
+- Run the head at session start and keep one crop per listed person in the image entry.
+- Return the full-image S3OD alpha as the start of the People task, with the People list.
+- Return the alpha of one person: S3OD on the person crop, with the crop rectangle. The host
+  composes the person alphas (SM5.2).
+- Remove the SAM 2.1 box prompts and the sidecar union from People. Sky does not change.
+- Update the port check reference and run the port check on Windows and macOS.
+
 ### 9.3 SM4 — Analysis render in ReferenceSpace
 
 Detailed plan: [SM4 Analysis render in ReferenceSpace](ai_segmentation_mask/phase_sm4_analysis_render_plan.md).
@@ -540,16 +573,22 @@ Open decisions: none (closed by S1 and S5 of the SM4 plan).
 
 ### 9.4 SM5 — AI Mask source model, R8 persistence, history, and project format
 
+Detailed plan: [SM5 AI Mask source, asset storage, and edit session](ai_segmentation_mask/phase_sm5_ai_mask_source_and_session_plan.md).
+The user decided D16 to D20 and approved P2, P3, and P6 on 2026-10-23. Issues: SM5.1 #470, SM5.2
+#471, SM5.3 #472. Tracking issue: #468.
+
 Scope:
 
-- Add the AI Mask source variant: the R8 asset key, the prompts, the model identity, and the
-  geometry fingerprint if P6 is approved.
-- Add project-owned R8 asset storage with verification on read.
-- Integrate history, Undo, Redo, Version, Paste, reopen, and export.
-- State the project format change and the result for older projects.
+- SM5.1: the AI Mask source kind (asset key, component recipe, Feather, Expand, model set
+  identity, geometry fingerprint), its JSON and validation, the project mask asset table with
+  compression and read verification, the read path for the editor, export, and thumbnails, and the
+  reachability cleanup.
+- SM5.2: the AI Mask edit session (session history stack, host composition, People toggles, edit
+  of an existing AI Mask, the Commit payload).
+- SM5.3: the editor integration (Open, Commit, Cancel, asset write), Version, reopen, export, and
+  the Paste skip of D18.
 
-Open decisions: P2, P3, P6, the format change, and the storage shared with the Brush plan. Split this
-phase before it starts. The expected diff is more than 2000 lines.
+Open decisions: none (closed by D16 to D20, P2, P3, and P6).
 
 ### 9.5 SM6 — Raster `MaskEvaluate` on three backends
 
@@ -560,18 +599,20 @@ Scope:
   outside `reference_bounds` is zero.
 - Upload the R8 asset into the render workspace of the open image and release it when the image
   closes.
+- Apply Feather and Expand of the source when the runtime makes the coverage texture (D20). Export
+  uses the same function, so the preview coverage and the export coverage agree.
 - Compare each backend with independent expected R8 values.
 
-### 9.6 SM7 — Commit and misalignment notice
+### 9.6 SM7 — Misalignment notice
 
 Scope:
 
-- Make the coverage from the Candidate Mask: bilinear upsampling of the 256 x 256 logits
-  (threshold 0) or of the S3OD alpha, then Feather and Edge (lab function F8). There is no edge
-  refinement stage (U3).
-- Make the `MaskAsset` and publish it with one Color Grade owner operation and one history
-  operation.
-- Show the misalignment notice of D9.
+- Compare the geometry fingerprint of each AI Mask (P6, SM5.1) with the current Lens and RAW decode
+  values.
+- Show the misalignment notice of D9 for each Mask whose fingerprint differs.
+
+The composition of the Candidate Mask and the Commit moved to SM5.2 (D16, D17). Feather and Expand
+moved to SM6 (D20).
 
 ### 9.7 SM8 — Coverage preview request
 
@@ -595,8 +636,8 @@ Scope:
 - The Mask thumbnail from the R8 asset.
 - Use the lab MVP UI as a reference only (D15). Record each difference from it with its reason.
 
-Open decisions: the exact interaction set of D3, the tool behavior at the 64-point decoder
-limit, and the S3OD residency (section 8.2.6). Split this phase before it starts. The expected diff is more than 2000 lines.
+Open decisions: the exact interaction set of D3 and the tool behavior at the 64-point decoder
+limit. D22 closed the S3OD residency. Split this phase before it starts. The expected diff is more than 2000 lines.
 
 ### 9.9 SM10 — Product qualification
 
@@ -619,6 +660,9 @@ Scope:
 | Zoom and region-of-interest render | The Mask edge stays on the same image content at each zoom level. |
 | Export | The exported Mask coverage matches the preview coverage on the same image content. |
 | Undo and Redo of Mask creation | The Mask and its coverage appear and disappear with the history operation. |
+| Undo and Redo in an open AI Mask session | The Candidate Mask moves through the session steps. The main history does not change and no model runs. |
+| Cancel of an AI Mask session | The document and the project mask asset table do not change. |
+| Paste to another image | The AI Masks are not pasted. The paste result names them. |
 | Reopen | A reopened project shows the same coverage. It does not run the model. |
 | Missing model | The tool shows the download panel. The document does not change. |
 | Sidecar failure | The tool shows the real error. The document does not change. |

@@ -30,6 +30,38 @@ This includes, and is not limited to:
 
 If the requested path cannot be implemented, **fail with the real error** and state the engineering blocker. Do not ship a weaker product and call it a fix. Performance of a CUDA **debug** build is not a reason to change product decode or quality policy.
 
+### Make implementation decisions; do not leave "open decisions"
+
+Do not end an implementation with a list of "open decisions", "follow-up decisions", or similar
+items for the user. Two kinds of decisions come up during implementation, and the implementer makes
+both:
+
+- **A better approach found during the work.** If a better approach than the plan appears after
+  part of the work is done, change to it, complete it, and record the change and its reason in the
+  plan section of the phase.
+- **Detail that the plan does not specify.** If the plan is not detailed enough for the code, choose
+  the detail that agrees with the approved decisions, the source, and these rules. Record it in the
+  plan section of the phase.
+
+Ask the user only when a decision changes an approved product decision, a persisted format, or the
+user-visible behavior that the plan states. Ask before or during the work, not in the final report.
+Before implementation starts, a plan can list the user decisions that it needs. Each of these must
+be closed before the phase is complete.
+
+### Report problems as GitHub issues
+
+When you find a problem during the work, open a GitHub issue for it. Do not report it only at the
+end of a long final report. This includes a defect in existing code, a test failure that the change
+did not cause, a missing owner API, a plan error, and a blocker that stops the work.
+
+- Follow the issue rules of [CONTRIBUTING.md](CONTRIBUTING.md): the title type, the labels, and the
+  project status. Search the open issues first and comment on an existing issue instead of opening
+  a duplicate.
+- Write one issue for each problem. Give the facts that the user needs to act: the behavior, the
+  evidence (command, test name, log path), and the cause when it is known. Link the plan section.
+- Keep the final report of the task short. List the issue numbers that you opened instead of
+  repeating their content.
+
 ## Code Style and Data Updates
 
 These rules apply to all project-authored code, including tests and tooling. They are project-wide
