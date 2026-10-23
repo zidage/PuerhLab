@@ -51,7 +51,36 @@ jobs:
           done
           # grpc + protobuf: required by the semantic search proto codegen under
           # PUERHLAB_USE_SYSTEM_GRPC_PROTOBUF=ON (see alcedo_studio/src/third_party/CMakeLists.txt).
-          brew install cmake ninja qt opencv opencolorio duckdb exiv2 glib little-cms2 highway openimageio pkg-config xxhash eigen libomp grpc protobuf
+          brew install cmake ninja qt opencv opencolorio exiv2 glib little-cms2 highway openimageio pkg-config xxhash eigen libomp grpc protobuf
+
+      - name: Install DuckDB
+        # Pinned official release instead of Homebrew duckdb. Homebrew duckdb 2.0.0 reports its
+        # commit hash as the version, so `INSTALL vss` requests extensions under that hash (HTTP
+        # 404). The release build reports v1.5.6, and the extension repository has v1.5.6 builds.
+        env:
+          DUCKDB_VERSION: v1.5.6
+          LIBDUCKDB_SHA256: e0bc007d9b0094c0970ac1847a8601d10aad07cbd2910ce586ec810f77b638d6
+          DUCKDB_CLI_SHA256: 80a80c68736bd7dea53e8b02447e9759db0c8596ea156476ba396c44f54c5810
+        run: |
+          set -euo pipefail
+          duckdb_dir="${RUNNER_TEMP}/duckdb-${DUCKDB_VERSION}"
+          mkdir -p "${duckdb_dir}"
+          release_url="https://github.com/duckdb/duckdb/releases/download/${DUCKDB_VERSION}"
+          curl -fsSL --retry 3 -o "${RUNNER_TEMP}/libduckdb.zip" "${release_url}/libduckdb-osx-universal.zip"
+          curl -fsSL --retry 3 -o "${RUNNER_TEMP}/duckdb_cli.zip" "${release_url}/duckdb_cli-osx-universal.zip"
+          echo "${LIBDUCKDB_SHA256}  ${RUNNER_TEMP}/libduckdb.zip" | shasum -a 256 -c -
+          echo "${DUCKDB_CLI_SHA256}  ${RUNNER_TEMP}/duckdb_cli.zip" | shasum -a 256 -c -
+          unzip -q -o "${RUNNER_TEMP}/libduckdb.zip" -d "${duckdb_dir}"
+          unzip -q -o "${RUNNER_TEMP}/duckdb_cli.zip" -d "${duckdb_dir}"
+          # The release dylib has the install name @rpath/libduckdb.dylib. Give it its absolute
+          # path, as the Homebrew dylib has, so the build-tree executables find it without an
+          # rpath entry. The change invalidates the signature, so sign it again (ad hoc).
+          install_name_tool -id "${duckdb_dir}/libduckdb.dylib" "${duckdb_dir}/libduckdb.dylib"
+          codesign --force --sign - "${duckdb_dir}/libduckdb.dylib"
+          "${duckdb_dir}/duckdb" --version
+          echo "${duckdb_dir}" >> "$GITHUB_PATH"
+          echo "ALCEDO_DUCKDB_INC=${duckdb_dir}" >> "$GITHUB_ENV"
+          echo "ALCEDO_DUCKDB_LIB=${duckdb_dir}/libduckdb.dylib" >> "$GITHUB_ENV"
 
       - name: Pre-install DuckDB extensions
         # Semantic search and image-description FTS need DuckDB extensions. Fresh
@@ -83,6 +112,8 @@ jobs:
       - name: Configure
         run: |
           cmake --preset macos_arm_metal_ci \
+            -DDUCKDB_INC="${ALCEDO_DUCKDB_INC}" \
+            -DDUCKDB_LIB="${ALCEDO_DUCKDB_LIB}" \
             -DALCEDO_DUCKDB_VSS_EXTENSION="${ALCEDO_DUCKDB_VSS_EXTENSION}" \
             -DALCEDO_DUCKDB_FTS_EXTENSION="${ALCEDO_DUCKDB_FTS_EXTENSION}"
 

@@ -20,7 +20,11 @@ image = "0.25.10"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokenizers = { version = "0.20", default-features = false, features = ["onig"] }
-ort = { version = "2.0.0-rc.12", default-features = false, features = ["std", "ndarray", "download-binaries", "copy-dylibs", "api-24", "tls-rustls", "directml", "coreml"] }
+# ONNX Runtime 1.28 or later: ONNX Runtime 1.24 to 1.27 fold the two `If` nodes of the SAM 2.1
+# tiny image encoder into freed memory (microsoft/onnxruntime#29071), so the AI Mask encoder output
+# is wrong. `ort` 2.0.0-rc.13 is the last release that builds with Rust 1.91. The pyke binaries
+# are split by execution provider, so DirectML and Core ML are target-specific features below.
+ort = { version = "=2.0.0-rc.13", default-features = false, features = ["std", "ndarray", "download-binaries", "copy-dylibs", "api-28", "tls-rustls"] }
 sha2 = "0.10"
 uuid = { version = "1", features = ["v4"] }
 zeroize = { version = "1", features = ["alloc"] }
@@ -37,7 +41,11 @@ reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
 base64 = "0.22"
 
+[target.'cfg(windows)'.dependencies]
+ort = { version = "=2.0.0-rc.13", default-features = false, features = ["directml"] }
+
 [target.'cfg(target_os = "macos")'.dependencies]
+ort = { version = "=2.0.0-rc.13", default-features = false, features = ["coreml"] }
 apple-cf = "0.9.3"
 coreml = "0.3.5"
 zip = { version = "2", default-features = false, features = ["deflate"] }

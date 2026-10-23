@@ -738,6 +738,22 @@ gtest_discover_tests(AiSidecarRuntimeServiceTest TEST_PREFIX "AiSidecarRuntimeSe
   PROPERTIES LABELS "ci_core_flow")
 alcedo_register_test_target(AiSidecarRuntimeServiceTest app ci_core)
 
+# SM3.A: AI Mask segmentation client (in-process gRPC server) and tool lifecycle service.
+add_executable(SegmentationClientTest ${ALCEDO_TEST_ROOT}/app/segmentation_client_test.cpp)
+target_include_directories(SegmentationClientTest PUBLIC ${ALCEDO_INCLUDE_DIR})
+target_link_libraries(SegmentationClientTest SidecarClient AiProto GTest::gtest_main)
+gtest_discover_tests(SegmentationClientTest TEST_PREFIX "SegmentationClientTest."
+  PROPERTIES LABELS "ci_core_flow")
+alcedo_register_test_target(SegmentationClientTest app ci_core)
+
+add_executable(AiMaskSegmentationServiceTest
+  ${ALCEDO_TEST_ROOT}/app/ai_mask_segmentation_service_test.cpp)
+target_include_directories(AiMaskSegmentationServiceTest PUBLIC ${ALCEDO_INCLUDE_DIR})
+target_link_libraries(AiMaskSegmentationServiceTest AiMaskSegmentationService GTest::gtest_main)
+gtest_discover_tests(AiMaskSegmentationServiceTest TEST_PREFIX "AiMaskSegmentationServiceTest."
+  PROPERTIES LABELS "ci_core_flow")
+alcedo_register_test_target(AiMaskSegmentationServiceTest app ci_core)
+
 # Frontend 1b: multi-profile provider cards, JSON persistence, and generated sidecar configs.
 add_executable(AiProviderProfileTest ${ALCEDO_TEST_ROOT}/app/ai_provider_profile_test.cpp)
 target_include_directories(AiProviderProfileTest PUBLIC ${ALCEDO_INCLUDE_DIR})
