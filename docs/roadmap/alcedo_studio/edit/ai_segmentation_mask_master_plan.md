@@ -16,7 +16,8 @@ user approved the SM5 design (D16 to D22): an AI Mask edit session with its own 
 assets in the project database, and People masks from S3OD. SM3.D is complete on Windows and macOS
 on 2026-10-23 ([phase plan](ai_segmentation_mask/phase_sm3d_people_masks_from_s3od_plan.md)). In SM5
 ([phase plan](ai_segmentation_mask/phase_sm5_ai_mask_source_and_session_plan.md)), SM5.1, SM5.2,
-and SM5.3 are complete on 2026-10-23. SM2 runs
+and SM5.3 are complete on 2026-10-23. SM6 is complete on Windows and macOS on 2026-10-24
+([phase plan](ai_segmentation_mask/phase_sm6_raster_mask_evaluate_plan.md)). SM2 runs
 after SM9 (section 7).
 
 Target release: Alcedo Studio 0.3.4. The AI Segmentation Mask is the main feature of that release.
@@ -298,7 +299,7 @@ The project storage owns the R8 bytes. No owner keeps a copy of another owner's 
 | SM5.1 | AI Mask source kind, project mask asset table, read verification, reachability cleanup | `edit/mask`, storage, history, app | SM4 | 1,500-1,900 | complete ([phase plan](ai_segmentation_mask/phase_sm5_ai_mask_source_and_session_plan.md)) |
 | SM5.2 | AI Mask edit session: session history stack, composition, People toggles, edit of a stored AI Mask, Commit payload | app layer, segmentation service, proto | SM5.1, SM3.D | 1,300-1,700 | complete (same plan) |
 | SM5.3 | Editor integration: Open, Commit, Cancel, asset write; Paste skip and notice | editor session, Mask controller, transfer, album backend | SM5.1, SM5.2 | 1,000-1,400 | complete (same plan) |
-| SM6 | Raster `MaskEvaluate` on CUDA, OpenCL, and Metal; Feather and Expand at texture creation (D20) | `edit/mask`, `edit/runtime`, three backends, app | SM5.1 | 2,000-2,900 in two parts SM6.1 and SM6.2 | SM6.1 complete 2026-10-24; SM6.2 in progress ([phase plan](ai_segmentation_mask/phase_sm6_raster_mask_evaluate_plan.md)) |
+| SM6 | Raster `MaskEvaluate` on CUDA, OpenCL, and Metal; Feather and Expand at texture creation (D20) | `edit/mask`, `edit/runtime`, three backends, app | SM5.1 | 2,000-2,900 in two parts SM6.1 and SM6.2 | complete 2026-10-24 on Windows and macOS ([phase plan](ai_segmentation_mask/phase_sm6_raster_mask_evaluate_plan.md)) |
 | SM7 | Misalignment notice from the geometry fingerprint (D9, P6) | app layer, `edit/mask` | SM5.1 | 300-600 | outline |
 | SM8 | Coverage preview request | render intent, compiler, three backends | SM6 | 1000-1800 | outline |
 | SM9 | AI Mask tool UI and interaction | QML, app controllers | SM3.A-C, SM4, SM7, SM8 | over 2000, split before start | outline |

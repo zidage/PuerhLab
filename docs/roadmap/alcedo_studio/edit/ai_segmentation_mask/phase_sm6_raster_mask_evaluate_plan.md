@@ -2,7 +2,7 @@
 
 Date: 2026-10-24.
 
-Status: SM6.1 complete (2026-10-24, section 14.1). SM6.2 in progress.
+Status: complete on Windows and macOS on 2026-10-24. SM6.1 section 14.1, SM6.2 section 14.2.
 
 Parent plan: [AI Segmentation Mask Master Plan](../ai_segmentation_mask_master_plan.md), section
 9.5. Issues: SM6.1 #492, SM6.2 #493. Tracking issue: #491.
@@ -215,7 +215,7 @@ device texture; the host bytes are released after the upload.
 | Phase | Result | Main modules | Dependency | Expected diff | Status |
 | --- | --- | --- | --- | ---: | --- |
 | SM6.1 | Coverage texture function (F8), reader port, and its path from the project to the render workspace | `edit/mask`, `edit/runtime` port, `edit/pipeline`, `app`, album backend | SM5.1 | 900-1,300 | complete (14.1) |
-| SM6.2 | Workspace texture cache, compiler change, raster `MaskEvaluate` on CUDA, OpenCL, and Metal | `edit/runtime`, three backends | SM6.1 | 1,100-1,600 | planned |
+| SM6.2 | Workspace texture cache, compiler change, raster `MaskEvaluate` on CUDA, OpenCL, and Metal | `edit/runtime`, three backends | SM6.1 | 1,100-1,600 | complete (14.2) |
 
 SM6 is split in two parts because one part with the host function, the port path, and three
 backend kernels with their tests can pass 2,000 lines. SM6.1 changes no render result: the passes
@@ -295,10 +295,10 @@ entry stays. The pass output has `render_extent` and R8 format, as the analytic 
 
 **Exit criteria.**
 
-- [ ] The tests of section 8.2 pass on CUDA and OpenCL (Windows) and on Metal (macOS).
-- [ ] The existing mask, grade, and geometry tests of the changed targets pass, or each failure
+- [x] The tests of section 8.2 pass on CUDA and OpenCL (Windows) and on Metal (macOS).
+- [x] The existing mask, grade, and geometry tests of the changed targets pass, or each failure
       also fails on `main`.
-- [ ] `AlbumBackendLib` and `alcedo_main` build on Windows; the Metal targets build on macOS.
+- [x] `AlbumBackendLib` and `alcedo_main` build on Windows; the Metal targets build on macOS.
 
 **Expected diff.** 1,100-1,600 lines (production 550-750, tests 500-750, plan 80).
 
@@ -527,17 +527,99 @@ The worst case is above 1 s: issue #494.
 ### 14.2 SM6.2
 
 ```text
-Phase / date / status:
-Source revision and branch:
-Actual changed modules:
-Implemented behavior:
-Explicitly unimplemented items:
-Primary success call chain:
-Primary failure and restore call chain:
-Build and test commands with exit codes:
-Discovered / passed / failed / skipped counts:
-Manual verification:
-Performance or resource evidence, if required:
-Evidence path:
-Remaining defects or unavailable platforms:
+Phase / date / status: SM6.2 / 2026-10-24 / complete.
+Source revision and branch: base 96d2ef25 (SM6.1); branch
+  feature/ai-segmentation-sm6-2-raster-mask-evaluate.
+Actual changed modules: edit/runtime (MaskCoverageTextureCache, workspace member, compiler),
+  CUDA, OpenCL, and Metal mask passes and kernels, tests.
+Implemented behavior: R6 to R11; the steps 1 to 6 of section 7.2.
+Explicitly unimplemented items: none of SM6.2. The Mask thumbnail from R8 stays an M21 error until
+  SM9.
+Primary success call chain: section 14.2.1.
+Primary failure and restore call chain: section 14.2.1.
+Build and test commands with exit codes: section 14.2.2.
+Discovered / passed / failed / skipped counts: section 14.2.2.
+Manual verification: none; SM9 is the first producer of AI Masks in the product.
+Performance or resource evidence, if required: not required (section 9); the texture cost is
+  in 14.1.3.
+Evidence path: build/tmp/sm6/ on Windows and on the Mac (removed at completion).
+Remaining defects or unavailable platforms: #496 (six multi-grade tests fail on main on OpenCL
+  and Metal) and #497 (five Metal LLF and Mask Mix tests fail on main). Both fail the same way on
+  clean 7eb94016.
 ```
+
+#### 14.2.1 Call chains
+
+```text
+GraphCompiler::Compile -> CompileGradeOwnedMaskStack -> MaskEvaluate for each Mask (AI included)
+ExecuteCudaMask / ExecuteOpenClMask / ExecuteMetalMask (compiled AI source)
+  -> RequireMaskModel -> AiSegmentationMaskSource
+  -> Workspace().MaskCoverage().Acquire(source, Workspace().MaskAssets(), Device(), context)
+     key = asset key / analysis size / feather bits / expand
+     hit -> entry (last used submission, LRU tick)
+     miss -> MaskAssetReader::Read -> MakeAiMaskCoverageTexture -> EvictFor (LRU, not used by
+             this frame or an in-flight submission, budget 256 MiB) -> CreateTexture2D(R8)
+             -> UploadTexture2D -> entry
+  -> MakeRasterMaskSamplingPlan(geometry, texture bounds, texture extent)
+  -> RasterMaskSamplesPerAxis -> raster kernel: S x S bilinear samples, 0 outside UV [0, 1],
+     mean, invert and opacity of the Mask, R8 -> MaskUnion -> Grade Mix
+BasicRenderWorkspace::ReleaseSessionResources -> MaskCoverage().Clear()
+```
+
+```text
+Reader error (missing, corrupt, no store), texture error, or upload error
+  -> no cache entry -> ExecuteXMask throws -> the render fails with the message; the fixture
+     cancels the render (BasicRenderDevice::CancelRender), as a renderer does.
+```
+
+#### 14.2.2 Evidence
+
+Windows (PowerShell, repository root):
+
+```powershell
+cmd /c scripts\msvc_env.cmd --build --preset win_debug --parallel 4 --target GpuDagCudaMaskTest GpuDagOpenClGradeTest GpuDagRawInputTest GpuDagModelGraphTest AiMaskCoverageTextureTest AlbumBackendLib alcedo_main   # exit 0 (after formatting)
+ctest --test-dir build/debug -j 1 --output-on-failure -R "^(GpuDagCudaMaskTest|GpuDagOpenClGradeTest|GpuDagRawInputTest|GpuDagModelGraphTest|AiMaskCoverageTextureTest)\."   # exit 8, 439/445 passed; the six failures are #496
+```
+
+macOS (`macos_debug` with `-DALCEDO_BUILD_TESTS=ON`, `build/macos-debug`, Apple silicon):
+
+```sh
+cmake --preset macos_debug -DALCEDO_BUILD_TESTS=ON   # exit 0
+cmake --build build/macos-debug --target GpuDagMetalGradeTest AiMaskCoverageTextureTest GpuDagRawInputTest -j 8   # exit 0
+ctest -j 1 --output-on-failure -R "^(GpuDagMetalGradeTest|AiMaskCoverageTextureTest|GpuDagRawInputTest)\."   # exit 8, 263/274 passed
+```
+
+| Test (section 8.2) | CUDA | OpenCL | Metal |
+| --- | --- | --- | --- |
+| `AiMaskCoverageMatchesIndependentReferenceAtFullAndPreviewScale` | PASS | PASS | PASS |
+| `AiMaskCoverageFollowsCropAndRotation` | PASS | PASS | PASS |
+| `AiMaskOutsideTextureBoundsIsZero` | PASS | PASS | PASS |
+| `AiMaskInvertAndOpacityApplyBeforeUnion` | PASS | PASS | PASS |
+| `AiMaskFeatherAndExpandChangeCoverage` | PASS | PASS | PASS |
+| `AiMaskCoverageTextureUploadsOncePerAssetAndEdge` | PASS | PASS | PASS |
+| `AiMaskMissingAssetFailsRender` | PASS | PASS | PASS |
+
+The 11 macOS failures are six multi-grade tests (#496) and five Metal LLF and Mask Mix tests
+(#497). Clean `main` (`7eb94016`, only `GpuDagMetalGradeTest` rebuilt in the same build directory)
+fails the same 11 tests (51/62). On Windows, clean `main` fails the same six OpenCL multi-grade
+tests (9/15 of `OpenClMultiGradeFixture`).
+
+`GpuDagGraphCompiler.AiSegmentationMaskCompilesToMaskEvaluate` (`GpuDagRawInputTest`) passes on
+Windows and macOS. `AiMaskCoverageTextureTest` passes 8/8 on Windows and macOS. Suite totals on
+Windows: `GpuDagCudaMaskTest` 17/17, `GpuDagOpenClGradeTest` 73/79, `GpuDagRawInputTest` 196/196, `GpuDagModelGraphTest` 145/145. `AlbumBackendLib` and `alcedo_main` build. The full
+suite was not run (only the user starts it).
+
+#### 14.2.3 Implementation decisions
+
+- The shared checks of section 8.2 live in `ai_mask_raster_test_support.hpp` with the host
+  reference of R7 and an in-memory reader. Each backend test file adapts its fixture to
+  `AiMaskBackendHarness`, so the three backends run the same assertions. The test analysis image
+  is 64 x 48 (the full reference of the test source); render scales 1, 0.5, and 0.25 give 1, 2,
+  and 4 samples per axis.
+- `RasterMaskSamplesPerAxis` is `clamp(ceil(2^mip_level - 1e-3), 1, 8)`; the allowance keeps an
+  exact footprint of N texels at N samples.
+- OpenCL reads the four texels with the nearest clamp-to-edge sampler at integer coordinates and
+  interpolates in the kernel, as CUDA and Metal do, so no backend uses hardware filtering.
+- On Metal the cache upload records a blit before the pass opens its compute encoder.
+- The cache keeps its entries in `std::unique_ptr` so a returned entry stays valid while the same
+  frame acquires the texture of another AI Mask.
