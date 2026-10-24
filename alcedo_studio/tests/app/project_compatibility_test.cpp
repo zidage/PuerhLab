@@ -7,9 +7,12 @@
 //
 // tests/resources/compat/raw_project_abdb000c8.alcd was packed by build abdb000c8 (main before
 // raster input). It holds one CI RAW image with one exposure commit. The JSON beside it records
-// the committed document and the render hash of support/project_compat_render.hpp on that
-// build. The hash is for CUDA on the GPU that recorded it, so only a CUDA build compares it;
-// every build checks that the project opens with the same document and renders.
+// the committed document of that build and the render hash of
+// support/project_compat_render.hpp on the build that render_hash_commit names. The render
+// executor sets no backend, so it uses the default Auto preference (to be removed, issue #488),
+// which takes OpenCL first on Windows: the hash is an OpenCL render on the NVIDIA GeForce RTX
+// 3080 Laptop GPU of a Windows CUDA build, so only a CUDA build compares it. Every build checks
+// that the project opens with the same document and renders.
 
 #include <duckdb.h>
 #include <gtest/gtest.h>
@@ -102,7 +105,8 @@ TEST(ProjectCompatibilityTest, ProjectWrittenByCurrentMainOpensAndRendersUnchang
                                                        element_id, image_id);
     EXPECT_NE(hash, 0u);
 #ifdef HAVE_CUDA
-    // The recorded hash is a CUDA render; other backends round differently.
+    // The recorded hash is an OpenCL render (see the file comment); other backends and devices
+    // round differently.
     EXPECT_EQ(std::to_string(hash), expected.at("render_hash").get<std::string>());
 #endif
   }

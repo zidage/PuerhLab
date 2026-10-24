@@ -910,7 +910,6 @@ mod tests {
         assert_eq!(response.dimension as usize, response.embedding.len());
         assert!(!response.embedding.is_empty());
         assert_eq!(response.model_name, "plhery/mobileclip2-onnx:s2");
-        assert!(response.elapsed_ms <= u64::MAX);
     }
 
     #[tokio::test]
