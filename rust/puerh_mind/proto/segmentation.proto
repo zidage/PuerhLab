@@ -104,6 +104,10 @@ message StartSegmentationSessionResponse {
   string session_id = 2;
   int64 encoder_ms = 3;  // encoder, head, and person crops; 0 for a cached image
   bool from_cache = 4;
+  // Size of the image entry of the session: the request size for new pixels, the cached size for
+  // a start from the cache. 0 when the start fails.
+  uint32 image_width = 5;
+  uint32 image_height = 6;
 }
 
 enum SegmentationPointLabel {

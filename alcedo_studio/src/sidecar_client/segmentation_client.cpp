@@ -164,6 +164,8 @@ class GrpcSegmentationClient final : public SegmentationClient {
     result.session_id = response.session_id();
     result.encoder_ms = response.encoder_ms();
     result.from_cache = response.from_cache();
+    result.image_width  = response.image_width();
+    result.image_height = response.image_height();
     result.image_not_cached =
         response.header().error_code() == alcedo::ai::AI_ERROR_IMAGE_NOT_CACHED;
     return result;

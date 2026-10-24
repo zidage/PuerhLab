@@ -115,6 +115,10 @@ pub struct StartedSession {
     pub encoder_ms: u64,
     /// True when the session uses a cached image embedding.
     pub from_cache: bool,
+    /// Size of the image entry of the session (SM5 decision M14): the size of the pixels for a new
+    /// image, and the size of the cached entry for a cache hit.
+    pub image_width: u32,
+    pub image_height: u32,
 }
 
 /// The masks of one decode request.
@@ -624,12 +628,15 @@ impl SegmentationEngine {
         if !key.is_empty() {
             let cached = self.cache.lock().map_err(|_| poisoned("cache"))?.get(key);
             if let Some(entry) = cached {
+                let (image_width, image_height) = (entry.width as u32, entry.height as u32);
                 let session_id = self.insert_session(entry)?;
                 info!("started segmentation session {session_id} from the cached image {key:?}");
                 return Ok(StartedSession {
                     session_id,
                     encoder_ms: 0,
                     from_cache: true,
+                    image_width,
+                    image_height,
                 });
             }
         }
@@ -690,6 +697,8 @@ impl SegmentationEngine {
             session_id,
             encoder_ms,
             from_cache: false,
+            image_width: width,
+            image_height: height,
         })
     }
 
@@ -1257,6 +1266,8 @@ mod tests {
         assert!(engine.end_session(&first.session_id).expect("end"));
         let cached = start_key_only(&engine, "photo-a").expect("cached start");
         assert!(cached.from_cache);
+        assert_eq!((first.image_width, first.image_height), (64, 48));
+        assert_eq!((cached.image_width, cached.image_height), (64, 48));
         assert_eq!(calls.encoder_runs.load(Ordering::SeqCst), 1);
         engine
             .decode(&cached.session_id, click(0.5, 0.5))

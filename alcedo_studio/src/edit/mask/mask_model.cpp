@@ -430,6 +430,10 @@ auto BrushSourceHasParameterizedPayload(const BrushMaskSource& brush) -> bool {
 }
 #endif
 
+void ValidateAiSegmentationMaskSource(const AiSegmentationMaskSource& source) {
+  ValidateAiSegmentation(source);
+}
+
 auto GetMaskSourceKind(const MaskSource& source) -> MaskSourceKind {
 #ifdef ALCEDO_ENABLE_BRUSH_MASK
   if (std::holds_alternative<BrushMaskSource>(source)) {

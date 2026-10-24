@@ -71,6 +71,9 @@ class FakeSegmentationClient final : public sidecar_client::SegmentationClient {
     result.status     = Ok();
     result.session_id = session_id;
     result.from_cache = image.pixels.empty();
+    // The cached image entry is 4096 x 2731.
+    result.image_width  = image.pixels.empty() ? 4096 : image.width;
+    result.image_height = image.pixels.empty() ? 2731 : image.height;
     return result;
   }
   auto Decode(const std::string& session_id, const SegmentationPrompt& prompt,
@@ -225,6 +228,20 @@ TEST(AiMaskSegmentationServiceTest, StartCachedImageEndsPreviousSessionAndSendsK
   EXPECT_EQ(under_test.log->back(), "decode s2 0");
 }
 
+TEST(AiMaskSegmentationServiceTest, StartResultsCarryTheSessionImageSize) {
+  ServiceUnderTest under_test;
+
+  const auto       with_pixels = under_test.service->StartImage(Image(8), "photo-a");
+  const auto       key_only    = under_test.service->StartCachedImage("cached");
+
+  ASSERT_TRUE(with_pixels.status.ok);
+  EXPECT_EQ(with_pixels.image_width, 8U);
+  EXPECT_EQ(with_pixels.image_height, 4U);
+  ASSERT_TRUE(key_only.status.ok);
+  EXPECT_EQ(key_only.image_width, 4096U);
+  EXPECT_EQ(key_only.image_height, 2731U);
+}
+
 TEST(AiMaskSegmentationServiceTest, StartCachedImageMissKeepsNoSession) {
   ServiceUnderTest under_test;
 
@@ -249,13 +266,13 @@ TEST(AiMaskSegmentationServiceTest, StartCachedImageWithEmptyKeyFailsWithoutCall
 TEST(AiMaskSegmentationServiceTest, RunTaskWithoutSessionFailsWithoutCall) {
   ServiceUnderTest under_test;
 
-  const auto result = under_test.service->RunTask(SegmentationTask::kSky);
+  const auto       result = under_test.service->RunTask(SegmentationTask::kSky, std::nullopt);
 
   EXPECT_FALSE(result.status.ok);
   EXPECT_FALSE(result.found);
   EXPECT_TRUE(under_test.log->empty());
   ASSERT_TRUE(under_test.service->Close().ok);
-  EXPECT_FALSE(under_test.service->RunTask(SegmentationTask::kSky).status.ok);
+  EXPECT_FALSE(under_test.service->RunTask(SegmentationTask::kSky, std::nullopt).status.ok);
 }
 
 TEST(AiMaskSegmentationServiceTest, RunTaskUsesCurrentSession) {
@@ -264,7 +281,7 @@ TEST(AiMaskSegmentationServiceTest, RunTaskUsesCurrentSession) {
   ASSERT_TRUE(under_test.service->StartImage(Image(16)).status.ok);
 
   EXPECT_TRUE(under_test.service->RunTask(SegmentationTask::kPerson, 2U).found);
-  EXPECT_TRUE(under_test.service->RunTask(SegmentationTask::kSubject).status.ok);
+  EXPECT_TRUE(under_test.service->RunTask(SegmentationTask::kSubject, std::nullopt).status.ok);
 
   EXPECT_EQ(*under_test.log, (CallLog{"start s1 8 96", "end s1", "start s2 16 192",
                                       "task s2 5 person 2", "task s2 1"}));
