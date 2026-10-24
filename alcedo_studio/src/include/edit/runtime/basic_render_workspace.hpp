@@ -14,6 +14,7 @@
 #include "edit/runtime/graph_image_cache.hpp"
 #include "edit/runtime/lut_resource_resolver.hpp"
 #include "edit/runtime/mask_asset_reader.hpp"
+#include "edit/runtime/mask_coverage_texture_cache.hpp"
 #include "edit/runtime/node_result_cache.hpp"
 #include "edit/runtime/parameter_arena.hpp"
 #include "edit/runtime/result_persistence.hpp"
@@ -101,6 +102,12 @@ class BasicRenderWorkspace {
     mask_assets_ = reader ? std::move(reader) : DefaultMaskAssetReader();
   }
   [[nodiscard]] auto MaskAssets() const -> const MaskAssetReader& { return *mask_assets_; }
+
+  /// Device coverage textures of AI Masks (SM6 R6). Cleared by ReleaseSessionResources.
+  [[nodiscard]] auto MaskCoverage() -> MaskCoverageTextureCache<Backend>& { return mask_coverage_; }
+  [[nodiscard]] auto MaskCoverage() const -> const MaskCoverageTextureCache<Backend>& {
+    return mask_coverage_;
+  }
 
   /**
    * @brief Persistence used by the current @ref BeginRender until End/Cancel.
@@ -313,6 +320,7 @@ class BasicRenderWorkspace {
     }
     images_.Clear();
     values_.Clear();
+    mask_coverage_.Clear();
     invalidation_.Clear();
     validity_prepared_ = false;
     scene_work_.Release();
@@ -372,6 +380,7 @@ class BasicRenderWorkspace {
   RuntimeInvalidationState       invalidation_{};
   std::shared_ptr<const LutResourceResolver> lut_resources_ = DefaultLutResourceResolver();
   std::shared_ptr<const MaskAssetReader>     mask_assets_   = DefaultMaskAssetReader();
+  MaskCoverageTextureCache<Backend>          mask_coverage_{};
   GraphValueId                   persist_sensor_{};
   std::uint64_t                  parameter_layout_hash_ = 0;
   ResultPersistenceScope         persistence_scope_     = ResultPersistenceScope::AllCurrentResults;

@@ -19,6 +19,7 @@
 #include "../graph/grade_owned_mask_support.hpp"
 #include "../graph/test_camera_profile.hpp"
 #include "../input/prepared_raw_test_support.hpp"
+#include "ai_mask_raster_test_support.hpp"
 #include "edit/input/raw_input_loader.hpp"
 #include "edit/operators/models/scalar_operator_model.hpp"
 #include "edit/runtime/cuda/cuda_develop_pass.hpp"
@@ -148,6 +149,37 @@ class CudaMaskFixture : public ::testing::Test {
                              pixels.size() * sizeof(Rgba)),
         device_.CommandContext());
     return pixels;
+  }
+
+  /// SM6.2: the shared AI Mask checks over this fixture, at the 64 x 48 analysis size.
+  auto AiMaskHarness() -> ai_mask_test::AiMaskBackendHarness {
+    SetExtent(ai_mask_test::kAnalysisExtent.width, ai_mask_test::kAnalysisExtent.height);
+    ai_mask_test::AiMaskBackendHarness h;
+    h.document    = [this]() -> PipelineDocument& { return document_; };
+    h.compile     = [this](RenderRequest request) { Compile(request); };
+    h.plan        = [this]() -> const ExecutionPlan& { return plan_; };
+    h.render_mask = [this] {
+      device_.BeginRender();
+      try {
+        (void)ExecuteCudaMask(device_, plan_, document_);
+      } catch (...) {
+        device_.CancelRender();
+        throw;
+      }
+      device_.EndRender();
+      device_.WaitIdle();
+    };
+    h.download_mask = [this] { return DownloadMask(); };
+    h.set_reader    = [this](std::shared_ptr<const MaskAssetReader> reader) {
+      device_.Workspace().SetMaskAssets(std::move(reader));
+    };
+    h.cache_entries   = [this] { return device_.Workspace().MaskCoverage().EntryCount(); };
+    h.cache_uploads   = [this] { return device_.Workspace().MaskCoverage().UploadCount(); };
+    h.release_session = [this] {
+      device_.WaitIdle();
+      device_.Workspace().ReleaseSessionResources();
+    };
+    return h;
   }
 
   std::uint32_t    width_  = 0;
@@ -463,6 +495,41 @@ TEST_F(CudaMaskFixture, CudaMultiMaskUnionMatchesReference) {
         DownloadR8(plan_.grade_nodes[1].mask_output), second);
     EXPECT_NE(primary, second);
   }
+}
+
+TEST_F(CudaMaskFixture, AiMaskCoverageMatchesIndependentReferenceAtFullAndPreviewScale) {
+  auto h = AiMaskHarness();
+  ai_mask_test::CheckAiMaskMatchesReferenceAtFullAndPreviewScale(h);
+}
+
+TEST_F(CudaMaskFixture, AiMaskCoverageFollowsCropAndRotation) {
+  auto h = AiMaskHarness();
+  ai_mask_test::CheckAiMaskFollowsCropAndRotation(h);
+}
+
+TEST_F(CudaMaskFixture, AiMaskOutsideTextureBoundsIsZero) {
+  auto h = AiMaskHarness();
+  ai_mask_test::CheckAiMaskOutsideTextureBoundsIsZero(h);
+}
+
+TEST_F(CudaMaskFixture, AiMaskInvertAndOpacityApplyBeforeUnion) {
+  auto h = AiMaskHarness();
+  ai_mask_test::CheckAiMaskInvertAndOpacityApplyBeforeUnion(h);
+}
+
+TEST_F(CudaMaskFixture, AiMaskFeatherAndExpandChangeCoverage) {
+  auto h = AiMaskHarness();
+  ai_mask_test::CheckAiMaskFeatherAndExpandChangeCoverage(h);
+}
+
+TEST_F(CudaMaskFixture, AiMaskCoverageTextureUploadsOncePerAssetAndEdge) {
+  auto h = AiMaskHarness();
+  ai_mask_test::CheckAiMaskCoverageTextureUploadsOncePerAssetAndEdge(h);
+}
+
+TEST_F(CudaMaskFixture, AiMaskMissingAssetFailsRender) {
+  auto h = AiMaskHarness();
+  ai_mask_test::CheckAiMaskMissingAssetFailsRender(h);
 }
 
 }  // namespace

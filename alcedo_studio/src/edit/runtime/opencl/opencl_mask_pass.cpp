@@ -15,6 +15,7 @@
 #include "edit/mask/mask_model.hpp"
 #include "edit/runtime/compiled_grade_mask.hpp"
 #include "edit/runtime/compiled_mask_stack.hpp"
+#include "edit/runtime/mask_coverage_texture_cache.hpp"
 #include "edit/runtime/opencl/opencl_dag_programs.hpp"
 #include "opencl/opencl_api_counters.hpp"
 #include "opencl/opencl_check.hpp"
@@ -49,6 +50,20 @@ struct MaskAnalyticParams {
 };
 
 static_assert(sizeof(MaskAnalyticParams) == 120);
+
+/// Layout of `MaskRasterParams` in mask.cl (SM6 R7).
+struct MaskRasterParams {
+  float         render_to_texture_uv[9]{};
+  std::uint32_t width          = 0;
+  std::uint32_t height         = 0;
+  std::uint32_t texture_width  = 0;
+  std::uint32_t texture_height = 0;
+  std::uint32_t samples        = 1;
+  std::uint32_t invert         = 0;
+  float         opacity        = 1.0f;
+};
+
+static_assert(sizeof(MaskRasterParams) == 64);
 
 auto EnsureOutput(OpenClRenderWorkspace& workspace, const GraphValueId& id, Extent2D extent)
     -> ResourceLease<OpenClBackend>& {
@@ -130,6 +145,31 @@ void EncodeAnalytic(OpenClRenderDevice& device, OpenClBackend::Texture2D& output
   Dispatch2D(device, kernel, output.Width(), output.Height(), "analytic mask");
 }
 
+void EncodeRaster(OpenClRenderDevice& device, OpenClBackend::Texture2D& output,
+                  const AiSegmentationMaskSource& source, const MaskModel& mask,
+                  const ExecutionPlan& plan) {
+  auto&       workspace = device.Workspace();
+  const auto& coverage  = workspace.MaskCoverage().Acquire(
+      source, workspace.MaskAssets(), workspace.Device(), device.CommandContext());
+  const auto sampling = MakeRasterMaskSamplingPlan(
+      plan.geometry, coverage.descriptor.reference_bounds, coverage.descriptor.extent);
+  const auto kernel = OpenClKernelCache::Instance().GetKernel(
+      OpenCL::GpuDag::kMaskProgramName, OpenCL::GpuDag::kMaskRasterKernelName);
+  MaskRasterParams params;
+  SetMatrix(params.render_to_texture_uv, sampling.render_to_texture_uv);
+  params.width          = output.Width();
+  params.height         = output.Height();
+  params.texture_width  = coverage.descriptor.extent.width;
+  params.texture_height = coverage.descriptor.extent.height;
+  params.samples        = RasterMaskSamplesPerAxis(sampling);
+  params.invert         = mask.invert ? 1u : 0u;
+  params.opacity        = mask.opacity;
+  SetMem(kernel, 0, coverage.texture.Native(), "raster mask texture");
+  SetMem(kernel, 1, output.Native(), "raster mask output");
+  SetParams(kernel, 2, params, "raster mask parameters");
+  Dispatch2D(device, kernel, output.Width(), output.Height(), "raster mask");
+}
+
 void EncodeFillZero(OpenClRenderDevice& device, OpenClBackend::Texture2D& output) {
   const auto kernel = OpenClKernelCache::Instance().GetKernel(OpenCL::GpuDag::kMaskProgramName,
                                                               OpenCL::GpuDag::kMaskFillZeroKernelName);
@@ -175,10 +215,9 @@ auto ExecuteOpenClMask(OpenClRenderDevice& device, const ExecutionPlan& plan,
     EncodeAnalytic(device, output.Texture(), mask_model, plan);
     return result;
   }
-  if (std::holds_alternative<AiSegmentationMaskSource>(mask_model.source)) {
-    throw std::runtime_error(
-        "ExecuteOpenClMask: AI Segmentation Mask raster evaluation is not available in this "
-        "build");
+  if (const auto* ai = std::get_if<AiSegmentationMaskSource>(&mask_model.source)) {
+    EncodeRaster(device, output.Texture(), *ai, mask_model, plan);
+    return result;
   }
   throw std::runtime_error("ExecuteOpenClMask: compiled mask does not match document");
 }

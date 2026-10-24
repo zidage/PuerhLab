@@ -45,6 +45,7 @@ inline constexpr const char* kLocalToneCollapseKernelName         = "local_tone_
 inline constexpr const char* kLocalToneApplyKernelName            = "local_tone_apply";
 inline constexpr const char* kLocalToneApplySceneKernelName       = "local_tone_apply_scene";
 inline constexpr const char* kMaskAnalyticKernelName              = "mask_analytic_r8";
+inline constexpr const char* kMaskRasterKernelName                = "mask_raster_r8";
 inline constexpr const char* kMaskFillZeroKernelName              = "mask_fill_zero_r8";
 inline constexpr const char* kMaskUnionMaxKernelName              = "mask_union_max_r8";
 inline constexpr const char* kDrtKernelName                       = "drt_display_rgba32f";

@@ -14,6 +14,7 @@
 #include "edit/runtime/compiled_grade_mask.hpp"
 #include "edit/runtime/compiled_mask_stack.hpp"
 #include "edit/runtime/cuda/cuda_mask_pass.hpp"
+#include "edit/runtime/mask_coverage_texture_cache.hpp"
 
 namespace alcedo {
 namespace {
@@ -79,6 +80,63 @@ __global__ void AnalyticMaskKernel(std::uint8_t* output, std::uint32_t width, st
   output[index] = QuantizeR8(FinishEffectiveCoverage(value, invert, opacity));
 }
 
+/// Raster MaskEvaluate parameters (SM6 R7). The matrix maps render pixels to texture UV.
+struct RasterMaskParams {
+  float         render_to_texture_uv[9];
+  std::uint32_t width;
+  std::uint32_t height;
+  std::uint32_t texture_width;
+  std::uint32_t texture_height;
+  std::uint32_t samples;
+  std::uint32_t invert;
+  float         opacity;
+};
+
+/// Bilinear read at texel centers with clamp-to-edge indices; 0 outside UV [0, 1].
+__device__ auto SampleRasterMask(const std::uint8_t* texture, const RasterMaskParams& params,
+                                 float x, float y) -> float {
+  const float* m = params.render_to_texture_uv;
+  const float  u = m[0] * x + m[1] * y + m[2];
+  const float  v = m[3] * x + m[4] * y + m[5];
+  if (!(u >= 0.0f && u <= 1.0f && v >= 0.0f && v <= 1.0f)) return 0.0f;
+  const float tx    = u * static_cast<float>(params.texture_width) - 0.5f;
+  const float ty    = v * static_cast<float>(params.texture_height) - 0.5f;
+  const float x0f   = floorf(tx);
+  const float y0f   = floorf(ty);
+  const float fx    = tx - x0f;
+  const float fy    = ty - y0f;
+  const int   max_x = static_cast<int>(params.texture_width) - 1;
+  const int   max_y = static_cast<int>(params.texture_height) - 1;
+  const int   x0    = min(max(static_cast<int>(x0f), 0), max_x);
+  const int   x1    = min(max(static_cast<int>(x0f) + 1, 0), max_x);
+  const int   y0    = min(max(static_cast<int>(y0f), 0), max_y);
+  const int   y1    = min(max(static_cast<int>(y0f) + 1, 0), max_y);
+  const auto  at    = [&](int tx_index, int ty_index) -> float {
+    return static_cast<float>(texture[ty_index * params.texture_width + tx_index]) / 255.0f;
+  };
+  const float top    = at(x0, y0) + (at(x1, y0) - at(x0, y0)) * fx;
+  const float bottom = at(x0, y1) + (at(x1, y1) - at(x0, y1)) * fx;
+  return top + (bottom - top) * fy;
+}
+
+__global__ void RasterMaskKernel(std::uint8_t* output, const std::uint8_t* texture,
+                                 RasterMaskParams params) {
+  const auto index = blockIdx.x * blockDim.x + threadIdx.x;
+  if (index >= params.width * params.height) return;
+  const auto  x       = index % params.width;
+  const auto  y       = index / params.width;
+  const float samples = static_cast<float>(params.samples);
+  float       sum     = 0.0f;
+  for (std::uint32_t j = 0; j < params.samples; ++j) {
+    for (std::uint32_t i = 0; i < params.samples; ++i) {
+      sum += SampleRasterMask(texture, params, static_cast<float>(x) + (i + 0.5f) / samples,
+                              static_cast<float>(y) + (j + 0.5f) / samples);
+    }
+  }
+  output[index] = QuantizeR8(
+      FinishEffectiveCoverage(sum / (samples * samples), params.invert != 0u, params.opacity));
+}
+
 __global__ void MaskFillZeroKernel(std::uint8_t* output, std::uint32_t pixel_count) {
   const auto index = blockIdx.x * blockDim.x + threadIdx.x;
   if (index >= pixel_count) return;
@@ -118,9 +176,23 @@ auto ExecuteCudaMask(CudaRenderDevice& device, const ExecutionPlan& plan,
         plan.geometry.render_to_reference, plan.geometry.full_reference_extent,
         AnalyticKindFromMask(mask_model), RadialParamsFromMask(mask_model),
         LinearGradientParamsFromMask(mask_model));
-  } else if (std::holds_alternative<AiSegmentationMaskSource>(mask_model.source)) {
-    throw std::runtime_error(
-        "ExecuteCudaMask: AI Segmentation Mask raster evaluation is not available in this build");
+  } else if (const auto* ai = std::get_if<AiSegmentationMaskSource>(&mask_model.source)) {
+    const auto& coverage =
+        workspace.MaskCoverage().Acquire(*ai, workspace.MaskAssets(), workspace.Device(), context);
+    const auto sampling = MakeRasterMaskSamplingPlan(
+        plan.geometry, coverage.descriptor.reference_bounds, coverage.descriptor.extent);
+    RasterMaskParams params{};
+    for (int i = 0; i < 9; ++i) params.render_to_texture_uv[i] = sampling.render_to_texture_uv.m[i];
+    params.width          = extent.width;
+    params.height         = extent.height;
+    params.texture_width  = coverage.descriptor.extent.width;
+    params.texture_height = coverage.descriptor.extent.height;
+    params.samples        = RasterMaskSamplesPerAxis(sampling);
+    params.invert         = mask_model.invert ? 1u : 0u;
+    params.opacity        = mask_model.opacity;
+    RasterMaskKernel<<<(render_pixels + block - 1) / block, block, 0, context.Stream()>>>(
+        static_cast<std::uint8_t*>(output.Texture().DevicePointer()),
+        static_cast<const std::uint8_t*>(coverage.texture.DevicePointer()), params);
   } else {
     throw std::runtime_error("ExecuteCudaMask: compiled mask does not match document");
   }
