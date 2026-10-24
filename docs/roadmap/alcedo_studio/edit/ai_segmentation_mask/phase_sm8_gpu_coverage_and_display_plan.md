@@ -1,6 +1,7 @@
 # SM8 GPU Coverage and One Display Composite - Phase Plan
 
-Date: 2026-10-24. Status: planned. No implementation evidence exists for SM8.
+Date: 2026-10-24. Status: SM8.1 complete on 2026-10-24 on Windows and macOS (section 7.1.1).
+SM8.2 to SM8.8 are planned; no implementation evidence exists for them.
 
 Parent: [AI Segmentation Mask Master Plan](../ai_segmentation_mask_master_plan.md), sections 1.5 and 9.7.
 Prerequisites: [SM4](phase_sm4_analysis_render_plan.md), [SM5](phase_sm5_ai_mask_source_and_session_plan.md),
@@ -274,7 +275,7 @@ The transport/composite split separates resource lifetime evidence from pixel co
 
 | Phase | Result | Dependency | Expected diff | Status |
 | --- | --- | --- | ---: | --- |
-| SM8.1 | Source lifetime and workspace operation boundary | SM5, SM6 | 900-1500 | planned |
+| SM8.1 | Source lifetime and workspace operation boundary | SM5, SM6 | 900-1500 | complete 2026-10-24 (7.1.1) |
 | SM8.2 | CUDA edge computation and committed-render reuse | SM8.1 | 1200-1900 | planned |
 | SM8.3 | OpenCL edge computation and committed-render reuse | SM8.2 equations and fixtures | 1000-1800 | planned |
 | SM8.4 | Metal edge computation and committed-render reuse | SM8.2 equations and fixtures | 1000-1800 | planned |
@@ -309,7 +310,114 @@ Use `AiMaskEditSessionTest` and proposed `EditorMaskCoveragePreviewTest` plus th
 
 **Commands.** Use command groups A and B in section 9. Filter to these named behaviors.
 **Exit.** All three behaviors pass; the shared read and release purpose are documented.
-**Expected diff.** 900-1500 lines. **Completion record.** Use section 11; unfilled.
+**Expected diff.** 900-1500 lines. **Completion record.** Section 7.1.1.
+
+#### 7.1.1 SM8.1 completion record
+
+```text
+Phase / date / status: SM8.1 / 2026-10-24 / complete on Windows (CUDA, OpenCL) and macOS (Metal).
+Source revision and branch: base b3e1d479 on main; branch
+  feature/ai-segmentation-sm8-1-coverage-source-lifetime (first pull request of the SM8 stack).
+Actual changed modules and diff size: 21 files, +1450 / -138 (1588 changed lines; estimate
+  900-1500). AiMaskEditSession, the new ai_mask_coverage_work, the host coverage function,
+  MaskCoverageTextureCache, BasicRenderWorkspace, BasicRenderDevice, CudaRenderDevice, the three
+  MaskEvaluate callers, and tests. Largest changed files: mask_coverage_texture_cache.hpp 440
+  lines, basic_render_workspace.hpp 491 lines, mask_coverage_texture_cache_test.cpp 449 lines.
+Implemented behavior:
+  1. AiMaskEditSession stores the composed coverage in shared immutable storage.
+     AcquireCoveragePixels() returns a read of the same allocation (no copy). Coverage() stays a
+     scoped view. A recipe change composes a new allocation; edge and input-mode steps keep it.
+     Undo and Redo compose only when the recipe changes, so they keep the allocation across edge
+     steps. The opened stored coverage is shared, not copied.
+  2. AiMaskCoverageWork (include/edit/runtime/ai_mask_coverage_work.hpp) validates the analysis
+     size, the source rectangle, and the edge values, and gives the source and output texel
+     rectangles. The host F8 function uses the same rectangles.
+  3. MaskCoverageTextureCache separates the original-coverage upload from the edge result.
+     AcquireStored keeps committed coverage by content key under the 256 MiB policy.
+     AcquireCandidate keeps one current original upload and one current edge result per
+     candidate allocation; identity is the allocation (weak owner identity), not a counter.
+     A replaced texture stays in the retired list only while a read (MaskCoverageRead) or an
+     in-flight submission uses it. The original upload holds the session read until its
+     submission completes. With no edge adjustment, the read is the source texture.
+  4. BasicRenderWorkspace: AcquireAiMaskCoverage (render or coverage work),
+     AcquireAiMaskCandidateCoverage (coverage work only), BeginCoverageWork, EndCoverageWork,
+     CancelCoverageWork. Coverage work waits for the previous submission and takes a new
+     submission id; it does not touch graph images, parameters, transients, scene work, or the
+     texture pool. BasicRenderDevice and CudaRenderDevice forward the three calls.
+  5. Errors: "AI Mask coverage:" messages for a null candidate, a wrong pixel count, an analysis
+     size outside [1, 4096], a source outside the analysis image, edge values out of range, a
+     failed texture allocation, and a failed upload. No current entry changes on failure.
+Primary success call chain:
+  AiMaskEditSession::AcquireCoveragePixels (session worker)
+    -> shared const read crosses to the render executor
+    -> BasicRenderDevice/CudaRenderDevice::BeginCoverageWork
+    -> BasicRenderWorkspace::AcquireAiMaskCandidateCoverage
+    -> MaskCoverageTextureCache::AcquireCandidate -> MakeAiMaskCoverageWork
+    -> original upload (no edge) or host edge result + upload
+    -> MaskCoverageRead (scoped processed texture read)
+    -> EndCoverageWork (Submit) -> WaitIdle -> ReleaseIdle drops the held session read
+  Committed render: ExecuteCudaMask / EncodeRaster (OpenCL, Metal)
+    -> BasicRenderWorkspace::AcquireAiMaskCoverage -> AcquireStored -> raster sampling.
+Primary failure and restore call chain:
+  invalid input / allocation / upload error in AcquireCandidate or AcquireStored
+    -> exception before Install -> current candidate entries, earlier reads, and photo results
+       unchanged -> caller cancels (CancelCoverageWork / CancelRender) -> error to caller.
+  cancelled render or coverage work -> DiscardUploadsOf(open submission) -> entries whose
+    upload was recorded in it are retired -> next acquisition uploads again (#503).
+Commands and exit codes:
+  cmd /c scripts\msvc_env.cmd --preset win_debug -DCMAKE_PREFIX_PATH=... (0)
+  cmd /c scripts\msvc_env.cmd --build --preset win_debug --parallel 4 --target
+    MaskCoverageTextureCacheTest AiMaskCoverageTextureTest AiMaskEditSessionTest
+    GpuDagCudaMaskTest GpuDagOpenClGradeTest GpuDagCudaWorkspaceTest alcedo_main (0)
+  ctest --test-dir build/debug -j 1 -R
+    '^(MaskCoverageTextureCacheTest|AiMaskCoverageTextureTest|AiMaskEditSessionTest|GpuDagCudaMaskTest|GpuDagCudaWorkspaceTest)\.'
+  ctest --test-dir build/debug -j 1 -R '^GpuDagOpenClGradeTest\.OpenClMaskFixture\.'
+  macOS: cmake --build build/macos-debug --target GpuDagMetalGradeTest (0);
+    ctest --test-dir build/macos-debug -j 1 -R '^GpuDagMetalGradeTest\.MetalMaskFixture\.'
+Discovered / passed / failed / skipped counts:
+  Windows host and CUDA: 90 discovered, 90 passed (GpuDagCudaMaskTest after the
+    control-render change below)
+    (MaskCoverageTextureCacheTest 8/8, AiMaskEditSessionTest 19/19, AiMaskCoverageTextureTest
+    8/8, GpuDagCudaMaskTest 18/18, GpuDagCudaWorkspaceTest 37/37).
+  Windows OpenCL: OpenClMaskFixture 17/17 passed.
+  macOS Metal: MetalMaskFixture 20 discovered, 18 passed, 2 failed. The failures are
+    MetalDisconnectedMaskUsesConstantOneCoverage and
+    MetalNormalMixMatchesCudaReferenceWithinTolerance: the null result lease and the
+    192-versus-0 value of open issue #497, unchanged by SM8.1.
+  Named SM8.1 behaviors: QueuedCoverageReadSurvivesNextModelResult and
+    EdgeChangeSharesOriginalPixels (AiMaskEditSessionTest), CoverageOnlyWorkKeepsPhotoResults
+    (GpuDagCudaMaskTest, GpuDagOpenClGradeTest, GpuDagMetalGradeTest): all pass.
+Manual verification: none; SM8.1 has no user-visible change.
+Numeric differences, latency, and resource measurements: none in this assignment. The candidate
+  read of CoverageOnlyWorkKeepsPhotoResults equals the session pixels byte for byte, and its edge
+  result equals the host function byte for byte, on all three backends.
+Remaining issues or unavailable platforms: #497 (Metal, existing). #503 found during this work
+  and fixed here.
+```
+
+Decisions made during SM8.1 (AGENTS.md "Make implementation decisions"):
+
+- The edge result stays the host F8 function plus an upload in SM8.1. It is the SM6 computation,
+  selected per backend at compile time, not a runtime substitute after a GPU failure. SM8.2,
+  SM8.3, and SM8.4 replace it on CUDA, OpenCL, and Metal; the last of them removes the host step
+  from the runtime. Until then a nonzero edge does not upload the original coverage, because the
+  host step reads the CPU pixels directly.
+- `EditorMaskCoveragePreviewTest` is not created in SM8.1. SM8.1 adds no app facade operation; the
+  facade (`UpdateAiMaskCandidateCoverage`, `SelectMaskCoveragePreview`) belongs to SM8.5 and
+  SM8.7. The three named behaviors are in `AiMaskEditSessionTest` and in the shared GPU mask
+  harness (`ai_mask_raster_test_support.hpp`), plus the new host `MaskCoverageTextureCacheTest`.
+- `CoverageOnlyWorkKeepsPhotoResults` compares the next render with a control render of the same
+  document. The Color Grade result lives in the scene-work pair and re-executes on every render,
+  so the check compares pass counters with the control instead of asserting zero executions.
+- Only coverage work can acquire the candidate, because the candidate is presentation input (C4,
+  C10). `BasicRenderWorkspace::MaskCoverage()` is now read-only; acquisition goes through the
+  workspace methods that check for an open submission.
+- A cancelled render or cancelled coverage work retires the coverage uploads of its submission.
+  On Metal, a cancel discards the recorded command buffer, so the cache entry had no content
+  (#503). The previous candidate is not restored after a cancel; earlier reads stay valid and the
+  next acquisition uploads again.
+- OpenCL coverage work records no kernel in SM8.1, so it does not bind the thread queue that
+  `BasicRenderDevice::Execute` binds. SM8.3 must bind it when it adds the OpenCL edge kernels.
 
 ### 7.2 SM8.2 - CUDA edge computation
 

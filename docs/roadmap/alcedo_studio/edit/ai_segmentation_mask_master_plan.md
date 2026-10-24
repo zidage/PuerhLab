@@ -22,7 +22,8 @@ after SM9 (section 7). On 2026-10-24 the user requested the new order SM8, SM9, 
 SM8 now includes GPU edge processing, retained candidate display, and one shared viewport composite
 ([detailed plan](ai_segmentation_mask/phase_sm8_gpu_coverage_and_display_plan.md)).
 SM9 and the later SM7 have a [detailed follow-on plan](ai_segmentation_mask/phase_sm9_tool_and_sm7_notice_plan.md).
-These phases are planned. The SM6 host implementation and its completion evidence remain historical facts.
+SM8.1 is complete on 2026-10-24; the later SM8 phases, SM9, and SM7 are planned. The SM6 host
+implementation and its completion evidence remain historical facts.
 
 Target release: Alcedo Studio 0.3.4. The AI Segmentation Mask is the main feature of that release.
 
@@ -341,7 +342,7 @@ The project storage owns the R8 bytes. No owner keeps a copy of another owner's 
 | SM5.2 | AI Mask edit session: session history stack, composition, People toggles, edit of a stored AI Mask, Commit payload | app layer, segmentation service, proto | SM5.1, SM3.D | 1,300-1,700 | complete (same plan) |
 | SM5.3 | Editor integration: Open, Commit, Cancel, asset write; Paste skip and notice | editor session, Mask controller, transfer, album backend | SM5.1, SM5.2 | 1,000-1,400 | complete (same plan) |
 | SM6 | Raster `MaskEvaluate` on CUDA, OpenCL, and Metal; Feather and Expand at texture creation (D20) | `edit/mask`, `edit/runtime`, three backends, app | SM5.1 | 2,000-2,900 in two parts SM6.1 and SM6.2 | complete 2026-10-24 on Windows and macOS ([phase plan](ai_segmentation_mask/phase_sm6_raster_mask_evaluate_plan.md)) |
-| SM8.1 | Stable coverage reads and workspace operation boundary | session, GPU workspace | SM5, SM6 | 900-1500 | planned ([SM8 plan](ai_segmentation_mask/phase_sm8_gpu_coverage_and_display_plan.md)) |
+| SM8.1 | Stable coverage reads and workspace operation boundary | session, GPU workspace | SM5, SM6 | 900-1500 | complete 2026-10-24 on Windows and macOS ([SM8 plan](ai_segmentation_mask/phase_sm8_gpu_coverage_and_display_plan.md#711-sm81-completion-record)) |
 | SM8.2 | CUDA Expand/Feather and committed-render reuse | CUDA runtime | SM8.1 | 1200-1900 | planned |
 | SM8.3 | OpenCL Expand/Feather and committed-render reuse | OpenCL runtime and registry | SM8.2 equations | 1000-1800 | planned |
 | SM8.4 | Metal Expand/Feather and committed-render reuse | Metal runtime | SM8.2 equations | 1000-1800 | planned |
