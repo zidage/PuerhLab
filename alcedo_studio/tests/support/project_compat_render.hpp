@@ -3,8 +3,8 @@
 //  Additional permission under GPLv3 section 7 applies; see the LICENSE file.
 
 // One render of a committed image history, hashed over its host pixels. The compatibility
-// fixture under tests/resources/compat records this hash from the build that wrote the
-// project, and ProjectCompatibilityTest compares it with the current build
+// fixture under tests/resources/compat records this hash and the build that recorded it
+// (render_hash_commit), and ProjectCompatibilityTest compares it with the current build
 // (raster_image_input_plan.md, section 7.4). Keep the render request unchanged: the recorded
 // hash depends on it.
 

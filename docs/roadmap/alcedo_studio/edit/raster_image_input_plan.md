@@ -1163,8 +1163,12 @@ OpenCL test skips itself because its 100-megapixel fixtures are not present).
   with `raw_project_abdb000c8.json`. A temporary generator test, built and run at `abdb000c8` and
   not committed, imported the CI RAW `_DSC0135.ARW`, committed one exposure edit, packed the
   project and recorded the committed document and the render hash
-  (`support/project_compat_render.hpp`, 512 px, CUDA, NVIDIA GeForce RTX 3080 Laptop GPU). The
-  test rewrites the stored RAW path to this checkout before it opens the project.
+  (`support/project_compat_render.hpp`, 512 px, NVIDIA GeForce RTX 3080 Laptop GPU). The
+  test rewrites the stored RAW path to this checkout before it opens the project. The render
+  executor sets no backend, so it uses the default Auto preference (to be removed, #488), which
+  takes OpenCL first on Windows: the hash is an OpenCL render. Issue #480 re-recorded the hash
+  at `655dd6f41` (#446): the earlier OpenCL color wheel computed `pow(|c|, 1)` for a neutral
+  wheel, which this device does not return exactly.
 
 **Tests:**
 
@@ -1290,8 +1294,9 @@ on the branch of the phase that introduced the code and is merged forward:
 - **R4, test expectation:** libpng on macOS writes an sRGB chunk into a PNG that has no color
   tag, so the origin is `png_srgb_chunk`. The test accepts both sRGB origins and checks the
   primaries and the transfer.
-- **R4, compatibility test:** the recorded render hash is a CUDA render, so only CUDA builds
-  compare it. Every build checks that the project opens with the same document and renders.
+- **R4, compatibility test:** the recorded render hash is from a Windows CUDA build (the
+  render itself is OpenCL, see above), so only CUDA builds compare it. Every build checks that
+  the project opens with the same document and renders.
 
 Result after the fixes: `RasterColorDescriptionTest`, `Aces2InverseTest`,
 `GpuDagMetalDisplayToAp1Test`, `GpuDagMetalRasterDevelopTest`, `GpuDagMetalDevelopTest`,

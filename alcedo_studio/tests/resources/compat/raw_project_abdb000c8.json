@@ -468,6 +468,8 @@
   "element_id": 1,
   "image_id": 1,
   "raw_fixture": "tag @ryanbreitkreutz - free raws from @signatureeditsco -_DSC0135.ARW",
-  "render_hash": "4717977625645122346",
+  "render_hash": "4331927259852930198",
+  "render_hash_commit": "655dd6f41",
+  "render_hash_note": "Issue #480. Build abdb000c8 recorded 4717977625645122346. #446 (655dd6f41) renders a neutral color wheel exactly; the earlier OpenCL kernel computed pow(|c|, 1), which this device does not return exactly, so every pixel of the old render differed by up to 6.6e-7.",
   "writer_commit": "abdb000c8"
 }
