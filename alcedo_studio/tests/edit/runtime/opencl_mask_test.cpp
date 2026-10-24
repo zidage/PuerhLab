@@ -17,12 +17,13 @@
 #include "../graph/grade_owned_mask_support.hpp"
 #include "../graph/test_camera_profile.hpp"
 #include "../input/prepared_raw_test_support.hpp"
+#include "ai_mask_raster_test_support.hpp"
 #include "edit/input/raw_input_loader.hpp"
 #include "edit/operators/models/builtin_type_ids.hpp"
 #include "edit/operators/models/scalar_operator_model.hpp"
 #include "edit/runtime/compiled_mask_stack.hpp"
-#include "edit/runtime/graph_compiler.hpp"
 #include "edit/runtime/frame_scene_binding.hpp"
+#include "edit/runtime/graph_compiler.hpp"
 #include "edit/runtime/opencl/opencl_develop_pass.hpp"
 #include "edit/runtime/opencl/opencl_mask_pass.hpp"
 #include "edit/runtime/opencl/opencl_pass_encoder.hpp"
@@ -188,6 +189,37 @@ class OpenClMaskFixture : public ::testing::Test {
       device_->CancelRender();
       throw;
     }
+  }
+
+  /// SM6.2: the shared AI Mask checks over this fixture, at the 64 x 48 analysis size.
+  auto AiMaskHarness() -> ai_mask_test::AiMaskBackendHarness {
+    SetExtent(ai_mask_test::kAnalysisExtent.width, ai_mask_test::kAnalysisExtent.height);
+    ai_mask_test::AiMaskBackendHarness h;
+    h.document    = [this]() -> PipelineDocument& { return document_; };
+    h.compile     = [this](RenderRequest request) { Compile(request); };
+    h.plan        = [this]() -> const ExecutionPlan& { return plan_; };
+    h.render_mask = [this] {
+      device_->BeginRender();
+      try {
+        (void)ExecuteOpenClMask(*device_, plan_, document_);
+      } catch (...) {
+        device_->CancelRender();
+        throw;
+      }
+      device_->EndRender();
+      device_->WaitIdle();
+    };
+    h.download_mask = [this] { return DownloadMask(); };
+    h.set_reader    = [this](std::shared_ptr<const MaskAssetReader> reader) {
+      device_->Workspace().SetMaskAssets(std::move(reader));
+    };
+    h.cache_entries   = [this] { return device_->Workspace().MaskCoverage().EntryCount(); };
+    h.cache_uploads   = [this] { return device_->Workspace().MaskCoverage().UploadCount(); };
+    h.release_session = [this] {
+      device_->WaitIdle();
+      device_->Workspace().ReleaseSessionResources();
+    };
+    return h;
   }
 
   std::uint32_t                       width_  = 0;
@@ -490,6 +522,41 @@ TEST_F(OpenClMaskFixture, OpenClMultiMaskUnionMatchesReference) {
                                              second);
     EXPECT_NE(primary, second);
   }
+}
+
+TEST_F(OpenClMaskFixture, AiMaskCoverageMatchesIndependentReferenceAtFullAndPreviewScale) {
+  auto h = AiMaskHarness();
+  ai_mask_test::CheckAiMaskMatchesReferenceAtFullAndPreviewScale(h);
+}
+
+TEST_F(OpenClMaskFixture, AiMaskCoverageFollowsCropAndRotation) {
+  auto h = AiMaskHarness();
+  ai_mask_test::CheckAiMaskFollowsCropAndRotation(h);
+}
+
+TEST_F(OpenClMaskFixture, AiMaskOutsideTextureBoundsIsZero) {
+  auto h = AiMaskHarness();
+  ai_mask_test::CheckAiMaskOutsideTextureBoundsIsZero(h);
+}
+
+TEST_F(OpenClMaskFixture, AiMaskInvertAndOpacityApplyBeforeUnion) {
+  auto h = AiMaskHarness();
+  ai_mask_test::CheckAiMaskInvertAndOpacityApplyBeforeUnion(h);
+}
+
+TEST_F(OpenClMaskFixture, AiMaskFeatherAndExpandChangeCoverage) {
+  auto h = AiMaskHarness();
+  ai_mask_test::CheckAiMaskFeatherAndExpandChangeCoverage(h);
+}
+
+TEST_F(OpenClMaskFixture, AiMaskCoverageTextureUploadsOncePerAssetAndEdge) {
+  auto h = AiMaskHarness();
+  ai_mask_test::CheckAiMaskCoverageTextureUploadsOncePerAssetAndEdge(h);
+}
+
+TEST_F(OpenClMaskFixture, AiMaskMissingAssetFailsRender) {
+  auto h = AiMaskHarness();
+  ai_mask_test::CheckAiMaskMissingAssetFailsRender(h);
 }
 
 }  // namespace

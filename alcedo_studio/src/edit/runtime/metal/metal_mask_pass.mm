@@ -14,6 +14,7 @@
 #include "edit/mask/mask_model.hpp"
 #include "edit/runtime/compiled_grade_mask.hpp"
 #include "edit/runtime/compiled_mask_stack.hpp"
+#include "edit/runtime/mask_coverage_texture_cache.hpp"
 #include "metal/compute_pipeline_cache.hpp"
 
 namespace alcedo {
@@ -43,6 +44,20 @@ struct alignas(16) MaskAnalyticParams {
   float         end_value           = 0.0f;
   float         opacity             = 1.0f;
 };
+
+/// Layout of `MaskRasterParams` in mask.metal (SM6 R7).
+struct MaskRasterParams {
+  float         render_to_texture_uv[9]{};
+  std::uint32_t width          = 0;
+  std::uint32_t height         = 0;
+  std::uint32_t texture_width  = 0;
+  std::uint32_t texture_height = 0;
+  std::uint32_t samples        = 1;
+  std::uint32_t invert         = 0;
+  float         opacity        = 1.0f;
+};
+
+static_assert(sizeof(MaskRasterParams) == 64);
 
 auto Pipeline(const char* function, const char* label) -> NS::SharedPtr<MTL::ComputePipelineState> {
 #ifndef ALCEDO_METAL_MASK_METALLIB_PATH
@@ -117,6 +132,34 @@ void EncodeAnalytic(MetalRenderDevice& device, MetalBackend::Texture2D& output,
   device.Workspace().Device().NoteComputeDispatch(device.CommandContext());
 }
 
+void EncodeRaster(MetalRenderDevice& device, MetalBackend::Texture2D& output,
+                  const AiSegmentationMaskSource& source, const MaskModel& mask,
+                  const ExecutionPlan& plan) {
+  auto&       workspace = device.Workspace();
+  // The upload records a blit before the compute encoder of the pass.
+  const auto& coverage  = workspace.MaskCoverage().Acquire(
+      source, workspace.MaskAssets(), workspace.Device(), device.CommandContext());
+  const auto sampling = MakeRasterMaskSamplingPlan(
+      plan.geometry, coverage.descriptor.reference_bounds, coverage.descriptor.extent);
+  auto*            encoder  = Encoder(device);
+  auto             pipeline = Pipeline("mask_raster", "Metal Mask raster");
+  MaskRasterParams params;
+  CopyMatrix(params.render_to_texture_uv, sampling.render_to_texture_uv);
+  params.width          = output.Width();
+  params.height         = output.Height();
+  params.texture_width  = coverage.descriptor.extent.width;
+  params.texture_height = coverage.descriptor.extent.height;
+  params.samples        = RasterMaskSamplesPerAxis(sampling);
+  params.invert         = mask.invert ? 1u : 0u;
+  params.opacity        = mask.opacity;
+  encoder->setComputePipelineState(pipeline.get());
+  encoder->setTexture(static_cast<MTL::Texture*>(coverage.texture.Native()), 0);
+  encoder->setTexture(static_cast<MTL::Texture*>(output.Native()), 1);
+  encoder->setBytes(&params, sizeof(params), 0);
+  Dispatch2D(encoder, pipeline.get(), output.Width(), output.Height());
+  device.Workspace().Device().NoteComputeDispatch(device.CommandContext());
+}
+
 void EncodeFillZero(MetalRenderDevice& device, MetalBackend::Texture2D& output) {
   auto* encoder  = Encoder(device);
   auto  pipeline = Pipeline("mask_fill_zero", "Metal Mask fill zero");
@@ -145,6 +188,8 @@ void AppendMetalMaskWarmup(std::vector<MetalPipelineWarmup>& pipelines) {
   pipelines.push_back(
       MetalPipelineWarmup{ALCEDO_METAL_MASK_METALLIB_PATH, "mask_analytic", "Metal Mask analytic"});
   pipelines.push_back(
+      MetalPipelineWarmup{ALCEDO_METAL_MASK_METALLIB_PATH, "mask_raster", "Metal Mask raster"});
+  pipelines.push_back(
       MetalPipelineWarmup{ALCEDO_METAL_MASK_METALLIB_PATH, "mask_fill_zero", "Metal Mask fill zero"});
   pipelines.push_back(
       MetalPipelineWarmup{ALCEDO_METAL_MASK_METALLIB_PATH, "mask_union_max", "Metal Mask union max"});
@@ -171,9 +216,9 @@ auto ExecuteMetalMask(MetalRenderDevice& device, const ExecutionPlan& plan,
     EncodeAnalytic(device, output.Texture(), mask_model, plan);
     return result;
   }
-  if (std::holds_alternative<AiSegmentationMaskSource>(mask_model.source)) {
-    throw std::runtime_error(
-        "ExecuteMetalMask: AI Segmentation Mask raster evaluation is not available in this build");
+  if (const auto* ai = std::get_if<AiSegmentationMaskSource>(&mask_model.source)) {
+    EncodeRaster(device, output.Texture(), *ai, mask_model, plan);
+    return result;
   }
   throw std::runtime_error("ExecuteMetalMask: compiled mask does not match document");
 }

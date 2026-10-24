@@ -86,6 +86,70 @@ kernel void mask_analytic(texture2d<float, access::write> output [[texture(0)]],
                gid);
 }
 
+// Raster MaskEvaluate (SM6 R7). The matrix maps render pixels to texture UV.
+struct MaskRasterParams {
+  float render_to_texture_uv[9];
+  uint  width;
+  uint  height;
+  uint  texture_width;
+  uint  texture_height;
+  uint  samples;
+  uint  invert;
+  float opacity;
+};
+
+// Bilinear read at texel centers with clamp-to-edge indices; 0 outside UV [0, 1].
+static inline float SampleRasterMask(texture2d<float, access::read> texture,
+                                     constant MaskRasterParams& params, float x, float y) {
+  const float u = params.render_to_texture_uv[0] * x + params.render_to_texture_uv[1] * y +
+                  params.render_to_texture_uv[2];
+  const float v = params.render_to_texture_uv[3] * x + params.render_to_texture_uv[4] * y +
+                  params.render_to_texture_uv[5];
+  if (!(u >= 0.0f && u <= 1.0f && v >= 0.0f && v <= 1.0f)) {
+    return 0.0f;
+  }
+  const float tx    = u * float(params.texture_width) - 0.5f;
+  const float ty    = v * float(params.texture_height) - 0.5f;
+  const float x0f   = floor(tx);
+  const float y0f   = floor(ty);
+  const float fx    = tx - x0f;
+  const float fy    = ty - y0f;
+  const int   max_x = int(params.texture_width) - 1;
+  const int   max_y = int(params.texture_height) - 1;
+  const uint  x0    = uint(clamp(int(x0f), 0, max_x));
+  const uint  x1    = uint(clamp(int(x0f) + 1, 0, max_x));
+  const uint  y0    = uint(clamp(int(y0f), 0, max_y));
+  const uint  y1    = uint(clamp(int(y0f) + 1, 0, max_y));
+  const float t00   = texture.read(uint2(x0, y0)).x;
+  const float t10   = texture.read(uint2(x1, y0)).x;
+  const float t01   = texture.read(uint2(x0, y1)).x;
+  const float t11   = texture.read(uint2(x1, y1)).x;
+  const float top    = t00 + (t10 - t00) * fx;
+  const float bottom = t01 + (t11 - t01) * fx;
+  return top + (bottom - top) * fy;
+}
+
+kernel void mask_raster(texture2d<float, access::read> texture [[texture(0)]],
+                        texture2d<float, access::write> output [[texture(1)]],
+                        constant MaskRasterParams& params [[buffer(0)]],
+                        uint2 gid [[thread_position_in_grid]]) {
+  if (gid.x >= params.width || gid.y >= params.height) {
+    return;
+  }
+  const float samples = float(params.samples);
+  float       sum     = 0.0f;
+  for (uint j = 0; j < params.samples; ++j) {
+    for (uint i = 0; i < params.samples; ++i) {
+      sum += SampleRasterMask(texture, params, float(gid.x) + (float(i) + 0.5f) / samples,
+                              float(gid.y) + (float(j) + 0.5f) / samples);
+    }
+  }
+  output.write(float4(QuantizeR8(FinishEffectiveCoverage(sum / (samples * samples), params.invert,
+                                                          params.opacity)),
+                      0.0f, 0.0f, 1.0f),
+               gid);
+}
+
 kernel void mask_fill_zero(texture2d<float, access::write> output [[texture(0)]],
                            uint2 gid [[thread_position_in_grid]]) {
   output.write(float4(0.0f, 0.0f, 0.0f, 1.0f), gid);

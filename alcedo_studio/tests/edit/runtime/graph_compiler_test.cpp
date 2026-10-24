@@ -196,7 +196,7 @@ TEST(GpuDagGraphCompiler, GraphCompilerEmitsMaskEvaluateWhenMaskConnected) {
   EXPECT_LT(plan.IndexOf(GpuPassKind::MaskUnion), plan.IndexOf(GpuPassKind::PrimaryColorGrade));
 }
 
-TEST(GpuDagGraphCompiler, AiSegmentationMaskCompileReportsMissingRasterEvaluation) {
+TEST(GpuDagGraphCompiler, AiSegmentationMaskCompilesToMaskEvaluate) {
   const auto pattern  = gpu_dag_test::MakeRggbPattern();
   const auto prepared = RawInputLoader::FromUnpackedCfa(
       gpu_dag_test::MakeU16CfaPlane(64, 64, pattern), pattern, gpu_dag_test::DefaultLinearization(),
@@ -205,14 +205,20 @@ TEST(GpuDagGraphCompiler, AiSegmentationMaskCompileReportsMissingRasterEvaluatio
   grade_mask_test::AddMask(*document.PrimaryGrade(),
                            grade_mask_test::MakeAiSegmentationMask(MaskId{"mask.ai"}));
   document.MarkTopologyChanged();
-  try {
-    (void)GraphCompiler::Compile(document, prepared.CompileSource(), RenderRequest{});
-    FAIL() << "a document with an AI Segmentation Mask compiled";
-  } catch (const std::runtime_error& error) {
-    EXPECT_STREQ(error.what(),
-                 "GraphCompiler: AI Segmentation Mask raster evaluation is not available in this "
-                 "build");
+  const auto  plan  = GraphCompiler::Compile(document, prepared.CompileSource(), RenderRequest{});
+  const auto* grade = plan.FirstGrade();
+  ASSERT_NE(grade, nullptr);
+  ASSERT_TRUE(grade->mask_stack.has_value());
+  const auto* source = grade->mask_stack->FindSource(MaskId{"mask.ai"});
+  ASSERT_NE(source, nullptr);
+  EXPECT_EQ(source->source_kind, MaskSourceKind::AiSegmentation);
+  std::size_t evaluate_passes = 0;
+  for (const auto& pass : plan.passes) {
+    if (pass.kind == GpuPassKind::MaskEvaluate) {
+      ++evaluate_passes;
+    }
   }
+  EXPECT_EQ(evaluate_passes, 1u);
 }
 
 auto Align256(std::size_t value) -> std::size_t { return (value + 255) & ~std::size_t{255}; }

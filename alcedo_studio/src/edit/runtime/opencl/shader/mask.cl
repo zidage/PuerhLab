@@ -86,6 +86,66 @@ __kernel void mask_analytic_r8(__write_only image2d_t output, MaskAnalyticParams
                         0.0f, 1.0f));
 }
 
+// Raster MaskEvaluate (SM6 R7). The matrix maps render pixels to texture UV.
+typedef struct {
+  float render_to_texture_uv[9];
+  uint  width;
+  uint  height;
+  uint  texture_width;
+  uint  texture_height;
+  uint  samples;
+  uint  invert;
+  float opacity;
+} MaskRasterParams;
+
+// Bilinear read at texel centers with clamp-to-edge indices; 0 outside UV [0, 1].
+static inline float SampleRasterMask(__read_only image2d_t texture,
+                                     __private const MaskRasterParams* params, float x, float y) {
+  const float u = params->render_to_texture_uv[0] * x + params->render_to_texture_uv[1] * y +
+                  params->render_to_texture_uv[2];
+  const float v = params->render_to_texture_uv[3] * x + params->render_to_texture_uv[4] * y +
+                  params->render_to_texture_uv[5];
+  if (!(u >= 0.0f && u <= 1.0f && v >= 0.0f && v <= 1.0f)) {
+    return 0.0f;
+  }
+  const float tx  = u * (float)params->texture_width - 0.5f;
+  const float ty  = v * (float)params->texture_height - 0.5f;
+  const float x0f = floor(tx);
+  const float y0f = floor(ty);
+  const float fx  = tx - x0f;
+  const float fy  = ty - y0f;
+  const int   x0  = (int)x0f;
+  const int   y0  = (int)y0f;
+  // The sampler clamps the integer coordinates to the edge texels.
+  const float t00 = read_imagef(texture, kNearestClamp, (int2)(x0, y0)).x;
+  const float t10 = read_imagef(texture, kNearestClamp, (int2)(x0 + 1, y0)).x;
+  const float t01 = read_imagef(texture, kNearestClamp, (int2)(x0, y0 + 1)).x;
+  const float t11 = read_imagef(texture, kNearestClamp, (int2)(x0 + 1, y0 + 1)).x;
+  const float top    = t00 + (t10 - t00) * fx;
+  const float bottom = t01 + (t11 - t01) * fx;
+  return top + (bottom - top) * fy;
+}
+
+__kernel void mask_raster_r8(__read_only image2d_t texture, __write_only image2d_t output,
+                             MaskRasterParams params) {
+  const uint2 gid = (uint2)(get_global_id(0), get_global_id(1));
+  if (gid.x >= params.width || gid.y >= params.height) {
+    return;
+  }
+  const float samples = (float)params.samples;
+  float       sum     = 0.0f;
+  for (uint j = 0; j < params.samples; ++j) {
+    for (uint i = 0; i < params.samples; ++i) {
+      sum += SampleRasterMask(texture, &params, (float)gid.x + ((float)i + 0.5f) / samples,
+                              (float)gid.y + ((float)j + 0.5f) / samples);
+    }
+  }
+  write_imagef(output, (int2)(gid.x, gid.y),
+               (float4)(QuantizeR8(FinishEffectiveCoverage(sum / (samples * samples), params.invert,
+                                                           params.opacity)),
+                        0.0f, 0.0f, 1.0f));
+}
+
 __kernel void mask_fill_zero_r8(__write_only image2d_t output, uint width, uint height) {
   const uint2 gid = (uint2)(get_global_id(0), get_global_id(1));
   if (gid.x >= width || gid.y >= height) {
