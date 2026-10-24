@@ -722,7 +722,9 @@ TEST_F(MetalMaskFixture, FailedEdgeWorkKeepsPublishedCoverage) {
  * recorded, and the blit runs only after the commit. Two candidate uploads and an edge result are
  * recorded in one command buffer and the session drops both allocations before the commit, so the
  * second staging write and the release precede the first blit. Each read must still hold its own
- * bytes. Two cycles, each ended by a session release, must leave the same allocation balance.
+ * bytes. In each of two cycles, the session release destroys every texture that the cycle created.
+ * (Staging pages are counted as allocations but their release is not, so the check counts
+ * textures.)
  */
 TEST_F(MetalMaskFixture, MetalCoverageUploadOwnerSurvivesUntilBlitCompletes) {
   auto                       h = AiMaskHarness();
@@ -768,20 +770,19 @@ TEST_F(MetalMaskFixture, MetalCoverageUploadOwnerSurvivesUntilBlitCompletes) {
         "edge result of the first upload");
   };
 
-  run_cycle();
-  h.release_session();
-  EXPECT_EQ(cache.EntryCount(), 0U);
-  EXPECT_EQ(cache.WorkTextureCount(), 0U);
-  EXPECT_EQ(cache.UsedBytes(), 0U);
-  EXPECT_FALSE(cache.HoldsCandidateUploadPixels());
-  const auto balance = backend.MallocCount() - backend.FreeCount();
-
-  run_cycle();
-  h.release_session();
-  EXPECT_EQ(cache.EntryCount(), 0U);
-  EXPECT_EQ(cache.WorkTextureCount(), 0U);
-  EXPECT_EQ(backend.MallocCount() - backend.FreeCount(), balance)
-      << "a second cycle releases every allocation it made";
+  for (int cycle = 0; cycle < 2; ++cycle) {
+    const auto textures_before = backend.TextureCreateCount();
+    const auto frees_before    = backend.FreeCount();
+    run_cycle();
+    h.release_session();
+    EXPECT_EQ(cache.EntryCount(), 0U) << cycle;
+    EXPECT_EQ(cache.WorkTextureCount(), 0U) << cycle;
+    EXPECT_EQ(cache.UsedBytes(), 0U) << cycle;
+    EXPECT_FALSE(cache.HoldsCandidateUploadPixels()) << cycle;
+    EXPECT_GT(backend.TextureCreateCount(), textures_before) << cycle;
+    EXPECT_EQ(backend.FreeCount() - frees_before, backend.TextureCreateCount() - textures_before)
+        << "cycle " << cycle << " destroys every texture it created";
+  }
 }
 
 }  // namespace
