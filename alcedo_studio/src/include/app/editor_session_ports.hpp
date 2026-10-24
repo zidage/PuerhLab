@@ -23,6 +23,7 @@
 #include "edit/graph/pipeline_graph_snapshot.hpp"
 #include "edit/history/edit_commit_attribution.hpp"
 #include "edit/history/pipeline_edit_batch.hpp"
+#include "edit/mask/mask_asset.hpp"
 #include "type/type.hpp"
 
 namespace alcedo {
@@ -521,6 +522,32 @@ class IEditorThumbnailPort {
   /// Invalidate cached pixels and schedule a new render only when the image
   /// remains focused in a thumbnail surface.
   virtual void RefreshAfterMaterialization(sl_element_id_t element_id) = 0;
+};
+
+/**
+ * @brief R8 asset store of AI Masks for the editor (SM5 M18).
+ *
+ * Production wraps PipelineMgmtService, which takes the project database connection at each
+ * call. Each call runs on the session owner thread and blocks until the store returns.
+ */
+class IEditorMaskAssetPort {
+ public:
+  virtual ~IEditorMaskAssetPort()                                               = default;
+
+  /**
+   * @brief Store @p asset in its own database transaction.
+   *
+   * The store validates the pixels and recomputes the key; a put of a stored key writes nothing.
+   * @return false with @p error set when the store rejects the asset or the write fails.
+   */
+  virtual auto PutMaskAsset(const MaskAsset& asset, std::string* error) -> bool = 0;
+
+  /**
+   * @brief Read the verified asset of @p key into @p asset.
+   * @return false with @p error set when the asset is missing or corrupt.
+   */
+  virtual auto ReadMaskAsset(const MaskAssetKey& key, MaskAsset* asset, std::string* error)
+      -> bool = 0;
 };
 
 /// Coordinator-facing diagnostics exposed to the session service for QML

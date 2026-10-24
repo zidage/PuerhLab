@@ -4,8 +4,13 @@
 
 #pragma once
 
+#include <string>
+#include <vector>
+
 #include "app/adjustment_transfer_types.hpp"
+#include "edit/graph/graph_ids.hpp"
 #include "edit/graph/pipeline_document.hpp"
+#include "edit/mask/mask_id.hpp"
 
 namespace alcedo {
 
@@ -14,7 +19,8 @@ namespace alcedo {
  *
  * Validates stable selection identities against the replayed source document,
  * preserves source backbone order, copies only selected values, and copies all
- * Masks or no Masks for each selected Color Grade. Never changes source state.
+ * Masks or no Masks for each selected Color Grade. AI Masks are never copied: an AI Mask
+ * describes the content of its own image (SM5 D18). Never changes source state.
  */
 class AdjustmentTransferPackageBuilder {
  public:
@@ -29,7 +35,9 @@ class AdjustmentTransferPackageBuilder {
    * Geometry item carries the complete document geometry.
    * Every @ref AdjustmentTransferItemKind::Adjustment item must name an
    * @ref AdjustmentInstanceId owned by that node. Package Color Grade order is
-   * the source backbone order, not the selection order.
+   * the source backbone order, not the selection order. A selected Masks item copies every
+   * Mask of the Grade except the AI Masks; when the Grade has only AI Masks, its entry has no
+   * Mask set. @ref ListAiMasksExcludedFromTransfer names the skipped Masks.
    *
    * @param document Replayed or live source document. Read-only.
    * @param selection Stable node and item identities to transfer.
@@ -42,6 +50,27 @@ class AdjustmentTransferPackageBuilder {
                                   const AdjustmentTransferSelection& selection)
       -> AdjustmentTransferPackage;
 };
+
+/// One AI Mask that a transfer package does not copy.
+struct AiMaskTransferExclusion {
+  NodeId      node_id;
+  MaskId      mask_id;
+  std::string display_name;
+
+  friend auto operator==(const AiMaskTransferExclusion&, const AiMaskTransferExclusion&)
+      -> bool = default;
+};
+
+/**
+ * @brief AI Masks that @ref AdjustmentTransferPackageBuilder::Build skips for @p selection.
+ *
+ * Lists, in source backbone and Mask order, the AI Masks of each Color Grade whose Masks item is
+ * in @p selection. Unknown nodes and Grades without a Masks item add nothing; Build reports
+ * selection errors. Reads @p document only.
+ */
+[[nodiscard]] auto ListAiMasksExcludedFromTransfer(const PipelineDocument&            document,
+                                                   const AdjustmentTransferSelection& selection)
+    -> std::vector<AiMaskTransferExclusion>;
 
 /**
  * @brief Selection containing every transferable item of @p document.

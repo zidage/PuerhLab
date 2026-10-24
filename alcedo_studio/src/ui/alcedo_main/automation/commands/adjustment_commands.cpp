@@ -537,13 +537,23 @@ auto RegisterAutomationAdjustmentCommands(AutomationCommandRegistry& registry,
                                          {"name", text_schema},
                                          {"value", text_schema}},
                              QJsonArray{"node_id", "node_name", "item", "name", "value"});
+  const QJsonObject skipped_ai_mask_schema = AutomationObjectSchema(
+      QJsonObject{{"node_id", text_schema}, {"mask_id", text_schema}, {"name", text_schema}},
+      QJsonArray{"node_id", "mask_id", "name"});
   copy.result_schema = AutomationObjectSchema(
       QJsonObject{{"package_id", text_schema},
                   {"element_id", QJsonObject{{"type", "integer"}}},
                   {"version_id", text_schema},
                   {"version_name", text_schema},
-                  {"items", QJsonObject{{"type", "array"}, {"items", copied_item_schema}}}},
-      QJsonArray{"package_id", "element_id", "version_id", "version_name", "items"});
+                  {"items", QJsonObject{{"type", "array"}, {"items", copied_item_schema}}},
+                  {"skipped_ai_masks",
+                   QJsonObject{{"type", "array"},
+                               {"items", skipped_ai_mask_schema},
+                               {"description",
+                                "AI Masks of the copied Masks items. A package never holds an AI "
+                                "Mask: it describes the content of its own photo."}}}},
+      QJsonArray{"package_id", "element_id", "version_id", "version_name", "items",
+                 "skipped_ai_masks"});
   copy.handler = [host, store](const QJsonObject& params, AutomationReply reply) {
     const auto catalog = ReadSourceCatalog(host, params, reply);
     if (!catalog.has_value()) {
@@ -558,10 +568,10 @@ auto RegisterAutomationAdjustmentCommands(AutomationCommandRegistry& registry,
                                QStringLiteral("The Version has no item to copy."));
       return;
     }
+    const auto                selection = MakeSelection(catalog->read_.version.version_id, *chosen);
     AdjustmentTransferPackage package;
     try {
-      package = AdjustmentTransferPackageBuilder::Build(
-          catalog->read_.document, MakeSelection(catalog->read_.version.version_id, *chosen));
+      package = AdjustmentTransferPackageBuilder::Build(catalog->read_.document, selection);
     } catch (const std::exception& e) {
       SendAutomationOwnerError(reply, AutomationErrorCode::Rejected, QString::fromUtf8(e.what()));
       return;
@@ -581,12 +591,19 @@ auto RegisterAutomationAdjustmentCommands(AutomationCommandRegistry& registry,
       }
       copied.push_back(row);
     }
+    QJsonArray skipped_ai_masks;
+    for (const auto& mask : ListAiMasksExcludedFromTransfer(catalog->read_.document, selection)) {
+      skipped_ai_masks.push_back(QJsonObject{{"node_id", Text(mask.node_id.Value())},
+                                             {"mask_id", Text(mask.mask_id.Value())},
+                                             {"name", QString::fromStdString(mask.display_name)}});
+    }
     reply.SendResult(QJsonObject{
         {"package_id", package_id},
         {"element_id", params.value("element_id")},
         {"version_id", QString::fromStdString(catalog->read_.version.version_id.ToString())},
         {"version_name", QString::fromStdString(catalog->read_.version.display_name)},
-        {"items", copied}});
+        {"items", copied},
+        {"skipped_ai_masks", skipped_ai_masks}});
   };
   RegisterOrFail(registry, std::move(copy), &ok, error);
 

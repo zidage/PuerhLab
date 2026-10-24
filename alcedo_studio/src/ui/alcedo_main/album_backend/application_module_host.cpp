@@ -36,6 +36,7 @@
 #include "ui/alcedo_main/album_backend/editor_session_checkpoint_store.hpp"
 #include "ui/alcedo_main/album_backend/editor_session_history_port.hpp"
 #include "ui/alcedo_main/album_backend/editor_session_task_port.hpp"
+#include "ui/alcedo_main/album_backend/editor_session_mask_asset_port.hpp"
 #include "ui/alcedo_main/album_backend/editor_session_thumbnail_port.hpp"
 #include "ui/alcedo_main/album_backend/thumbnail_image_provider.hpp"
 #include "ui/alcedo_main/album_backend/comparison_image_provider.hpp"
@@ -360,10 +361,16 @@ ApplicationModuleHost::ApplicationModuleHost(QObject* parent, LifecycleObserver 
     // The scheduler port is also the comparison's image port: comparison pairs render on the
     // editor's own executor and worker. ShutdownModules shuts it down (waiting for an image job)
     // before the session service is destroyed.
+    // AI Mask R8 assets live in the project database of the open project.
+    auto session_mask_assets = std::make_shared<EditorSessionMaskAssetPort>(
+        [this]() -> std::shared_ptr<alcedo::PipelineMgmtService> {
+          return project_ ? project_->handler().pipeline_service() : nullptr;
+        });
     editor_session_runtime_ = alcedo::EditorSessionRuntime::CreateWithPorts(
         session_pipeline, session_history, session_tasks, session_scheduler,
         session_checkpoint, session_thumbnail, save_coordinator,
-        std::make_shared<alcedo::EditorSessionThreadedCommandExecutor>(), session_scheduler);
+        std::make_shared<alcedo::EditorSessionThreadedCommandExecutor>(), session_scheduler,
+        std::move(session_mask_assets));
     // Completion is forward: coordinator installs on_complete at Schedule.
     editor_session_scheduler_ = std::move(session_scheduler);
   }

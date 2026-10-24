@@ -68,6 +68,9 @@ enum class EditorOperationLeaseKind : std::uint8_t {
   /// An open editor comparison: blocks every image write, history movement, Version write,
   /// Paste, and view change until the comparison closes.
   Comparison,
+  /// An open AI Mask edit session: blocks every document write, history movement, Version write,
+  /// Paste, and comparison until the session commits or cancels. View changes stay available.
+  AiMaskEdit,
 };
 
 /// Queue-owned lease describing which actions an accepted operation blocks.

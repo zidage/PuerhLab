@@ -1578,6 +1578,10 @@ Alcedo 将改用 %1。</translation>
         <source>This recent search does not exist.</source>
         <translation>此最近搜索不存在。</translation>
     </message>
+    <message>
+        <source>AI Masks are not copied: %1</source>
+        <translation>AI 蒙版不会被复制：%1</translation>
+    </message>
 </context>
 <context>
     <name>AgentSessionCard</name>

@@ -4,6 +4,8 @@
 
 #include "ui/alcedo_main/album_backend/adjustment_transfer_dialog_model.hpp"
 
+#include <QStringList>
+
 #include "app/adjustment_transfer_package_builder.hpp"
 #include "ui/alcedo_main/i18n.hpp"
 
@@ -309,6 +311,22 @@ auto AdjustmentTransferDialogModel::BuildPackage(std::string* error) const
     }
     return std::nullopt;
   }
+}
+
+auto AdjustmentTransferDialogModel::excluded_ai_mask_notice() const -> QString {
+  if (!read_.has_value()) {
+    return {};
+  }
+  const auto excluded = alcedo::ListAiMasksExcludedFromTransfer(read_->document, BuildSelection());
+  if (excluded.empty()) {
+    return {};
+  }
+  QStringList names;
+  names.reserve(static_cast<qsizetype>(excluded.size()));
+  for (const auto& mask : excluded) {
+    names.push_back(QString::fromStdString(mask.display_name));
+  }
+  return Tr("AI Masks are not copied: %1").arg(names.join(QStringLiteral(", ")));
 }
 
 auto AdjustmentTransferDialogModel::SelectionSummary() const -> QVariantList {

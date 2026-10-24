@@ -361,6 +361,11 @@ void ValidateDocumentTransfer(const AdjustmentTransferPackage& package) {
       }
       for (const auto& mask : *grade.masks) {
         ValidateMaskModel(mask);
+        // D18: no package carries an AI Mask; the package builder skips them.
+        if (GetMaskSourceKind(mask.source) == MaskSourceKind::AiSegmentation) {
+          Fail("transfer Color Grade contains the AI Mask '" + std::string{mask.id.Value()} +
+               "'; AI Masks are not transferable");
+        }
       }
     }
     if (grade.source_node_id == package.default_grade_id_) {
