@@ -31,14 +31,15 @@
 #include "app/editor_working_document.hpp"
 #include "app/pipeline_service.hpp"
 #include "app/project_service.hpp"
+#include "edit/frame_presentation_types.hpp"
 #include "edit/graph/color_grade_node_model.hpp"
 #include "edit/graph/develop_color_transform.hpp"
 #include "edit/graph/develop_node_model.hpp"
 #include "edit/graph/drt_node_model.hpp"
 #include "edit/graph/pipeline_document.hpp"
 #include "edit/graph/pipeline_graph_commands.hpp"
-#include "edit/frame_presentation_types.hpp"
 #include "edit/graph/pipeline_graph_snapshot.hpp"
+#include "edit/mask/mask_asset.hpp"
 #include "edit/operators/models/builtin_type_ids.hpp"
 #include "edit/operators/models/lmt_model.hpp"
 #include "edit/operators/models/lut_reference.hpp"
@@ -56,6 +57,7 @@
 #include "image/metadata_extractor.hpp"
 #include "renderer/pipeline_scheduler.hpp"
 #include "renderer/pipeline_task.hpp"
+#include "ui/alcedo_main/album_backend/editor_session_mask_asset_port.hpp"
 #include "ui/alcedo_main/album_backend/editor_session_pipeline_port.hpp"
 #ifdef HAVE_CUDA
 #include "edit/runtime/cuda/cuda_product_renderer.hpp"
@@ -741,6 +743,44 @@ TEST(EditorSessionRenderSchedulerPortTest, RequestWithoutFrameSourceIsRejected) 
 
 // Rendering reads only the preview of an image the session holds. Without the lease the request
 // is stale: it fails without loading the image and without creating the executor.
+// SM6.1 R2: the editor executor lives for the application; its Mask asset reader reads from the
+// project that is open at the read.
+TEST(EditorSessionRenderSchedulerPortTest, CurrentProjectMaskAssetReaderReadsTheOpenProject) {
+  std::shared_ptr<alcedo::PipelineMgmtService> open_service;
+  const CurrentProjectMaskAssetReader          reader([&open_service] { return open_service; });
+
+  alcedo::MaskAsset                            asset;
+  asset.descriptor.extent           = {4, 2};
+  asset.descriptor.reference_bounds = alcedo::NormalizedRect{0.5f, 0.5f, 0.25f, 0.25f};
+  asset.pixels                      = {0, 64, 128, 255, 255, 128, 64, 0};
+  asset.key                         = alcedo::MakeMaskAssetKey(asset.descriptor, asset.pixels);
+  try {
+    (void)reader.Read(asset.key);
+    FAIL() << "the reader read without an open project";
+  } catch (const std::runtime_error& error) {
+    EXPECT_NE(std::string{error.what()}.find("No project is open"), std::string::npos)
+        << error.what();
+  }
+
+  const auto stamp = std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+  const auto db_path =
+      std::filesystem::temp_directory_path() / ("current_project_mask_reader_" + stamp + ".db");
+  const auto meta_path =
+      std::filesystem::temp_directory_path() / ("current_project_mask_reader_" + stamp + ".json");
+  {
+    alcedo::ProjectService project(db_path, meta_path);
+    open_service = std::make_shared<alcedo::PipelineMgmtService>(project.GetStorage());
+    open_service->PutMaskAsset(asset);
+    const auto read = reader.Read(asset.key);
+    EXPECT_EQ(read.pixels, asset.pixels);
+    EXPECT_EQ(read.descriptor, asset.descriptor);
+    open_service.reset();
+  }
+  std::error_code ec;
+  std::filesystem::remove(db_path, ec);
+  std::filesystem::remove(meta_path, ec);
+}
+
 TEST(EditorSessionRenderSchedulerPortTest, RenderOfAnImageWithoutAHeldLeaseFailsAsStale) {
   auto pipeline_port = std::make_shared<EditorSessionPipelinePort>();
   pipeline_port->SetServices(EditorSessionPipelineMappers{

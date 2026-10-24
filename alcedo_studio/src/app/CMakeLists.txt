@@ -380,7 +380,8 @@ def_library(PipelineMgmtService
             "${ALCEDO_APP_ROOT}/pipeline_root_state.cpp"
             "${ALCEDO_APP_ROOT}/committed_snapshot_cache.cpp"
             "${ALCEDO_APP_ROOT}/source_dng_profile_binding.cpp"
-    PUBLIC_DEPS ProjectService EditPipeline EditGraph EditLutResources
+            "${ALCEDO_APP_ROOT}/project_mask_asset_reader.cpp"
+    PUBLIC_DEPS ProjectService EditPipeline EditGraph EditLutResources EditMaskRaster
 )
 
 def_library(AdjustmentTransferService

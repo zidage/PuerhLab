@@ -139,7 +139,8 @@ ExportService::ExportService(std::shared_ptr<SleeveServiceImpl>   sleeve_service
       executors_(kExportExecutorCount,
                  pipeline_service_ ? pipeline_service_->GetAcceleratorBackendPreference()
                                    : AcceleratorBackendPreference::Auto,
-                 pipeline_service_ ? pipeline_service_->LutResources() : nullptr),
+                 pipeline_service_ ? pipeline_service_->LutResources() : nullptr,
+                 pipeline_service_ ? pipeline_service_->MaskAssets() : nullptr),
       render_scheduler_(executors_.Size()) {}
 
 void ExportService::EnqueueExportTask(const ExportTask& task) {

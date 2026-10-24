@@ -92,4 +92,25 @@ auto MakeMaskAssetKey(const MaskAssetDescriptor& descriptor, std::span<const std
   return MaskAssetKey{Hex128(digest)};
 }
 
+auto AiMaskAssetPixelRect(const MaskAssetDescriptor& descriptor, Extent2D image_extent)
+    -> std::optional<RectI> {
+  const auto& bounds = descriptor.reference_bounds;
+  const auto  width  = descriptor.extent.width;
+  const auto  height = descriptor.extent.height;
+  if (image_extent.Empty() || descriptor.extent.Empty() || !std::isfinite(bounds.x) ||
+      !std::isfinite(bounds.y) || !std::isfinite(bounds.w) || !std::isfinite(bounds.h)) {
+    return std::nullopt;
+  }
+  const double left = std::round(static_cast<double>(bounds.x) * image_extent.width);
+  const double top  = std::round(static_cast<double>(bounds.y) * image_extent.height);
+  if (left < 0.0 || top < 0.0 || left + width > image_extent.width ||
+      top + height > image_extent.height ||
+      std::abs(static_cast<double>(bounds.w) * image_extent.width - width) >= 0.5 ||
+      std::abs(static_cast<double>(bounds.h) * image_extent.height - height) >= 0.5) {
+    return std::nullopt;
+  }
+  return RectI{static_cast<std::int32_t>(left), static_cast<std::int32_t>(top),
+               static_cast<std::int32_t>(width), static_cast<std::int32_t>(height)};
+}
+
 }  // namespace alcedo

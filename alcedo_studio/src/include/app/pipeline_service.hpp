@@ -16,6 +16,7 @@
 
 #include "app/committed_snapshot_cache.hpp"
 #include "app/pipeline_root_state.hpp"
+#include "app/project_mask_asset_reader.hpp"
 #include "decoders/processor/raw_color_context.hpp"
 #include "edit/graph/pipeline_document.hpp"
 #include "edit/graph/pipeline_graph_snapshot.hpp"
@@ -24,6 +25,7 @@
 #include "edit/mask/mask_asset.hpp"
 #include "edit/pipeline/pipeline_accelerator.hpp"
 #include "edit/runtime/lut_resource_resolver.hpp"
+#include "edit/runtime/mask_asset_reader.hpp"
 #include "sleeve/storage.hpp"
 #include "storage/store/edit_history/commit_graph_store.hpp"
 #include "type/type.hpp"
@@ -101,6 +103,10 @@ class PipelineMgmtService final {
   /// to the executors they construct, like the accelerator preference.
   const std::shared_ptr<const LutResourceResolver> lut_resources_;
 
+  /// Reader of the Mask assets of this project, fixed for the life of the service. ReadMaskAsset
+  /// and the executors of this project read through it.
+  const std::shared_ptr<const MaskAssetReader>     mask_assets_;
+
   std::uint64_t                       editor_pipeline_history_rebuild_count_ = 0;
 
   CommittedSnapshotCache              committed_snapshots_;
@@ -131,6 +137,7 @@ class PipelineMgmtService final {
       : storage_(storage_service),
         accelerator_preference_(accelerator_preference),
         lut_resources_(lut_resources ? std::move(lut_resources) : DefaultLutResourceResolver()),
+        mask_assets_(std::make_shared<const ProjectMaskAssetReader>(storage_service)),
         committed_snapshots_(storage_service) {}
 
   /**
@@ -322,6 +329,11 @@ class PipelineMgmtService final {
 
   void               DeletePipeline(sl_element_id_t id);
   void               DeletePipelines(std::span<const sl_element_id_t> ids);
+
+  /// Mask asset reader for the executors of this project; never null.
+  [[nodiscard]] auto MaskAssets() const -> const std::shared_ptr<const MaskAssetReader>& {
+    return mask_assets_;
+  }
 
   /// LUT resolver for the executors of this project; never null.
   [[nodiscard]] auto LutResources() const -> const std::shared_ptr<const LutResourceResolver>& {

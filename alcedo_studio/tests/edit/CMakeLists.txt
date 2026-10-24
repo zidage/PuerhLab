@@ -315,6 +315,16 @@ gtest_discover_tests(AnalyticMaskEditTest
   PROPERTIES LABELS "ci_core_flow;edit;mask")
 alcedo_register_test_target(AnalyticMaskEditTest edit)
 
+# SM6.1: AI Mask coverage texture (Feather and Expand) and the default Mask asset reader.
+add_executable(AiMaskCoverageTextureTest
+  ${ALCEDO_TEST_ROOT}/edit/mask/ai_mask_coverage_texture_test.cpp)
+target_include_directories(AiMaskCoverageTextureTest PUBLIC ${ALCEDO_INCLUDE_DIR})
+target_link_libraries(AiMaskCoverageTextureTest PRIVATE GTest::gtest_main EditMaskRaster)
+gtest_discover_tests(AiMaskCoverageTextureTest
+  TEST_PREFIX "AiMaskCoverageTextureTest."
+  PROPERTIES LABELS "ci_core_flow;edit;mask;ai_mask")
+alcedo_register_test_target(AiMaskCoverageTextureTest edit)
+
 # Host GraphImageCache retention: LRU budget vs live writes, injected allocation failure.
 add_executable(GraphImageCacheRetentionTest
   ${ALCEDO_TEST_ROOT}/edit/runtime/graph_image_cache_retention_test.cpp)

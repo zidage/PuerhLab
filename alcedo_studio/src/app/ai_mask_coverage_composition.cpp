@@ -205,17 +205,15 @@ auto PlaceAiMaskAssetInCoverage(const MaskAsset& asset, Extent2D extent)
     -> std::vector<std::uint8_t> {
   RequireExtent(extent);
   ValidateMaskAssetPixels(asset.descriptor, asset.pixels);
-  const auto& bounds = asset.descriptor.reference_bounds;
-  const auto  width  = asset.descriptor.extent.width;
-  const auto  height = asset.descriptor.extent.height;
-  const long  left   = std::lround(static_cast<double>(bounds.x) * extent.width);
-  const long  top    = std::lround(static_cast<double>(bounds.y) * extent.height);
-  if (left < 0 || top < 0 || left + width > extent.width || top + height > extent.height ||
-      std::abs(static_cast<double>(bounds.w) * extent.width - width) >= 0.5 ||
-      std::abs(static_cast<double>(bounds.h) * extent.height - height) >= 0.5) {
+  const auto rect = AiMaskAssetPixelRect(asset.descriptor, extent);
+  if (!rect.has_value()) {
     Fail("the stored asset does not fit the session image " + std::to_string(extent.width) + " x " +
          std::to_string(extent.height));
   }
+  const auto                width  = asset.descriptor.extent.width;
+  const auto                height = asset.descriptor.extent.height;
+  const auto                left   = static_cast<std::size_t>(rect->x);
+  const auto                top    = static_cast<std::size_t>(rect->y);
   std::vector<std::uint8_t> coverage(PixelCount(extent), 0);
   for (std::uint32_t row = 0; row < height; ++row) {
     std::copy_n(asset.pixels.data() + static_cast<std::size_t>(row) * width, width,

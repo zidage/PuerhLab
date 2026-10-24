@@ -25,6 +25,7 @@
 #include "edit/runtime/executor_role.hpp"
 #include "edit/runtime/gpu_node_pass_stats.hpp"
 #include "edit/runtime/lut_resource_resolver.hpp"
+#include "edit/runtime/mask_asset_reader.hpp"
 #include "edit/runtime/pipeline_apply_request.hpp"
 #include "edit/runtime/render_device_type.hpp"
 #include "edit/runtime/rendered_pipeline_image.hpp"
@@ -97,9 +98,12 @@ class Renderer {
   /**
    * @param lut_resources Resolver for Color Grade LUT references, shared with the device
    *        workspace. Null selects the file-path-only DefaultLutResourceResolver.
+   * @param mask_assets Reader of AI Mask assets, shared with the device workspace. Null selects
+   *        DefaultMaskAssetReader.
    */
   explicit Renderer(ExecutorRole role, PreparedSourceCache::UnpackFn unpack = {},
-                    std::shared_ptr<const LutResourceResolver> lut_resources = nullptr);
+                    std::shared_ptr<const LutResourceResolver> lut_resources = nullptr,
+                    std::shared_ptr<const MaskAssetReader>     mask_assets   = nullptr);
   ~Renderer();
 
   Renderer(const Renderer&)                    = delete;
@@ -208,11 +212,13 @@ class Renderer {
   StaticExecutionPlanCache        plan_cache_{Backend::kCapabilityVersion};
   std::optional<RenderBindingKey> binding_;
   std::shared_ptr<const LutResourceResolver> lut_resources_;
+  std::shared_ptr<const MaskAssetReader>     mask_assets_;
 };
 
 template <class Backend>
 Renderer<Backend>::Renderer(ExecutorRole role, PreparedSourceCache::UnpackFn unpack,
-                            std::shared_ptr<const LutResourceResolver> lut_resources)
+                            std::shared_ptr<const LutResourceResolver> lut_resources,
+                            std::shared_ptr<const MaskAssetReader>     mask_assets)
     : role_(role),
       device_(),
       unpack_(unpack ? std::move(unpack)
@@ -222,7 +228,8 @@ Renderer<Backend>::Renderer(ExecutorRole role, PreparedSourceCache::UnpackFn unp
                        }}),
       source_cache_(unpack_),
       plan_cache_(Backend::kCapabilityVersion),
-      lut_resources_(lut_resources ? std::move(lut_resources) : DefaultLutResourceResolver()) {}
+      lut_resources_(lut_resources ? std::move(lut_resources) : DefaultLutResourceResolver()),
+      mask_assets_(mask_assets ? std::move(mask_assets) : DefaultMaskAssetReader()) {}
 
 template <class Backend>
 Renderer<Backend>::~Renderer() = default;
@@ -234,6 +241,7 @@ void Renderer<Backend>::EnsureDevice() {
   }
   device_ = std::make_unique<RenderDevice>();
   device_->Workspace().SetLutResources(lut_resources_);
+  device_->Workspace().SetMaskAssets(mask_assets_);
   if (role_ == ExecutorRole::Batch) {
     if constexpr (requires {
                     { device_->Workspace().Device().UseDedicatedQueue() };

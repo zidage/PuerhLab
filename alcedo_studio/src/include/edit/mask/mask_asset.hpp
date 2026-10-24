@@ -5,6 +5,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -98,5 +99,18 @@ void ValidateMaskAsset(const MaskAsset& asset);
  */
 [[nodiscard]] auto MakeMaskAssetKey(const MaskAssetDescriptor& descriptor,
                                     std::span<const std::uint8_t> pixels) -> MaskAssetKey;
+
+/**
+ * @brief Pixel rectangle of an asset raster in an image of @p image_extent that covers the full
+ *        ReferenceSpace.
+ *
+ * The left and top pixel are the bounds origin times @p image_extent, rounded. The bounds size
+ * times @p image_extent must equal the asset extent within half a pixel.
+ *
+ * @return The rectangle, or no value when the asset does not lie inside the image or its size
+ *         does not match its bounds.
+ */
+[[nodiscard]] auto AiMaskAssetPixelRect(const MaskAssetDescriptor& descriptor,
+                                        Extent2D image_extent) -> std::optional<RectI>;
 
 }  // namespace alcedo
