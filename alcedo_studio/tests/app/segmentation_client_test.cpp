@@ -91,6 +91,9 @@ class RecordingSegmentationService final : public alcedo::ai::SegmentationServic
     response->set_session_id("session-1");
     response->set_encoder_ms(request->rgb8_pixels().empty() ? 0 : 70);
     response->set_from_cache(request->rgb8_pixels().empty());
+    // The cached image entry of the key "cached" is 4096 x 2731.
+    response->set_image_width(request->rgb8_pixels().empty() ? 4096 : request->width());
+    response->set_image_height(request->rgb8_pixels().empty() ? 2731 : request->height());
     return grpc::Status::OK;
   }
 
@@ -274,6 +277,27 @@ TEST_F(SegmentationClientTest, StartSessionSendsImageKeyWithoutPixels) {
   EXPECT_EQ(service_.ReceivedImageKey(), "cached");
   EXPECT_EQ(service_.ReceivedPixelBytes(), 0U);
   EXPECT_EQ(service_.ReceivedSize(), (std::pair<uint32_t, uint32_t>{0, 0}));
+}
+
+TEST_F(SegmentationClientTest, StartSessionResultCarriesImageSize) {
+  SegmentationRgb8Image image;
+  image.width  = 64;
+  image.height = 48;
+  image.pixels.assign(static_cast<size_t>(image.width) * image.height * 3, 90);
+
+  const auto with_pixels = client_->StartSession(image, "photo-a", kTimeout);
+  const auto key_only    = client_->StartSession(SegmentationRgb8Image{}, "cached", kTimeout);
+  const auto not_cached  = client_->StartSession(SegmentationRgb8Image{}, "photo-b", kTimeout);
+
+  ASSERT_TRUE(with_pixels.status.ok) << with_pixels.status.error;
+  EXPECT_EQ(with_pixels.image_width, 64U);
+  EXPECT_EQ(with_pixels.image_height, 48U);
+  ASSERT_TRUE(key_only.status.ok) << key_only.status.error;
+  EXPECT_EQ(key_only.image_width, 4096U);
+  EXPECT_EQ(key_only.image_height, 2731U);
+  EXPECT_FALSE(not_cached.status.ok);
+  EXPECT_EQ(not_cached.image_width, 0U);
+  EXPECT_EQ(not_cached.image_height, 0U);
 }
 
 TEST_F(SegmentationClientTest, ImageNotCachedHeaderSetsImageNotCached) {

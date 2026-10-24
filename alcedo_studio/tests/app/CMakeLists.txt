@@ -754,6 +754,15 @@ gtest_discover_tests(AiMaskSegmentationServiceTest TEST_PREFIX "AiMaskSegmentati
   PROPERTIES LABELS "ci_core_flow")
 alcedo_register_test_target(AiMaskSegmentationServiceTest app ci_core)
 
+# SM5.2: AI Mask edit session (session history, model outputs, composition, commit payload).
+add_executable(AiMaskEditSessionTest ${ALCEDO_TEST_ROOT}/app/ai_mask_edit_session_test.cpp)
+target_include_directories(AiMaskEditSessionTest PUBLIC ${ALCEDO_INCLUDE_DIR})
+target_link_libraries(AiMaskEditSessionTest AiMaskEditSession opencv_core opencv_imgproc
+  GTest::gtest_main)
+gtest_discover_tests(AiMaskEditSessionTest TEST_PREFIX "AiMaskEditSessionTest."
+  PROPERTIES LABELS "ci_core_flow")
+alcedo_register_test_target(AiMaskEditSessionTest app ci_core)
+
 # Frontend 1b: multi-profile provider cards, JSON persistence, and generated sidecar configs.
 add_executable(AiProviderProfileTest ${ALCEDO_TEST_ROOT}/app/ai_provider_profile_test.cpp)
 target_include_directories(AiProviderProfileTest PUBLIC ${ALCEDO_INCLUDE_DIR})

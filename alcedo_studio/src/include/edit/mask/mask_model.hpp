@@ -190,6 +190,13 @@ struct MaskModel {
 void ValidateMaskModel(const MaskModel& mask);
 
 /**
+ * @brief Validate one AI Segmentation source with the source rules of @ref ValidateMaskModel.
+ *
+ * @throws std::runtime_error naming the first rule that fails. Does not mutate @p source.
+ */
+void               ValidateAiSegmentationMaskSource(const AiSegmentationMaskSource& source);
+
+/**
  * @brief Serialize one Mask, including null range fields and an explicit source kind.
  */
 [[nodiscard]] auto MaskModelToJson(const MaskModel& mask) -> nlohmann::json;

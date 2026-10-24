@@ -30,6 +30,25 @@ struct AiMaskSegmentationTimeouts {
 };
 
 /**
+ * @brief The model calls of an AI Mask edit session on the current segmentation session (SM5.2).
+ *
+ * The AI Mask edit session calls the runner for each step that needs a model output. Each call
+ * blocks until the model answers. A failure is reported in the result status; the runner throws
+ * no exception for a model failure.
+ */
+class IAiMaskSegmentationRunner {
+ public:
+  virtual ~IAiMaskSegmentationRunner()                                              = default;
+
+  /// Decodes @p prompt on the current segmentation session.
+  virtual auto Decode(const SegmentationPrompt& prompt) -> SegmentationDecodeResult = 0;
+  /// Runs the task mask @p task. @p person_index is the People list index for kPerson and empty
+  /// for the other tasks.
+  virtual auto RunTask(SegmentationTask task, std::optional<uint32_t> person_index)
+      -> SegmentationTaskResult = 0;
+};
+
+/**
  * @brief One activation of the AI Mask tool over the sidecar segmentation service (SM3.A to
  * SM3.C).
  *
@@ -44,14 +63,14 @@ struct AiMaskSegmentationTimeouts {
  * Threading: not thread-safe. The owner calls every method from one thread. Each method blocks
  * until the sidecar answers or its timeout passes.
  */
-class AiMaskSegmentationService {
+class AiMaskSegmentationService final : public IAiMaskSegmentationRunner {
  public:
   /// @p sidecar_lease keeps the sidecar process running (AiSidecarRuntimeService::AcquireLease).
   /// @p client talks to that process.
   AiMaskSegmentationService(std::shared_ptr<void>                               sidecar_lease,
                             std::unique_ptr<sidecar_client::SegmentationClient> client,
                             AiMaskSegmentationTimeouts                          timeouts = {});
-  ~AiMaskSegmentationService();
+  ~AiMaskSegmentationService() override;
 
   AiMaskSegmentationService(const AiMaskSegmentationService&)                    = delete;
   auto operator=(const AiMaskSegmentationService&) -> AiMaskSegmentationService& = delete;
@@ -72,12 +91,12 @@ class AiMaskSegmentationService {
   auto               StartCachedImage(const std::string& image_key) -> SegmentationSessionResult;
   /// Decodes @p prompt on the current session. Fails without a sidecar call when no session
   /// exists.
-  auto               Decode(const SegmentationPrompt& prompt) -> SegmentationDecodeResult;
+  auto               Decode(const SegmentationPrompt& prompt) -> SegmentationDecodeResult override;
   /// Runs the task mask @p task on the current session (SM3.C, SM3.D). @p person_index is the
   /// index into the People list for kPerson; the other tasks take no index. Fails without a
   /// sidecar call when no session exists or the service is closed.
-  auto RunTask(SegmentationTask task, std::optional<uint32_t> person_index = std::nullopt)
-      -> SegmentationTaskResult;
+  auto               RunTask(SegmentationTask task, std::optional<uint32_t> person_index)
+      -> SegmentationTaskResult override;
   /// Ends the current session. Succeeds without a sidecar call when no session exists.
   auto               EndImage() -> SegmentationCallStatus;
   /// Ends the session, unloads the models, and releases the lease. Later calls fail without a

@@ -14,8 +14,9 @@ on Windows and macOS on 2026-10-23 ([phase plan](ai_segmentation_mask/phase_sm3c
 its macOS port check ran with SM3.D. On 2026-10-23 the
 user approved the SM5 design (D16 to D22): an AI Mask edit session with its own history stack, R8
 assets in the project database, and People masks from S3OD. SM3.D is complete on Windows and macOS
-on 2026-10-23 ([phase plan](ai_segmentation_mask/phase_sm3d_people_masks_from_s3od_plan.md)). SM5
-([phase plan](ai_segmentation_mask/phase_sm5_ai_mask_source_and_session_plan.md)) is planned. SM2 runs
+on 2026-10-23 ([phase plan](ai_segmentation_mask/phase_sm3d_people_masks_from_s3od_plan.md)). In SM5
+([phase plan](ai_segmentation_mask/phase_sm5_ai_mask_source_and_session_plan.md)), SM5.1 and SM5.2
+are complete on 2026-10-23; SM5.3 is planned. SM2 runs
 after SM9 (section 7).
 
 Target release: Alcedo Studio 0.3.4. The AI Segmentation Mask is the main feature of that release.
@@ -294,8 +295,8 @@ The project storage owns the R8 bytes. No owner keeps a copy of another owner's 
 | SM3.C | Task masks in the service: Subject (S3OD), Background, Sky and People (head) | Rust service, proto, C++ client | SM3.A | 1600-2050 in two parts SM3.C.1 and SM3.C.2; actual about 3,250 code lines | complete 2026-10-23 on Windows and macOS (macOS port check with SM3.D) ([phase plan](ai_segmentation_mask/phase_sm3c_task_masks_plan.md)) |
 | SM4 | Analysis render in ReferenceSpace, image key, and prompt coordinates | geometry, editor session, app, viewer geometry | none | 1600 in two parts SM4.1 and SM4.2; actual about 1,350 | complete 2026-10-23 on Windows; measurements with SM9 ([phase plan](ai_segmentation_mask/phase_sm4_analysis_render_plan.md)) |
 | SM3.D | People masks from S3OD on person crops (D21, D22) | lab pipeline, Rust service, proto, C++ client | SM3.C | 1,300-1,750 in two parts SM3.D.1 and SM3.D.2, plus 300-450 in the lab; actual about 2,230 lines, plus 820 in the lab without the result JSON | complete 2026-10-23 on Windows and macOS ([phase plan](ai_segmentation_mask/phase_sm3d_people_masks_from_s3od_plan.md)) |
-| SM5.1 | AI Mask source kind, project mask asset table, read verification, reachability cleanup | `edit/mask`, storage, history, app | SM4 | 1,500-1,900 | planned ([phase plan](ai_segmentation_mask/phase_sm5_ai_mask_source_and_session_plan.md)) |
-| SM5.2 | AI Mask edit session: session history stack, composition, People toggles, edit of a stored AI Mask, Commit payload | app layer, segmentation service, proto | SM5.1, SM3.D | 1,300-1,700 | planned (same plan) |
+| SM5.1 | AI Mask source kind, project mask asset table, read verification, reachability cleanup | `edit/mask`, storage, history, app | SM4 | 1,500-1,900 | complete ([phase plan](ai_segmentation_mask/phase_sm5_ai_mask_source_and_session_plan.md)) |
+| SM5.2 | AI Mask edit session: session history stack, composition, People toggles, edit of a stored AI Mask, Commit payload | app layer, segmentation service, proto | SM5.1, SM3.D | 1,300-1,700 | complete (same plan) |
 | SM5.3 | Editor integration: Open, Commit, Cancel, asset write; Paste skip and notice | editor session, Mask controller, transfer, album backend | SM5.1, SM5.2 | 1,000-1,400 | planned (same plan) |
 | SM6 | Raster `MaskEvaluate` on CUDA, OpenCL, and Metal; Feather and Expand at texture creation (D20) | `edit/runtime` | SM5.1 | 1000-1800 | outline |
 | SM7 | Misalignment notice from the geometry fingerprint (D9, P6) | app layer, `edit/mask` | SM5.1 | 300-600 | outline |

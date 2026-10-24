@@ -2,7 +2,8 @@
 
 Date: 2026-10-23.
 
-Status: SM5.1 complete (2026-10-23, section 13.1). SM5.2 and SM5.3 planned.
+Status: SM5.1 complete (2026-10-23, section 13.1). SM5.2 complete (2026-10-23, section 13.2).
+SM5.3 planned.
 
 Parent plan: [AI Segmentation Mask Master Plan](../ai_segmentation_mask_master_plan.md), section
 9.4. Issues: SM5.1 #470, SM5.2 #471, SM5.3 #472. Tracking issue: #468.
@@ -380,7 +381,7 @@ auto CommitAiMaskSource(const NodeId& grade_id, const std::optional<MaskId>& mas
 | Phase | Result | Main modules | Dependency | Expected diff | Status |
 | --- | --- | --- | --- | ---: | --- |
 | SM5.1 | AI Mask source kind, recipe JSON, asset table and store, reachability cleanup, explicit dispatch | `edit/mask`, `edit/runtime`, `storage`, `app/pipeline_service`, album backend | SM4 | 1,500-1,900 | complete (13.1) |
-| SM5.2 | AI Mask edit session: stack, output map, composition, People toggles, reopen, commit payload; session size in the start response | `app/ai_mask_edit_session`, segmentation service, proto | SM5.1, SM3.D | 1,300-1,700 | planned |
+| SM5.2 | AI Mask edit session: stack, output map, composition, People toggles, reopen, commit payload; session size in the start response | `app/ai_mask_edit_session`, segmentation service, proto | SM5.1, SM3.D | 1,300-1,700 | complete (13.2) |
 | SM5.3 | Editor integration: lease, Open, Commit, Cancel, asset port; Paste exclusion and notice | `app/editor_session_service`, policy, mask controller, transfer, album backend | SM5.1, SM5.2 | 1,000-1,400 | planned |
 
 SM5 is split into three parts because one part with the session and the editor integration can
@@ -546,8 +547,8 @@ the sidecar message; the stack, coverage, and `PersonIncluded(3)` do not change.
 
 **Exit criteria.**
 
-- [ ] The tests of section 8.2 pass, and the Rust tests of the start response pass.
-- [ ] `AiMaskSegmentationServiceTest` and `SegmentationClientTest` pass.
+- [x] The tests of section 8.2 pass, and the Rust tests of the start response pass.
+- [x] `AiMaskSegmentationServiceTest` and `SegmentationClientTest` pass.
 
 **Expected diff.** 1,300-1,700 lines (production 650-800, tests 600-850, Rust and proto 50).
 
@@ -856,8 +857,181 @@ The full suite was not run (only the user starts it).
 ### 13.2 SM5.2
 
 ```text
-(same fields as 13.1)
+Phase / date / status: SM5.2 / 2026-10-23 / complete.
+Source revision and branch: base 11cb8747 (main, SM5.1 merged); branch
+  feature/ai-segmentation-sm5-2-edit-session.
+Actual changed modules: rust/puerh_mind (proto, engine StartedSession, server mapping),
+  sidecar_client (DTO, client mapping), app/ai_mask_segmentation_service
+  (IAiMaskSegmentationRunner), new library AiMaskEditSession (app/ai_mask_edit_session,
+  app/ai_mask_model_output_store, app/ai_mask_coverage_composition), edit/mask/mask_model
+  (public ValidateAiSegmentationMaskSource), test CMake (AiMaskEditSessionTest).
+Implemented behavior: M3 to M7, M9, M14, M15, D16 (session side), D21; the steps 1 to 5 of
+  section 7.2.
+Explicitly unimplemented items: none of SM5.2. The lease, Open, Commit, Cancel, the asset port,
+  and the Paste exclusion belong to SM5.3.
+Primary success call chain: section 13.2.1.
+Primary failure and restore call chain: section 13.2.1.
+Build and test commands with exit codes: section 13.2.2.
+Discovered / passed / failed / skipped counts: section 13.2.2.
+Manual verification: none; SM9 is the first user of the session.
+Performance or resource evidence, if required: section 13.2.3 (section 9).
+Evidence path: build/tmp/sm5/ (removed at completion).
+Remaining defects or unavailable platforms: no macOS run (the Rust change is platform-neutral;
+  the C++ session has no platform code). Issue #482 (clang-tidy member suffix rule) was found
+  during the work.
 ```
+
+#### 13.2.1 Call chains
+
+```text
+AiMaskEditSession::AddTask(People, Add)
+  -> next state = current + {Add, People}; prompt group closed
+  -> EnsureOutputs -> AiMaskModelOutputStore::Ensure
+     -> output {"task":"people"} missing -> runner.RunTask(kPeople)
+     -> ValidateAiMaskModelOutput -> alpha grid and People list kept
+  -> Push -> Compose: ComponentCoverage (ConvertModelOutputToCoverage, mask_box 0,0,1,1)
+     -> FoldAiMaskCoverage(Add) -> Coverage(); Redo states dropped
+AiMaskEditSession::TogglePerson(1)
+  -> PersonIncluded(1) == in_subject == true -> toggle {1, Subtract, People list box}
+  -> Ensure: output {"person":1} missing -> runner.RunTask(kPerson, 1) -> crop alpha + mask_box
+  -> Compose: People base, then min(base, 255 - person 1) inside the crop -> fold into total
+AiMaskEditSession::AddPromptStep(stroke, Subtract)
+  -> open group: labels = Subtract; else new group {Subtract} with Add labels (M3)
+  -> point count <= 64 and ValidateAiMaskRecipe, else Rejected (no call)
+  -> Ensure: each missing group prefix -> runner.Decode(all points, latest box,
+     mask_input = selected logits of the step before) (M4)
+  -> step level = decoder selected_index -> Push -> Compose
+Undo / Redo -> Compose from the kept outputs (no runner call)
+AiMaskEditSession(runner, image, stored source, stored asset)        (M15)
+  -> ValidateAiSegmentationMaskSource -> analysis size == session size -> asset key and pixels
+  -> PlaceAiMaskAssetInCoverage -> first state = stored recipe and edge, no runner call
+  -> Feather, Expand, and mode steps keep the stored coverage; the first component change
+     replays every component through Ensure, then decodes the new step
+AiMaskEditSession::PrepareCommit
+  -> CropAiMaskCoverage (values > 0, 1-pixel border, clipped) -> MakeMaskAssetKey
+  -> AiSegmentationMaskSource{key, descriptor, session size, recipe, edge,
+     model set and fingerprint (the stored ones for a stored-coverage state)}
+  -> ValidateAiSegmentationMaskSource -> {asset, source}
+SegmentationEngine::start_session -> StartedSession{image_width, image_height} (entry size,
+  also for a cache hit) -> server -> StartSegmentationSessionResponse fields 5 and 6
+  -> SegmentationClient -> SegmentationSessionResult{image_width, image_height}
+```
+
+```text
+runner status not ok (decode, task, person) -> {Failed, sidecar message}; the outputs computed
+  before the failure stay in the store; stack, recipe, and coverage do not change.
+task, People, or person found = false -> {NotFound, sidecar message}; nothing changes.
+Invalid model output (logit or alpha count, box, Sky size, level count) -> {Failed, message}.
+Invalid step (65th point, level change of a non-click, toggle without People last, index outside
+  the People list, invalid or unchanged edge, unchanged mode) -> {Rejected}; no runner call.
+PrepareCommit with no value > 0 -> std::runtime_error "The AI Mask has no coverage."
+Reopen with another analysis size, another asset, or changed pixels -> std::runtime_error.
+```
+
+#### 13.2.2 Evidence
+
+Commands (PowerShell, repository root unless noted):
+
+```powershell
+cmd /c scripts\msvc_env.cmd --preset win_debug -DCMAKE_PREFIX_PATH="D:/Qt/6.9.3/msvc2022_64/lib/cmake"   # exit 0
+cmd /c scripts\msvc_env.cmd --build --preset win_debug --parallel 4 --target AiMaskEditSessionTest AiMaskSegmentationServiceTest SegmentationClientTest GpuDagModelGraphTest   # exit 0
+ctest --test-dir build/debug -j 1 --output-on-failure -R "^(AiMaskEditSessionTest|AiMaskSegmentationServiceTest|SegmentationClientTest|GpuDagModelGraphTest)\."   # exit 0, 186/186 passed
+# rust/puerh_mind:
+cargo test --lib segmentation   # exit 0, 82 passed, 0 failed
+cargo fmt -- --check            # exit 0
+```
+
+| Test (section 8.2) | Target | Result |
+| --- | --- | --- |
+| `LogitsConvertToSessionSizeWithThresholdZero` | `AiMaskEditSessionTest` | PASS |
+| `AlphaGridPastesThroughMaskBox` | `AiMaskEditSessionTest` | PASS |
+| `FoldAddsWithMaximumAndSubtractsWithInverse` | `AiMaskEditSessionTest` | PASS |
+| `PromptStepsChainMaskInputInsideAGroup` | `AiMaskEditSessionTest` | PASS |
+| `SubtractStrokeAfterTaskStartsSubtractGroup` | `AiMaskEditSessionTest` | PASS |
+| `UndoAndRedoNeedNoModelCall` | `AiMaskEditSessionTest` | PASS |
+| `NewStepAfterUndoDropsRedo` | `AiMaskEditSessionTest` | PASS |
+| `PeopleClickUsesInSubjectThenToggles` | `AiMaskEditSessionTest` | PASS |
+| `PersonNotFoundMakesNoStep` | `AiMaskEditSessionTest` | PASS |
+| `FailedModelCallKeepsState` | `AiMaskEditSessionTest` | PASS |
+| `EdgeAndModeStepsNeedNoModelCall` | `AiMaskEditSessionTest` | PASS |
+| `LevelChangeAppliesOnlyToSingleClick` | `AiMaskEditSessionTest` | PASS |
+| `PointLimitRejectsThe65thPoint` | `AiMaskEditSessionTest` | PASS |
+| `ReopenShowsStoredCoverageWithoutModelCall` | `AiMaskEditSessionTest` | PASS |
+| `ReopenRejectsAnotherAnalysisSize` | `AiMaskEditSessionTest` | PASS |
+| `PrepareCommitCropsToCoverageWithBorder` | `AiMaskEditSessionTest` | PASS |
+| `PrepareCommitRejectsEmptyCoverage` | `AiMaskEditSessionTest` | PASS |
+| `start_response_carries_image_size` | Rust `server::segmentation` | PASS |
+| `key_only_start_hits_after_session_end` (image size assertions added) | Rust `service::segmentation::engine` | PASS |
+| `StartSessionResultCarriesImageSize` | `SegmentationClientTest` | PASS |
+| `StartResultsCarryTheSessionImageSize` (added) | `AiMaskSegmentationServiceTest` | PASS |
+
+Suite totals: `AiMaskEditSessionTest` 17/17, `AiMaskSegmentationServiceTest` 13/13,
+`SegmentationClientTest` 11/11, `GpuDagModelGraphTest` 145/145 (the target of the changed
+`mask_model.cpp`), Rust `segmentation` 82/82. The full suite was not run (only the user starts
+it).
+
+#### 13.2.3 Measurements (section 9)
+
+Windows, the release flags of `win_release` (`/O2 /arch:AVX2 /GL`): the `AiMaskEditSession`
+library built in `build/release` and a benchmark executable under `build/tmp/sm5/bench/`
+(removed). One 4096 x 3072 session with a fake runner (1024 x 768 People alpha, one 600 x 1024
+person crop, 256 x 256 logits). Three runs; the times include the fake runner (< 1 ms).
+
+| Step | Time |
+| --- | ---: |
+| `AddTask(People)` (convert and fold) | 22-25 ms |
+| `TogglePerson` (People base, person, fold) | 37-40 ms |
+| `AddPromptStep` (logits to 4096 x 3072, fold of 3 components) | 25-30 ms |
+| `Undo` (compose again) | 25-26 ms |
+| `PrepareCommit` (crop of a 4096 x 3072 coverage, key) | 16-17 ms |
+
+The first version used a per-pixel `std::lround` and scalar folds: People took 152 ms and a person
+toggle 210 ms (above the 100 ms of the risk table). The conversions and folds now use OpenCV
+`cv::compare`, `convertTo`, `cv::max`, `cv::min`, and `cv::bitwise_not`; the tests above check the
+values. A debug build takes 150-430 ms per step (not representative).
+
+Not taken: the asset row size and the put and read times for the Subject coverage of three
+quality photos. They need the real models on the quality photos and the SM5.3 commit path; take
+them with SM5.3.
+
+#### 13.2.4 Implementation decisions
+
+- The output map and the runner calls have a separate owner, `AiMaskModelOutputStore`
+  (`app/ai_mask_model_output_store`). The session owns the stack and the step rules; the
+  composition functions are pure. `AiMaskStepStatus` and `AiMaskStepResult` are declared in the
+  store header, which the session header includes.
+- Output keys: `{"task": ...}`, `{"person": i}`, and `{"prompt": <components JSON of the group
+  prefix>}` with the group operation Add and the level of the last step 0, because the decode
+  depends on neither. A level change therefore needs no decode.
+- The decoder box of a group prefix is the box of the latest step that has one.
+- Three levels exist only when the group prefix is one point without a box (the sidecar click
+  rule `is_click`). A second click in an open group decodes two points and has one level.
+  `SelectLevel` rejects other groups, a level above 2, and the level that is already selected.
+- An unchanged edge, an unchanged input mode, and an invalid edge are `Rejected`; they make no
+  stack entry.
+- `PersonIncluded` reads the toggles of the last People component of the recipe.
+- A session opened with People as the last component has no People list until the People task
+  runs: `TogglePerson` runs it first (the replay needs it), then checks the index.
+- A reopened session starts in Prompt mode with the stored prompt group open when the last stored
+  component is a prompt group (the next prompt step continues that group after the replay), else
+  in Task mode.
+- A state whose recipe equals the stored recipe shows the stored coverage and commits the stored
+  `model_set_id` and `geometry_fingerprint`, because its coverage comes from them. Another state
+  commits the session values.
+- Alpha grids: the session pixels whose centers lie in `mask_box` get `cv::resize` of the grid to
+  that rectangle (the lab `alpha_on_image` mapping for the integer-pixel boxes of the sidecar),
+  then `convertTo(CV_8U, 255)`: rounding with ties to even and saturation to [0, 255] (the
+  clamp).
+- Model outputs are validated when they arrive: the logit count, the alpha count and box, the Sky
+  size equal to the session size, and the decoder mask count equal to the level count. A
+  violation is `Failed`.
+- `ValidateAiSegmentationMaskSource` is now public in `mask_model.hpp`: the session validates the
+  stored source and the commit source without a `MaskModel`.
+- `PlaceAiMaskAssetInCoverage` (the inverse of `CropAiMaskCoverage`) is added for M15.
+- `AiMaskSegmentationService::RunTask` has no default argument now; the interface method has
+  none. The three test calls pass `std::nullopt`.
+- Diff size: production C++ about 1,360 lines (above the 650-800 of section 7.2 because of the
+  separate output store and the API comments), tests about 820, Rust and proto 39.
 
 ### 13.3 SM5.3
 

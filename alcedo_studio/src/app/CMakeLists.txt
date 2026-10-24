@@ -318,6 +318,20 @@ def_library(AiMaskSegmentationService
     PUBLIC_DEPS SidecarClient
 )
 
+# AI Mask edit session (SM5.2): the session step history, the model outputs of its steps, the
+# host composition of the coverage, and the commit payload.
+def_library(AiMaskEditSession
+    SOURCES
+        "${ALCEDO_APP_ROOT}/ai_mask_edit_session.cpp"
+        "${ALCEDO_APP_ROOT}/ai_mask_model_output_store.cpp"
+        "${ALCEDO_APP_ROOT}/ai_mask_coverage_composition.cpp"
+        "${ALCEDO_INCLUDE_ROOT}/app/ai_mask_edit_session.hpp"
+        "${ALCEDO_INCLUDE_ROOT}/app/ai_mask_model_output_store.hpp"
+        "${ALCEDO_INCLUDE_ROOT}/app/ai_mask_coverage_composition.hpp"
+    PUBLIC_DEPS AiMaskSegmentationService EditMaskCore
+    PRIVATE_DEPS opencv_core opencv_imgproc
+)
+
 def_library(AiCredentialStore
     SOURCES
         "${ALCEDO_APP_ROOT}/ai_credential_store.cpp"

@@ -87,6 +87,10 @@ struct SegmentationSessionResult {
   /// True when a start without pixels names an image key that the sidecar does not cache
   /// (AI_ERROR_IMAGE_NOT_CACHED). The caller renders the image and starts again with the pixels.
   bool                   image_not_cached = false;
+  /// Size of the session image: the sent size for a start with pixels, the cached size for a
+  /// start from the cache. 0 when the start fails.
+  uint32_t               image_width      = 0;
+  uint32_t               image_height     = 0;
 };
 
 /// A task mask of the sidecar (SM3.C, SM3.D).

@@ -298,6 +298,8 @@ impl SegmentationService for SegmentationServiceImpl {
             response.session_id = session.session_id;
             response.encoder_ms = session.encoder_ms as i64;
             response.from_cache = session.from_cache;
+            response.image_width = session.image_width;
+            response.image_height = session.image_height;
         }
         Ok(Response::new(response))
     }
@@ -652,6 +654,28 @@ mod tests {
         );
         assert!(response.session_id.is_empty());
         assert!(!response.from_cache);
+    }
+
+    #[tokio::test]
+    async fn start_response_carries_image_size() {
+        let service = loaded_service().await;
+        let with_pixels = start_with_key(&service, "photo-a", true).await;
+        assert_eq!(
+            header_status(&with_pixels.header).0,
+            AiResponseStatus::AiStatusOk as i32
+        );
+        assert!(!with_pixels.from_cache);
+        assert_eq!((with_pixels.image_width, with_pixels.image_height), (8, 4));
+        let key_only = start_with_key(&service, "photo-a", false).await;
+        assert_eq!(
+            header_status(&key_only.header).0,
+            AiResponseStatus::AiStatusOk as i32
+        );
+        assert!(key_only.from_cache);
+        assert_eq!((key_only.image_width, key_only.image_height), (8, 4));
+        let not_cached = start_with_key(&service, "photo-b", false).await;
+        assert!(not_cached.session_id.is_empty());
+        assert_eq!((not_cached.image_width, not_cached.image_height), (0, 0));
     }
 
     #[tokio::test]
