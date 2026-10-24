@@ -5,6 +5,7 @@
 #include "ui/alcedo_main/album_backend/editor_session_mask_asset_port.hpp"
 
 #include <exception>
+#include <stdexcept>
 #include <utility>
 
 namespace alcedo::ui {
@@ -53,6 +54,19 @@ auto EditorSessionMaskAssetPort::ReadMaskAsset(const alcedo::MaskAssetKey& key,
   } catch (const std::exception& e) {
     return SetError(error, e.what());
   }
+}
+
+CurrentProjectMaskAssetReader::CurrentProjectMaskAssetReader(
+    std::function<std::shared_ptr<alcedo::PipelineMgmtService>()> pipeline_service)
+    : pipeline_service_(std::move(pipeline_service)) {}
+
+auto CurrentProjectMaskAssetReader::Read(const alcedo::MaskAssetKey& key) const
+    -> alcedo::MaskAsset {
+  const auto service = pipeline_service_ ? pipeline_service_() : nullptr;
+  if (!service) {
+    throw std::runtime_error("No project is open to read Mask asset " + std::string{key.Value()});
+  }
+  return service->ReadMaskAsset(key);
 }
 
 }  // namespace alcedo::ui

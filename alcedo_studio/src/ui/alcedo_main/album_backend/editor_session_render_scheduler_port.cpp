@@ -23,6 +23,7 @@
 #include "image/image_buffer.hpp"
 #include "io/image/image_loader.hpp"
 #include "renderer/pipeline_task.hpp"
+#include "ui/alcedo_main/album_backend/editor_session_mask_asset_port.hpp"
 #include "ui/alcedo_main/editor_support/controllers/image_controller.hpp"
 #include "ui/edit_viewer/frame_sink.hpp"
 #include "utils/diagnostics/app_logging.hpp"
@@ -487,8 +488,14 @@ auto EditorSessionRenderSchedulerPort::EnsureExecutor()
   // The backend preference is fixed at construction; a preference change takes effect after the
   // application restarts, like every other executor.
   const auto service = pipeline_port ? pipeline_port->PipelineMapper() : nullptr;
-  auto       executor = std::make_shared<alcedo::PipelineExecutor>(
-      alcedo::ExecutorRole::Interactive, service ? service->LutResources() : nullptr);
+  // The executor lives for the application; its Mask asset reader reads from the open project.
+  auto       mask_assets = std::make_shared<const CurrentProjectMaskAssetReader>(
+      [pipeline_port]() -> std::shared_ptr<alcedo::PipelineMgmtService> {
+        return pipeline_port ? pipeline_port->PipelineMapper() : nullptr;
+      });
+  auto executor = std::make_shared<alcedo::PipelineExecutor>(
+      alcedo::ExecutorRole::Interactive, service ? service->LutResources() : nullptr,
+      std::move(mask_assets));
   if (service) {
     executor->SetAcceleratorBackendPreference(service->GetAcceleratorBackendPreference());
   }

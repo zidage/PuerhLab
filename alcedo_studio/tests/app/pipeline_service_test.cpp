@@ -1469,6 +1469,30 @@ auto CleanupJournalDirectory(std::string_view name) -> std::filesystem::path {
   return directory;
 }
 
+// SM6.1 R2: the executors of a project read its stored assets through MaskAssets().
+TEST_F(PipelineMapperTests, MaskAssetsReaderReadsStoredAssetAndReportsMissingKey) {
+  ProjectService      project(db_path_, meta_path_);
+  PipelineMgmtService pipelines(project.GetStorage());
+  const auto          asset = MakeCleanupMaskAsset(7);
+  pipelines.PutMaskAsset(asset);
+
+  const auto& reader = pipelines.MaskAssets();
+  ASSERT_NE(reader, nullptr);
+  const auto read = reader->Read(asset.key);
+  EXPECT_EQ(read.key, asset.key);
+  EXPECT_EQ(read.descriptor, asset.descriptor);
+  EXPECT_EQ(read.pixels, asset.pixels);
+
+  const auto missing = MakeCleanupMaskAsset(8);
+  try {
+    (void)reader->Read(missing.key);
+    FAIL() << "a missing asset was read";
+  } catch (const std::runtime_error& error) {
+    EXPECT_NE(std::string{error.what()}.find("is missing from the project"), std::string::npos)
+        << error.what();
+  }
+}
+
 // SM5.1 M11: an asset that the root, the checkpoint, a reachable commit, or only an editor journal
 // record refers to stays after the clean-close cleanup.
 TEST_F(PipelineMapperTests, CleanupKeepsAssetsOfReachableHistory) {

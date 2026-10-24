@@ -349,10 +349,7 @@ void PipelineMgmtService::PutMaskAsset(const MaskAsset& asset) {
 }
 
 auto PipelineMgmtService::ReadMaskAsset(const MaskAssetKey& key) -> MaskAsset {
-  auto           db_guard = storage_->GetDatabase().GetConnectionGuard();
-  auto           db_lock  = db_guard.Lock();
-  MaskAssetStore store(db_guard.conn_);
-  return store.Read(key);
+  return mask_assets_->Read(key);
 }
 
 auto PipelineMgmtService::CollectUnreferencedMaskAssets(

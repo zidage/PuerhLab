@@ -13,6 +13,7 @@
 #include "edit/pipeline/pipeline_accelerator.hpp"
 #include "edit/runtime/executor_role.hpp"
 #include "edit/runtime/lut_resource_resolver.hpp"
+#include "edit/runtime/mask_asset_reader.hpp"
 #include "edit/runtime/pipeline_apply_request.hpp"
 #include "edit/runtime/rendered_pipeline_image.hpp"
 #include "image/image_buffer.hpp"
@@ -72,6 +73,9 @@ class PipelineExecutor {
   /// Resolver every renderer of this executor uses for Color Grade LUT references.
   std::shared_ptr<const LutResourceResolver> lut_resources_;
 
+  /// Reader every renderer of this executor uses for the R8 assets of AI Masks.
+  std::shared_ptr<const MaskAssetReader>     mask_assets_;
+
   /// Renderers of one backend, one per served role; each is created by its first Apply.
   template <class RendererType>
   struct RoleRenderers {
@@ -98,9 +102,12 @@ class PipelineExecutor {
    * @param lut_resources Resolver for Color Grade LUT references, handed to every renderer this
    *        executor creates. The application passes the LUT library; null selects the
    *        file-path-only DefaultLutResourceResolver.
+   * @param mask_assets Reader of the AI Mask assets of the project, handed to every renderer this
+   *        executor creates. Null selects DefaultMaskAssetReader, which fails each read.
    */
   explicit PipelineExecutor(ExecutorRole                               role,
-                            std::shared_ptr<const LutResourceResolver> lut_resources = nullptr);
+                            std::shared_ptr<const LutResourceResolver> lut_resources = nullptr,
+                            std::shared_ptr<const MaskAssetReader>     mask_assets   = nullptr);
 
   [[nodiscard]] auto Serves(ExecutorRole role) const -> bool {
     return role == ExecutorRole::Interactive ? serves_interactive_ : serves_batch_;

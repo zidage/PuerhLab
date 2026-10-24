@@ -30,13 +30,13 @@ namespace {
 /** @brief Renderer of the request role; created on first use. */
 template <class RendererType, class Renderers>
 auto RoleRenderer(Renderers& renderers, const PipelineApplyRequest& request,
-                  const std::shared_ptr<const LutResourceResolver>& lut_resources)
-    -> RendererType& {
+                  const std::shared_ptr<const LutResourceResolver>& lut_resources,
+                  const std::shared_ptr<const MaskAssetReader>&     mask_assets) -> RendererType& {
   auto& renderer =
       request.role == ExecutorRole::Interactive ? renderers.interactive : renderers.batch;
   if (!renderer) {
     renderer = std::make_shared<RendererType>(request.role, PreparedSourceCache::UnpackFn{},
-                                              lut_resources);
+                                              lut_resources, mask_assets);
   }
   return *renderer;
 }
@@ -69,11 +69,13 @@ auto RoleRendererDeviceBytes(const Renderers& renderers) -> std::size_t {
 }  // namespace
 
 PipelineExecutor::PipelineExecutor(ExecutorRole                               role,
-                                   std::shared_ptr<const LutResourceResolver> lut_resources)
+                                   std::shared_ptr<const LutResourceResolver> lut_resources,
+                                   std::shared_ptr<const MaskAssetReader>     mask_assets)
     : serves_interactive_(role == ExecutorRole::Interactive),
       serves_batch_(role == ExecutorRole::Batch),
       resolved_accelerator_backend_(alcedo::ResolveAcceleratorBackend(accelerator_preference_)),
-      lut_resources_(lut_resources ? std::move(lut_resources) : DefaultLutResourceResolver()) {}
+      lut_resources_(lut_resources ? std::move(lut_resources) : DefaultLutResourceResolver()),
+      mask_assets_(mask_assets ? std::move(mask_assets) : DefaultMaskAssetReader()) {}
 
 auto PipelineExecutor::Apply(const PipelineGraphSnapshot& snapshot,
                              std::shared_ptr<ImageBuffer> input,
@@ -98,19 +100,19 @@ auto PipelineExecutor::Render(const PipelineGraphSnapshot&        snapshot,
   }
 #ifdef HAVE_CUDA
   if (resolved_accelerator_backend_ == GpuBackendKind::CUDA) {
-    return RoleRenderer<CudaRenderer>(cuda_renderers_, request, lut_resources_)
+    return RoleRenderer<CudaRenderer>(cuda_renderers_, request, lut_resources_, mask_assets_)
         .RenderImage(snapshot, input, request);
   }
 #endif
 #ifdef HAVE_METAL
   if (resolved_accelerator_backend_ == GpuBackendKind::Metal) {
-    return RoleRenderer<MetalRenderer>(metal_renderers_, request, lut_resources_)
+    return RoleRenderer<MetalRenderer>(metal_renderers_, request, lut_resources_, mask_assets_)
         .RenderImage(snapshot, input, request);
   }
 #endif
 #ifdef HAVE_OPENCL
   if (resolved_accelerator_backend_ == GpuBackendKind::OpenCL) {
-    return RoleRenderer<OpenClRenderer>(opencl_renderers_, request, lut_resources_)
+    return RoleRenderer<OpenClRenderer>(opencl_renderers_, request, lut_resources_, mask_assets_)
         .RenderImage(snapshot, input, request);
   }
 #endif

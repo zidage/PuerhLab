@@ -13,6 +13,7 @@
 
 #include "edit/runtime/graph_image_cache.hpp"
 #include "edit/runtime/lut_resource_resolver.hpp"
+#include "edit/runtime/mask_asset_reader.hpp"
 #include "edit/runtime/node_result_cache.hpp"
 #include "edit/runtime/parameter_arena.hpp"
 #include "edit/runtime/result_persistence.hpp"
@@ -84,6 +85,22 @@ class BasicRenderWorkspace {
     lut_resources_ = resources ? std::move(resources) : DefaultLutResourceResolver();
   }
   [[nodiscard]] auto LutResources() const -> const LutResourceResolver& { return *lut_resources_; }
+
+  /**
+   * @brief Reader that the AI Mask pass uses for stored R8 assets.
+   *
+   * Injected once by the owning Renderer from its executor's construction; defaults to
+   * DefaultMaskAssetReader, which fails each read. A null argument restores the default.
+   * @pre Not rendering.
+   */
+  void               SetMaskAssets(std::shared_ptr<const MaskAssetReader> reader) {
+    if (rendering_) {
+      throw std::runtime_error(
+          "BasicRenderWorkspace::SetMaskAssets: cannot change while rendering");
+    }
+    mask_assets_ = reader ? std::move(reader) : DefaultMaskAssetReader();
+  }
+  [[nodiscard]] auto MaskAssets() const -> const MaskAssetReader& { return *mask_assets_; }
 
   /**
    * @brief Persistence used by the current @ref BeginRender until End/Cancel.
@@ -354,6 +371,7 @@ class BasicRenderWorkspace {
   SceneWorkImagePair<Backend>    scene_work_{};
   RuntimeInvalidationState       invalidation_{};
   std::shared_ptr<const LutResourceResolver> lut_resources_ = DefaultLutResourceResolver();
+  std::shared_ptr<const MaskAssetReader>     mask_assets_   = DefaultMaskAssetReader();
   GraphValueId                   persist_sensor_{};
   std::uint64_t                  parameter_layout_hash_ = 0;
   ResultPersistenceScope         persistence_scope_     = ResultPersistenceScope::AllCurrentResults;

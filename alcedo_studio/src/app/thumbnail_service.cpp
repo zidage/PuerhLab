@@ -264,7 +264,8 @@ struct ThumbnailService::State {
         executors_(batch_executor_count,
                    pipeline_service_ ? pipeline_service_->GetAcceleratorBackendPreference()
                                      : AcceleratorBackendPreference::Auto,
-                   pipeline_service_ ? pipeline_service_->LutResources() : nullptr),
+                   pipeline_service_ ? pipeline_service_->LutResources() : nullptr,
+                   pipeline_service_ ? pipeline_service_->MaskAssets() : nullptr),
         render_scheduler_(executors_.Size()),
         lookup_thread_pool_(2),
         decode_thread_pool_(ThumbnailDecodeWorkerCount()),
