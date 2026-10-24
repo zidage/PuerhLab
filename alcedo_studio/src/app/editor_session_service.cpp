@@ -12,6 +12,7 @@
 #include <mutex>
 #include <string>
 #include <utility>
+#include <variant>
 
 #include "app/ai_mask_analysis_image.hpp"
 #include "app/editor_action_policy.hpp"
@@ -20,6 +21,8 @@
 #include "app/editor_session_lifecycle.hpp"
 #include "app/editor_session_navigation_controller.hpp"
 #include "app/editor_session_render_controller.hpp"
+#include "edit/graph/color_grade_node_model.hpp"
+#include "edit/graph/develop_node_model.hpp"
 #include "edit/graph/drt_node_model.hpp"
 #include "edit/graph/pipeline_document.hpp"
 #include "edit/history/mini_git_working_history.hpp"
@@ -534,6 +537,7 @@ auto EditorSessionService::Open(sl_element_id_t element_id, image_id_t image_id)
   }
   AbortMaskCreation();
   (void)CloseComparisonOnOwner(false, std::nullopt);
+  (void)EndAiMaskEditOnOwner();
   const auto outcome = navigation_.RequestOpenOrSwitch(element_id, image_id, false);
   if (outcome.rejected) {
     return Reject(outcome.message);
@@ -1031,6 +1035,7 @@ auto EditorSessionService::Switch(sl_element_id_t element_id, image_id_t image_i
   }
   AbortMaskCreation();
   (void)CloseComparisonOnOwner(false, std::nullopt);
+  (void)EndAiMaskEditOnOwner();
   const auto outcome = navigation_.RequestOpenOrSwitch(element_id, image_id, true);
   if (outcome.rejected) {
     return Reject(outcome.message);
@@ -1117,6 +1122,7 @@ auto EditorSessionService::Close(bool persist_changes) -> EditorSessionResult {
   }
   AbortMaskCreation();
   (void)CloseComparisonOnOwner(false, std::nullopt);
+  (void)EndAiMaskEditOnOwner();
   if (persist_changes && pending_history_checkpoint_.has_value()) {
     pending_close_after_persist_ = true;
     EditorSessionResult waiting;
@@ -1264,6 +1270,9 @@ auto EditorSessionService::EnqueueAdjustmentInput(EditorAdjustmentPatch patch)
   if (comparison_active_.load(std::memory_order_acquire)) {
     return Reject("Close the comparison before editing");
   }
+  if (ai_mask_edit_active_.load(std::memory_order_acquire)) {
+    return Reject("Commit or cancel the AI Mask edit before editing");
+  }
   if (patch.attribution.has_value()) {
     if (!patch.settled) {
       return Reject("Only a settled adjustment can name a commit author");
@@ -1303,6 +1312,9 @@ auto EditorSessionService::EnqueuePendingInputBoundary(
   }
   if (comparison_active_.load(std::memory_order_acquire)) {
     return Reject("Close the comparison before editing");
+  }
+  if (ai_mask_edit_active_.load(std::memory_order_acquire)) {
+    return Reject("Commit or cancel the AI Mask edit before editing");
   }
   if (attribution.has_value() && !IsStorableEditCommitAttribution(*attribution)) {
     return Reject("The commit author must be agent");
@@ -1355,6 +1367,11 @@ auto EditorSessionService::EnqueueMaskCreation(EditorMaskCreationCommand command
       command.kind != EditorMaskCreationCommandKind::Cancel &&
       command.kind != EditorMaskCreationCommandKind::CancelMode) {
     return Reject("Close the comparison before editing Masks");
+  }
+  if (ai_mask_edit_active_.load(std::memory_order_acquire) &&
+      command.kind != EditorMaskCreationCommandKind::Cancel &&
+      command.kind != EditorMaskCreationCommandKind::CancelMode) {
+    return Reject("Commit or cancel the AI Mask edit before editing Masks");
   }
   {
     std::scoped_lock lock(mask_command_mutex_);
@@ -2296,6 +2313,7 @@ auto EditorSessionService::Shutdown() -> EditorSessionResult {
   }
   // Cancel the comparison image job; the render port's own shutdown waits for it.
   (void)CloseComparisonOnOwner(false, std::nullopt);
+  (void)EndAiMaskEditOnOwner();
   // Cancel outstanding save work. Each in-flight checkpoint publishes one
   // terminal cancellation through the posted completion path; navigation keeps
   // image A on that failure path and clears the pending action.
@@ -2848,6 +2866,222 @@ auto EditorSessionService::CloseComparisonOnOwner(bool refresh_current_view,
                                   lifecycle_.active_image_load_request(), lifecycle_.state());
   }
   return true;
+}
+
+auto EditorSessionService::OpenAiMaskEdit(const NodeId& grade_id, std::optional<MaskId> mask_id,
+                                          EditorAiMaskEditOpenCompletion on_complete)
+    -> EditorSessionResult {
+  if (!on_complete) {
+    return Reject("The AI Mask edit requires a completion");
+  }
+  if (!InOwnerReduction()) {
+    EditorSessionCommand command;
+    command.kind    = EditorSessionCommandKind::OpenAiMaskEdit;
+    command.node_id = grade_id;
+    auto shared_completion =
+        std::make_shared<EditorAiMaskEditOpenCompletion>(std::move(on_complete));
+    return SubmitCommand(
+        std::move(command), [this, mask_id, shared_completion](const EditorSessionCommand& queued) {
+          return OpenAiMaskEdit(queued.node_id, mask_id, std::move(*shared_completion));
+        });
+  }
+  const auto finish = [&](EditorSessionResultKind kind, std::string message,
+                          EditorAiMaskEditOpenResult opened) {
+    EditorSessionResult result;
+    result.kind     = kind;
+    result.state    = lifecycle_.state();
+    result.identity = lifecycle_.identity();
+    result.message  = std::move(message);
+    opened.result   = Emit(std::move(result));
+    auto returned   = opened.result;
+    on_complete(std::move(opened));
+    return returned;
+  };
+  const auto refuse = [&](EditorSessionResultKind kind, std::string message) {
+    return finish(kind, std::move(message), EditorAiMaskEditOpenResult{});
+  };
+  if (ai_mask_edit_.has_value()) {
+    return refuse(EditorSessionResultKind::Rejected, "An AI Mask edit is already open");
+  }
+  if (const auto decision = EvaluateDocumentWriteAdmission(false); !decision.allowed) {
+    return refuse(EditorSessionResultKind::Rejected, decision.reason);
+  }
+  if (!dependencies_.pipeline || !dependencies_.history || !lifecycle_.has_history_guard()) {
+    return refuse(EditorSessionResultKind::Rejected,
+                  "The AI Mask edit requires an open image history");
+  }
+  // Earlier accepted writes are reduced already (queue order). Input that is still open commits
+  // through the normal seal path, so the session starts from a settled document.
+  std::string error;
+  if (!SettlePendingInputForBoundary(&error)) {
+    return refuse(
+        EditorSessionResultKind::Rejected,
+        error.empty() ? "Pending edits could not be settled before the AI Mask edit" : error);
+  }
+  // The AI Mask edit owns the Mask input until it ends; the analytic Mask tool closes.
+  AbortMaskCreation();
+  const auto identity = lifecycle_.identity();
+  const auto working  = dependencies_.pipeline->CurrentPreview(identity.element_id);
+  if (!working) {
+    return refuse(EditorSessionResultKind::Rejected,
+                  "The working state of the image is not available");
+  }
+  const auto& document = working->Document();
+  const auto* grade = dynamic_cast<const ColorGradeNodeModel*>(document.Graph().FindNode(grade_id));
+  if (grade == nullptr) {
+    return refuse(EditorSessionResultKind::Rejected, "The AI Mask target is not a Color Grade");
+  }
+  const auto* develop = document.Develop();
+  if (develop == nullptr) {
+    return refuse(EditorSessionResultKind::Failed, "The working document has no Develop node");
+  }
+  EditorAiMaskEditOpenResult opened;
+  opened.geometry_fingerprint = MakeAiMaskGeometryFingerprint(develop->Params());
+  if (mask_id.has_value()) {
+    const auto* mask = grade->FindMask(*mask_id);
+    if (mask == nullptr) {
+      return refuse(EditorSessionResultKind::Rejected, "The Mask is missing");
+    }
+    const auto* stored = std::get_if<AiSegmentationMaskSource>(&mask->source);
+    if (stored == nullptr) {
+      return refuse(EditorSessionResultKind::Rejected, "The Mask is not an AI Mask");
+    }
+    if (!dependencies_.mask_assets) {
+      return refuse(EditorSessionResultKind::Rejected, "AI Mask assets are not available");
+    }
+    MaskAsset asset;
+    if (!dependencies_.mask_assets->ReadMaskAsset(stored->asset_key, &asset, &error)) {
+      return refuse(EditorSessionResultKind::Failed,
+                    error.empty() ? "The AI Mask asset could not be read" : error);
+    }
+    opened.stored_source = *stored;
+    opened.stored_asset  = std::move(asset);
+  }
+  AcquireLease(EditorOperationLeaseKind::AiMaskEdit, current_operation_id_, identity.element_id,
+               identity.image_id, lifecycle_.active_image_load_request(),
+               "Commit or cancel the AI Mask edit first");
+  ai_mask_edit_ = AiMaskEditTarget{grade_id, std::move(mask_id)};
+  ai_mask_edit_active_.store(true, std::memory_order_release);
+  return finish(EditorSessionResultKind::Accepted, "AI Mask edit opened", std::move(opened));
+}
+
+auto EditorSessionService::CommitAiMaskEdit(EditorAiMaskCommit commit) -> EditorSessionResult {
+  if (!InOwnerReduction()) {
+    EditorSessionCommand command;
+    command.kind = EditorSessionCommandKind::CommitAiMaskEdit;
+    auto shared  = std::make_shared<EditorAiMaskCommit>(std::move(commit));
+    return SubmitCommand(std::move(command), [this, shared](const EditorSessionCommand&) {
+      return CommitAiMaskEdit(std::move(*shared));
+    });
+  }
+  if (!ai_mask_edit_.has_value()) {
+    return Reject("No AI Mask edit is open");
+  }
+  if (commit.grade_id != ai_mask_edit_->grade_id || commit.mask_id != ai_mask_edit_->mask_id) {
+    return Reject("The AI Mask commit does not match the open AI Mask edit");
+  }
+  if (const auto decision = EvaluateDocumentWriteAdmission(true); !decision.allowed) {
+    return Reject(decision.reason);
+  }
+  try {
+    ValidateAiSegmentationMaskSource(commit.source);
+  } catch (const std::exception& e) {
+    return Reject(e.what());
+  }
+  if (commit.asset.key != commit.source.asset_key ||
+      commit.asset.descriptor != commit.source.descriptor) {
+    return Reject("The AI Mask asset does not match the key and bounds of its source");
+  }
+  if (!dependencies_.mask_assets) {
+    return Reject("AI Mask assets are not available");
+  }
+  if (!dependencies_.history || !lifecycle_.has_history_guard()) {
+    return Reject("The AI Mask commit requires an open image history");
+  }
+  const auto fail = [this](std::string message) {
+    EditorSessionResult failed;
+    failed.kind     = EditorSessionResultKind::Failed;
+    failed.state    = lifecycle_.state();
+    failed.identity = lifecycle_.identity();
+    failed.message  = std::move(message);
+    return Emit(std::move(failed));
+  };
+  // M12: the asset commits its own transaction first, so no history record refers to a missing
+  // asset. A failed publish leaves an unreferenced row that the cleanup at close removes.
+  std::string error;
+  if (!dependencies_.mask_assets->PutMaskAsset(commit.asset, &error)) {
+    return fail(error.empty() ? "The AI Mask asset could not be stored" : std::move(error));
+  }
+  EditorMaskCreationResult published;
+  const bool               applied = dependencies_.history->WithWorkingDocument(
+      lifecycle_.history_guard(),
+      [this, &commit, &published](PipelineDocument& document, MiniGitWorkingHistory& history,
+                                  const IEditorHistoryPort::MaskSettle& settle, bool* input_open,
+                                  std::string* op_error) {
+        mask_creation_.Bind(document, history);
+        mask_creation_.SetSettlePublisher(settle);
+        mask_creation_.SetInteractivePreview({});
+        published =
+            mask_creation_.CommitAiMaskSource(commit.grade_id, commit.mask_id, commit.source);
+        *input_open = mask_creation_.HasOpenOperation();
+        if (!published.accepted && op_error != nullptr) {
+          *op_error = published.error;
+        }
+        return published.accepted;
+      },
+      &error);
+  RefreshMaskCreationReadState();
+  if (!applied) {
+    return fail(error.empty() ? "The AI Mask could not be published" : std::move(error));
+  }
+  (void)EndAiMaskEditOnOwner();
+  if (!published.committed) {
+    EditorSessionResult unchanged;
+    unchanged.kind     = EditorSessionResultKind::Accepted;
+    unchanged.state    = lifecycle_.state();
+    unchanged.identity = lifecycle_.identity();
+    unchanged.message  = "The AI Mask is unchanged";
+    return Emit(std::move(unchanged));
+  }
+  return PublishTypedNodeHistorySuccess("AI Mask committed");
+}
+
+auto EditorSessionService::CancelAiMaskEdit() -> EditorSessionResult {
+  if (!InOwnerReduction()) {
+    EditorSessionCommand command;
+    command.kind = EditorSessionCommandKind::CancelAiMaskEdit;
+    return SubmitCommand(std::move(command),
+                         [this](const EditorSessionCommand&) { return CancelAiMaskEdit(); });
+  }
+  const bool          ended = EndAiMaskEditOnOwner();
+  EditorSessionResult result;
+  result.kind     = EditorSessionResultKind::Accepted;
+  result.state    = lifecycle_.state();
+  result.identity = lifecycle_.identity();
+  result.message  = ended ? "AI Mask edit cancelled" : "No AI Mask edit is open";
+  return Emit(std::move(result));
+}
+
+auto EditorSessionService::EndAiMaskEditOnOwner() -> bool {
+  ReleaseLeasesByKind(EditorOperationLeaseKind::AiMaskEdit);
+  ai_mask_edit_active_.store(false, std::memory_order_release);
+  if (!ai_mask_edit_.has_value()) {
+    return false;
+  }
+  ai_mask_edit_.reset();
+  publication_dirty_ = true;
+  return true;
+}
+
+auto EditorSessionService::EvaluateDocumentWriteAdmission(bool ignore_ai_mask_edit_lease)
+    -> EditorActionDecision {
+  EditorCommandContext context{active_leases_};
+  if (ignore_ai_mask_edit_lease) {
+    std::erase_if(context.leases, [](const EditorOperationLease& lease) {
+      return lease.kind == EditorOperationLeaseKind::AiMaskEdit;
+    });
+  }
+  return EditorActionPolicy::Evaluate(EditorAction::CommitAdjustment, context, BuildActionInputs());
 }
 
 void EditorSessionService::NotifyImageAcquired(ImageLoadRequestId image_load_request, bool success,

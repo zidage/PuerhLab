@@ -44,6 +44,9 @@ class AdjustmentTransferDialogModel final : public QObject {
   Q_PROPERTY(int allNodesCheckState READ all_nodes_check_state NOTIFY StateChanged)
   Q_PROPERTY(int focusedItemsCheckState READ focused_items_check_state NOTIFY StateChanged)
   Q_PROPERTY(QString errorText READ error_text NOTIFY StateChanged)
+  /// "AI Masks are not copied: <names>" for the AI Masks of the selected Masks items; empty
+  /// when the selection copies no AI Mask (SM5 D18).
+  Q_PROPERTY(QString excludedAiMaskNotice READ excluded_ai_mask_notice NOTIFY StateChanged)
 
  public:
   explicit AdjustmentTransferDialogModel(QObject* parent = nullptr);
@@ -89,6 +92,7 @@ class AdjustmentTransferDialogModel final : public QObject {
   [[nodiscard]] auto all_nodes_check_state() const -> int;
   [[nodiscard]] auto focused_items_check_state() const -> int;
   [[nodiscard]] auto error_text() const -> QString { return error_text_; }
+  [[nodiscard]] auto excluded_ai_mask_notice() const -> QString;
   [[nodiscard]] auto has_source() const -> bool { return read_.has_value(); }
 
   /// Stable typed selection of every checked, enabled item.

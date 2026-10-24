@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -19,6 +20,9 @@
 
 namespace alcedo {
 namespace {
+
+/// Id prefix of AI Segmentation Masks; null-terminated for AllocateMaskId.
+constexpr std::string_view kAiMaskIdPrefix = "mask.ai.";
 
 [[nodiscard]] auto FiniteSample(const MaskCreationSample& sample) -> bool {
   return std::isfinite(sample.normalized.x) && std::isfinite(sample.normalized.y) &&
@@ -196,6 +200,8 @@ auto EditorMaskCreationController::AllocateMaskId() const -> MaskId {
   const char* prefix = "mask.radial.";
   if (kind_ == MaskSourceKind::LinearGradient) {
     prefix = "mask.linear.";
+  } else if (kind_ == MaskSourceKind::AiSegmentation) {
+    prefix = kAiMaskIdPrefix.data();
   }
   for (std::uint32_t i = 1; i < 1000000; ++i) {
     MaskId id{std::string{prefix} + std::to_string(i)};
@@ -210,6 +216,11 @@ auto EditorMaskCreationController::MakeCreationMask(const MaskSource& source) co
   MaskModel mask;
   mask.id           = mask_id_;
   mask.display_name = CreationDisplayName(kind_);
+  if (kind_ == MaskSourceKind::AiSegmentation) {
+    // "AI Mask N" follows the first free id `mask.ai.N`.
+    const auto id_text = std::string{mask_id_.Value()};
+    mask.display_name += " " + id_text.substr(kAiMaskIdPrefix.size());
+  }
   mask.source       = source;
   return mask;
 }
@@ -486,6 +497,53 @@ auto EditorMaskCreationController::RemoveMask(const NodeId& grade_id, const Mask
   result.committed         = true;
   result.quality_requested = true;
   RequestInteractive(result);
+  return result;
+}
+
+auto EditorMaskCreationController::CommitAiMaskSource(const NodeId&                   grade_id,
+                                                      const std::optional<MaskId>&    mask_id,
+                                                      const AiSegmentationMaskSource& source)
+    -> EditorMaskCreationResult {
+  if (open_) {
+    return Reject("finish or cancel the open Mask operation before committing an AI Mask");
+  }
+  if (document_ == nullptr || history_ == nullptr) {
+    return Reject("Mask creation controller is not bound to a document");
+  }
+  ResetMode();
+  node_id_ = grade_id;
+  kind_    = MaskSourceKind::AiSegmentation;
+  if (Grade() == nullptr) {
+    ResetMode();
+    return Reject("AI Mask target is not a Color Grade");
+  }
+  EditorMaskCreationResult result;
+  if (!mask_id.has_value()) {
+    creating_ = true;
+    if (!InsertProvisional(source)) {
+      ResetMode();
+      return Reject("the AI Mask could not be added to the Color Grade");
+    }
+    result = PublishAddMask();
+  } else {
+    const auto* mask = Grade()->FindMask(*mask_id);
+    if (mask == nullptr) {
+      ResetMode();
+      return Reject("Mask is missing");
+    }
+    if (GetMaskSourceKind(mask->source) != MaskSourceKind::AiSegmentation) {
+      ResetMode();
+      return Reject("Mask is not an AI Mask");
+    }
+    mask_id_       = *mask_id;
+    before_source_ = MaskModelToJson(*mask).at("source");
+    if (!ApplyLiveSource(source)) {
+      ResetMode();
+      return Reject("the AI Mask source could not be applied to the Color Grade");
+    }
+    result = PublishReplaceSource();
+  }
+  ResetMode();
   return result;
 }
 

@@ -273,8 +273,10 @@ alcedo_register_test_target(EditorComparisonInputsTest ui)
 
 # The editor comparison through the production session facade over the real history port: entry
 # admission, action restriction, captured working values, Version sources, close, and image switch.
+# Also the AI Mask edit Open, Commit, and Cancel over the same ports (SM5.3).
 add_executable(EditorComparisonServiceTest
     ${ALCEDO_TEST_ROOT}/app/editor_comparison_service_test.cpp
+    ${ALCEDO_TEST_ROOT}/app/editor_ai_mask_edit_service_test.cpp
     ${ALCEDO_EDITOR_HISTORY_PORT_SOURCES})
 target_include_directories(EditorComparisonServiceTest
   PUBLIC ${ALCEDO_INCLUDE_DIR} ${ALCEDO_TEST_DIR} ${ALCEDO_TEST_ROOT}/edit/graph)

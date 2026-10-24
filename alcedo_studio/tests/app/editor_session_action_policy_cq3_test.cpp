@@ -186,6 +186,66 @@ TEST(EditorSessionComparisonPolicy,
   EXPECT_FALSE(EditorActionPolicy::Evaluate(EditorAction::OpenComparison, {}, inputs).allowed);
 }
 
+TEST(EditorSessionAiMaskEditPolicy, AiMaskEditLeaseBlocksDocumentWritesAndHistory) {
+  EditorActionInputs inputs;
+  inputs.session_state              = EditorSessionState::Interactive;
+  inputs.has_image                  = true;
+  inputs.can_undo                   = true;
+  inputs.can_redo                   = true;
+  inputs.package_available          = true;
+  inputs.has_unmaterialized_changes = true;
+  EditorOperationLease lease;
+  lease.operation.command_id = 9;
+  lease.kind                 = EditorOperationLeaseKind::AiMaskEdit;
+  lease.blocked_actions =
+      EditorActionPolicy::DefaultBlockedActions(EditorOperationLeaseKind::AiMaskEdit);
+  lease.blocking_reason   = "Commit or cancel the AI Mask edit first";
+  const auto availability = EditorActionPolicy::EvaluateAll(EditorCommandContext{{lease}}, inputs);
+
+  // SM5 M16: every document write, history move, Version write, Paste, and the comparison.
+  const std::set<EditorAction> blocked = {EditorAction::PreviewAdjustment,
+                                          EditorAction::CommitAdjustment,
+                                          EditorAction::Undo,
+                                          EditorAction::Redo,
+                                          EditorAction::MoveHead,
+                                          EditorAction::DiscardChanges,
+                                          EditorAction::CheckoutVersion,
+                                          EditorAction::CreateRootVersion,
+                                          EditorAction::BranchVersion,
+                                          EditorAction::RenameVersion,
+                                          EditorAction::RemoveVersion,
+                                          EditorAction::ApplyPaste,
+                                          EditorAction::OpenComparison};
+  for (std::size_t i = 0; i < EditorActionCount(); ++i) {
+    const auto action = static_cast<EditorAction>(i);
+    // Recovery actions have their own facts and are off without a pending recovery.
+    if (action == EditorAction::RetrySave || action == EditorAction::DiscardAndContinue ||
+        action == EditorAction::CancelPendingNavigation) {
+      continue;
+    }
+    EXPECT_EQ(availability.For(action).allowed, !blocked.contains(action))
+        << EditorActionName(action);
+  }
+  EXPECT_TRUE(availability.For(EditorAction::RequestViewChange).allowed);
+  EXPECT_TRUE(availability.For(EditorAction::SelectImage).allowed);
+  EXPECT_EQ(availability.For(EditorAction::CommitAdjustment).reason,
+            "Commit or cancel the AI Mask edit first");
+
+  // The session evaluates CommitAdjustment admission for Open and Commit itself, so the commands
+  // have no policy action: a refused Open still reaches its completion.
+  EXPECT_FALSE(EditorActionPolicy::ActionForCommand(EditorSessionCommandKind::OpenAiMaskEdit));
+  EXPECT_FALSE(EditorActionPolicy::ActionForCommand(EditorSessionCommandKind::CommitAiMaskEdit));
+  EXPECT_FALSE(EditorActionPolicy::ActionForCommand(EditorSessionCommandKind::CancelAiMaskEdit));
+  // Every in-flight operation that writes or moves the document refuses that admission.
+  for (const auto kind :
+       {EditorOperationLeaseKind::ImageLoad, EditorOperationLeaseKind::ImageSwitch,
+        EditorOperationLeaseKind::SaveCheckpoint, EditorOperationLeaseKind::PasteMaterialization,
+        EditorOperationLeaseKind::FailureRecovery, EditorOperationLeaseKind::Comparison}) {
+    const auto other = EditorActionPolicy::DefaultBlockedActions(kind);
+    EXPECT_NE(std::find(other.begin(), other.end(), EditorAction::CommitAdjustment), other.end());
+  }
+}
+
 TEST(EditorSessionInputSequencePolicy,
      OpenInputSequenceOrMaskEditRefusesHistoryMovesAndPasteButKeepsEditing) {
   EditorActionInputs inputs;

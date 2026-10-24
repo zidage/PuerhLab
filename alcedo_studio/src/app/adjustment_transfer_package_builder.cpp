@@ -9,12 +9,14 @@
 #include <stdexcept>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "app/document_transfer.hpp"
 #include "app/pipeline_history_applier.hpp"
 #include "edit/graph/color_grade_node_model.hpp"
 #include "edit/graph/develop_node_model.hpp"
 #include "edit/graph/drt_node_model.hpp"
+#include "edit/mask/mask_model.hpp"
 
 namespace alcedo {
 namespace {
@@ -121,7 +123,16 @@ auto BuildColorGradeEntry(const ColorGradeNodeModel&            grade,
     entry.adjustments.push_back({id, model.Type(), model.ToJson()});
   }
   if (masks_selected) {
-    entry.masks = std::vector<MaskModel>{grade.Masks().begin(), grade.Masks().end()};
+    // D18: an AI Mask describes the content of its own image; Paste never copies it.
+    std::vector<MaskModel> masks;
+    for (const auto& mask : grade.Masks()) {
+      if (GetMaskSourceKind(mask.source) != MaskSourceKind::AiSegmentation) {
+        masks.push_back(mask);
+      }
+    }
+    if (!masks.empty()) {
+      entry.masks = std::move(masks);
+    }
   }
   return entry;
 }
@@ -271,6 +282,31 @@ auto AdjustmentTransferPackageBuilder::Build(const PipelineDocument&            
   ValidateDocumentTransfer(package);
   package.fingerprint_ = DocumentTransferFingerprint(package);
   return package;
+}
+
+auto ListAiMasksExcludedFromTransfer(const PipelineDocument&            document,
+                                     const AdjustmentTransferSelection& selection)
+    -> std::vector<AiMaskTransferExclusion> {
+  std::set<std::string> grades_with_masks;
+  for (const auto& node : selection.nodes) {
+    for (const auto& item : node.items) {
+      if (item.kind == AdjustmentTransferItemKind::Masks) {
+        grades_with_masks.insert(std::string{node.node_id.Value()});
+      }
+    }
+  }
+  std::vector<AiMaskTransferExclusion> excluded;
+  for (const auto* grade : ColorGradesOnImageBackbone(document)) {
+    if (!grades_with_masks.contains(std::string{grade->Id().Value()})) {
+      continue;
+    }
+    for (const auto& mask : grade->Masks()) {
+      if (GetMaskSourceKind(mask.source) == MaskSourceKind::AiSegmentation) {
+        excluded.push_back({grade->Id(), mask.id, mask.display_name});
+      }
+    }
+  }
+  return excluded;
 }
 
 auto SelectAllTransferableItems(const PipelineDocument& document) -> AdjustmentTransferSelection {

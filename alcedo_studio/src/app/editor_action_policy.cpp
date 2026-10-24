@@ -163,6 +163,25 @@ auto EditorActionPolicy::DefaultBlockedActions(EditorOperationLeaseKind kind)
           EditorAction::RemoveVersion,     EditorAction::ApplyPaste,
           EditorAction::RequestViewChange, EditorAction::OpenComparison,
       };
+    case EditorOperationLeaseKind::AiMaskEdit:
+      // The live document must not change under an open AI Mask edit, so its Commit needs no
+      // conflict check. View changes, image selection, leaving the editor, and shutdown stay
+      // available: an image change ends the session first.
+      return {
+          EditorAction::PreviewAdjustment,
+          EditorAction::CommitAdjustment,
+          EditorAction::Undo,
+          EditorAction::Redo,
+          EditorAction::MoveHead,
+          EditorAction::DiscardChanges,
+          EditorAction::CheckoutVersion,
+          EditorAction::CreateRootVersion,
+          EditorAction::BranchVersion,
+          EditorAction::RenameVersion,
+          EditorAction::RemoveVersion,
+          EditorAction::ApplyPaste,
+          EditorAction::OpenComparison,
+      };
   }
   return {};
 }
@@ -226,6 +245,12 @@ auto EditorActionPolicy::ActionForCommand(EditorSessionCommandKind kind)
     // Reads the open image only; the reducer reports its own refusal to the caller.
     case EditorSessionCommandKind::RenderPreviewImages:
     case EditorSessionCommandKind::RenderAiMaskAnalysisImage:
+      return std::nullopt;
+    // The AI Mask edit commands evaluate CommitAdjustment admission on the owner themselves, so
+    // that a refused Open still reaches its completion and Commit ignores its own lease.
+    case EditorSessionCommandKind::OpenAiMaskEdit:
+    case EditorSessionCommandKind::CommitAiMaskEdit:
+    case EditorSessionCommandKind::CancelAiMaskEdit:
       return std::nullopt;
     case EditorSessionCommandKind::SetPresentationTarget:
     case EditorSessionCommandKind::SetPresentationSize:

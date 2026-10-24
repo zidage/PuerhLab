@@ -7,8 +7,13 @@
 #include <gtest/gtest.h>
 
 #include <stdexcept>
+#include <string>
+#include <vector>
 
+#include "app/adjustment_transfer_package_builder.hpp"
+#include "edit/graph/color_grade_node_model.hpp"
 #include "edit/graph/drt_node_model.hpp"
+#include "edit/graph/grade_owned_mask_support.hpp"
 #include "edit/graph/pipeline_document.hpp"
 #include "edit/history/commit_graph.hpp"
 #include "edit/history/commit_types.hpp"
@@ -16,6 +21,7 @@
 #include "edit/history/edit_commit_attribution.hpp"
 #include "edit/history/pipeline_edit_batch.hpp"
 #include "edit/history/pipeline_history_format.hpp"
+#include "edit/mask/mask_model.hpp"
 #include "json.hpp"
 #include "support/document_transfer_test_support.hpp"
 #include "support/editor_mini_git_project_fixture.hpp"
@@ -35,6 +41,86 @@ TEST(AdjustmentTransferServiceTest, CaptureExportImportRoundTripKeepsDevelopAndG
   const auto imported = AdjustmentTransferService::ImportPackage(exported);
   EXPECT_EQ(imported.fingerprint_, package.fingerprint_);
   EXPECT_FALSE(imported.Empty());
+}
+
+/// Default document whose primary Grade holds the Masks named by @p radial and @p ai, in order.
+auto DocumentWithMasks(bool radial, bool ai) -> PipelineDocument {
+  auto document = CreateDefaultPipelineDocument();
+  if (radial) {
+    (void)grade_mask_test::AddRadialMask(document, MaskId{"mask.radial.1"});
+  }
+  if (ai) {
+    (void)grade_mask_test::AddMask(*document.PrimaryGrade(),
+                                   grade_mask_test::MakeAiSegmentationMask(MaskId{"mask.ai.1"}));
+    document.MarkTopologyChanged();
+  }
+  return document;
+}
+
+auto PrimaryGradeEntry(const AdjustmentTransferPackage& package, const PipelineDocument& document)
+    -> const TransferColorGradeValue* {
+  for (const auto& entry : package.color_grades_) {
+    if (entry.source_node_id == document.PrimaryGrade()->Id()) {
+      return &entry;
+    }
+  }
+  return nullptr;
+}
+
+TEST(AdjustmentTransferServiceTest, PasteBuildSkipsAiMasks) {
+  const auto  source    = DocumentWithMasks(true, true);
+  const auto  selection = SelectAllTransferableItems(source);
+  const auto  package   = AdjustmentTransferPackageBuilder::Build(source, selection);
+  const auto* entry     = PrimaryGradeEntry(package, source);
+  ASSERT_NE(entry, nullptr);
+  ASSERT_TRUE(entry->masks.has_value());
+  ASSERT_EQ(entry->masks->size(), 1u);
+  EXPECT_EQ(entry->masks->front().id, MaskId{"mask.radial.1"});
+  EXPECT_EQ(AdjustmentTransferService::ExportPackage(package).dump().find("ai_segmentation"),
+            std::string::npos);
+  const std::vector<AiMaskTransferExclusion> expected = {
+      {source.PrimaryGrade()->Id(), MaskId{"mask.ai.1"}, "AI Mask 1"}};
+  EXPECT_EQ(ListAiMasksExcludedFromTransfer(source, selection), expected);
+
+  // A Grade with only AI Masks keeps its entry without a Mask set.
+  const auto  only_ai       = DocumentWithMasks(false, true);
+  const auto  only_selected = SelectAllTransferableItems(only_ai);
+  const auto  only_package  = AdjustmentTransferPackageBuilder::Build(only_ai, only_selected);
+  const auto* only_entry    = PrimaryGradeEntry(only_package, only_ai);
+  ASSERT_NE(only_entry, nullptr);
+  EXPECT_FALSE(only_entry->masks.has_value());
+  EXPECT_EQ(ListAiMasksExcludedFromTransfer(only_ai, only_selected).size(), 1u);
+
+  // Without the Masks item no Mask is copied, so none is named as skipped.
+  auto without_masks = selection;
+  for (auto& node : without_masks.nodes) {
+    std::erase_if(node.items, [](const AdjustmentTransferItemSelection& item) {
+      return item.kind == AdjustmentTransferItemKind::Masks;
+    });
+  }
+  EXPECT_TRUE(ListAiMasksExcludedFromTransfer(source, without_masks).empty());
+}
+
+TEST(AdjustmentTransferServiceTest, ImportPackageRejectsAiMaskKind) {
+  const auto source = DocumentWithMasks(true, false);
+  auto       json   = AdjustmentTransferService::ExportPackage(
+      AdjustmentTransferPackageBuilder::Build(source, SelectAllTransferableItems(source)));
+  bool inserted = false;
+  for (auto& grade : json.at("color_grades")) {
+    if (grade.contains("masks")) {
+      grade.at("masks").push_back(
+          MaskModelToJson(grade_mask_test::MakeAiSegmentationMask(MaskId{"mask.ai.1"})));
+      inserted = true;
+    }
+  }
+  ASSERT_TRUE(inserted);
+  try {
+    (void)AdjustmentTransferService::ImportPackage(json);
+    FAIL() << "a package with an AI Mask was imported";
+  } catch (const std::runtime_error& e) {
+    EXPECT_NE(std::string{e.what()}.find("AI Masks are not transferable"), std::string::npos)
+        << e.what();
+  }
 }
 
 TEST(AdjustmentTransferServiceTest, ImportRejectsOperatorListPackages) {

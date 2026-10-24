@@ -281,6 +281,37 @@ TEST(AdjustmentTransferDialogModelTest, MasksRowIsSingleAllOrNoneItem) {
   EXPECT_TRUE(RowValue(items, masks_row, AdjustmentTransferItemListModel::EnabledRole).toBool());
 }
 
+TEST(AdjustmentTransferDialogModelTest, TransferDialogShowsSkippedAiMasks) {
+  DialogModelHistoryFixture fixture;
+  auto                      document = CreateDefaultPipelineDocument();
+  grade_mask_test::AddRadialMask(document, MaskId{"mask.a"});
+  auto ai_mask         = grade_mask_test::MakeAiSegmentationMask(MaskId{"mask.ai.1"});
+  ai_mask.display_name = "Sky AI";
+  grade_mask_test::AddMask(*document.PrimaryGrade(), std::move(ai_mask));
+  document.MarkTopologyChanged();
+  fixture.ReplaceRootDocument(std::move(document));
+
+  AdjustmentTransferDialogModel model;
+  std::string                   error;
+  ASSERT_TRUE(model.OpenSource(fixture.graph_, fixture.root_document_, &error)) << error;
+  EXPECT_EQ(model.excluded_ai_mask_notice(), QStringLiteral("AI Masks are not copied: Sky AI"));
+  const auto package = model.BuildPackage(&error);
+  ASSERT_TRUE(package.has_value()) << error;
+  bool copied_radial = false;
+  for (const auto& grade : package->color_grades_) {
+    if (grade.masks.has_value()) {
+      ASSERT_EQ(grade.masks->size(), 1u);
+      EXPECT_EQ(grade.masks->front().id, MaskId{"mask.a"});
+      copied_radial = true;
+    }
+  }
+  EXPECT_TRUE(copied_radial);
+
+  // Without the Masks item no Mask is copied, so the notice is empty.
+  model.SetItemChecked(QStringLiteral("grade.primary"), QStringLiteral("masks"), false);
+  EXPECT_TRUE(model.excluded_ai_mask_notice().isEmpty());
+}
+
 TEST(AdjustmentTransferDialogModelTest, MasklessGradeShowsDisabledMasksItem) {
   DialogModelHistoryFixture     fixture;
   AdjustmentTransferDialogModel model;

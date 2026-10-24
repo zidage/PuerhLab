@@ -405,6 +405,23 @@ Dialog {
                 }
             }
 
+            // AI Masks describe the content of their own image; Copy skips them and names them.
+            Label {
+                objectName: "adjustmentTransferExcludedAiMaskNotice"
+                Layout.fillWidth: true
+                Layout.leftMargin: appTheme.spaceLg
+                Layout.rightMargin: appTheme.spaceLg
+                Layout.topMargin: appTheme.spaceXs
+                visible: text.length > 0
+                text: dialog.copyMode && dialog.dialogModel
+                      ? String(dialog.dialogModel.excludedAiMaskNotice || "")
+                      : ""
+                color: appTheme.textMutedColor
+                font.family: appTheme.uiFontFamily
+                font.pixelSize: appTheme.fontSizeCaption
+                wrapMode: Text.WordWrap
+            }
+
             // ── Footer bar ───────────────────────────────────────────────────
             Rectangle {
                 objectName: "adjustmentTransferFooter"

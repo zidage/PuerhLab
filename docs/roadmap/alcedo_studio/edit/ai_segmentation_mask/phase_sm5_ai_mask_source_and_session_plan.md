@@ -3,7 +3,7 @@
 Date: 2026-10-23.
 
 Status: SM5.1 complete (2026-10-23, section 13.1). SM5.2 complete (2026-10-23, section 13.2).
-SM5.3 planned.
+SM5.3 complete (2026-10-23, section 13.3).
 
 Parent plan: [AI Segmentation Mask Master Plan](../ai_segmentation_mask_master_plan.md), section
 9.4. Issues: SM5.1 #470, SM5.2 #471, SM5.3 #472. Tracking issue: #468.
@@ -382,7 +382,7 @@ auto CommitAiMaskSource(const NodeId& grade_id, const std::optional<MaskId>& mas
 | --- | --- | --- | --- | ---: | --- |
 | SM5.1 | AI Mask source kind, recipe JSON, asset table and store, reachability cleanup, explicit dispatch | `edit/mask`, `edit/runtime`, `storage`, `app/pipeline_service`, album backend | SM4 | 1,500-1,900 | complete (13.1) |
 | SM5.2 | AI Mask edit session: stack, output map, composition, People toggles, reopen, commit payload; session size in the start response | `app/ai_mask_edit_session`, segmentation service, proto | SM5.1, SM3.D | 1,300-1,700 | complete (13.2) |
-| SM5.3 | Editor integration: lease, Open, Commit, Cancel, asset port; Paste exclusion and notice | `app/editor_session_service`, policy, mask controller, transfer, album backend | SM5.1, SM5.2 | 1,000-1,400 | planned |
+| SM5.3 | Editor integration: lease, Open, Commit, Cancel, asset port; Paste exclusion and notice | `app/editor_session_service`, policy, mask controller, transfer, album backend | SM5.1, SM5.2 | 1,000-1,400 | complete (13.3) |
 
 SM5 is split into three parts because one part with the session and the editor integration can
 pass 2,000 lines. Order: SM5.1, then SM3.D and SM5.2, then SM5.3.
@@ -590,9 +590,9 @@ the put".
 
 **Exit criteria.**
 
-- [ ] The tests of section 8.3 pass.
-- [ ] `AlbumBackendLib` and `alcedo_main` build.
-- [ ] The existing tests of the touched targets pass, or each failure also fails on `main`.
+- [x] The tests of section 8.3 pass.
+- [x] `AlbumBackendLib` and `alcedo_main` build.
+- [x] The existing tests of the touched targets pass, or each failure also fails on `main` (#484).
 
 **Expected diff.** 1,000-1,400 lines (production 450-600, tests 500-750, QML 20).
 
@@ -1036,5 +1036,158 @@ them with SM5.3.
 ### 13.3 SM5.3
 
 ```text
-(same fields as 13.1)
+Phase / date / status: SM5.3 / 2026-10-23 / complete.
+Source revision and branch: base ad964bd7 (main, SM5.2 merged; tested on 96ff8cd5, the same
+  tree); branch feature/ai-segmentation-sm5-3-editor-integration.
+Actual changed modules: app/editor_action_policy (AiMaskEdit lease), app/editor_session_command_queue
+  (three command kinds), app/editor_session_ports (IEditorMaskAssetPort), app/editor_session_service
+  and editor_session_bootstrap (Open, Commit, Cancel, mask asset dependency),
+  app/editor_mask_creation_controller (CommitAiMaskSource), app/adjustment_transfer_package_builder
+  and app/document_transfer (M17), album_backend (EditorSessionMaskAssetPort, module host wiring,
+  transfer dialog notice), automation adjustments.copy (skipped_ai_masks), AdjustmentTransferDialog
+  QML, zh_CN translation of the notice, tests.
+Implemented behavior: M12 (editor side), M16, M17, M18 (editor port), section 5.5; the steps 1 to 6
+  of section 7.3.
+Explicitly unimplemented items: none of SM5.3. The tool controller and QML that call Open, Commit,
+  and Cancel are SM9.
+Primary success call chain: section 13.3.1.
+Primary failure and restore call chain: section 13.3.1.
+Build and test commands with exit codes: section 13.3.2.
+Discovered / passed / failed / skipped counts: section 13.3.2.
+Manual verification: none; SM9 is the first caller of the editor commands.
+Performance or resource evidence, if required: section 13.3.3.
+Evidence path: build/tmp/sm5_3/ (removed at completion).
+Remaining defects or unavailable platforms: no macOS build in this run (the change has no platform
+  code). Issue #484 (pre-existing DocumentTransferTest failure) was found during the work.
 ```
+
+#### 13.3.1 Call chains
+
+```text
+EditorSessionService::OpenAiMaskEdit(grade, mask id?, completion)
+  -> SubmitCommand(OpenAiMaskEdit)                            session owner thread, no policy action
+  -> no open AI Mask edit -> EvaluateDocumentWriteAdmission(all leases) == CommitAdjustment allowed
+  -> SettlePendingInputForBoundary -> AbortMaskCreation (the analytic Mask tool closes)
+  -> IEditorPipelinePort::CurrentPreview -> Color Grade -> MakeAiMaskGeometryFingerprint(Develop)
+  -> mask id: AI Mask of the Grade -> IEditorMaskAssetPort::ReadMaskAsset(stored key)
+  -> AcquireLease(AiMaskEdit, "Commit or cancel the AI Mask edit first")
+  -> completion {Accepted, fingerprint, stored source copy, stored asset}
+EditorSessionService::CommitAiMaskEdit(EditorAiMaskCommit)
+  -> SubmitCommand(CommitAiMaskEdit)                          session owner thread
+  -> open edit, same Grade and Mask id -> EvaluateDocumentWriteAdmission(without AiMaskEdit)
+  -> ValidateAiSegmentationMaskSource; asset key and descriptor == source key and descriptor
+  -> IEditorMaskAssetPort::PutMaskAsset -> EditorSessionMaskAssetPort
+     -> PipelineMgmtService::PutMaskAsset -> MaskAssetStore::Put   own DuckDB transaction (M12)
+  -> IEditorHistoryPort::WithWorkingDocument
+     -> EditorMaskCreationController::CommitAiMaskSource
+        new: mask.ai.N, "AI Mask N" -> PublishAddMask
+        opened: AI kind check -> ApplyLiveSource -> PublishReplaceSource (equal source: nothing)
+        -> settle publisher -> PublishAppliedTypedBatch -> journal append -> live document
+        -> ResetMode (Inactive)
+  -> EndAiMaskEditOnOwner (lease released)
+  -> PublishTypedNodeHistorySuccess: render by the history render reason, history revision
+EditorSessionService::CancelAiMaskEdit -> EndAiMaskEditOnOwner -> Accepted; no port call, no batch
+Open, Switch, Close, Shutdown -> CloseComparisonOnOwner -> EndAiMaskEditOnOwner
+AdjustmentTransferPackageBuilder::Build -> BuildColorGradeEntry
+  -> Masks item: every non-AI Mask; only AI Masks: no Mask set -> ValidateDocumentTransfer
+ListAiMasksExcludedFromTransfer(document, selection)
+  -> AdjustmentTransferDialogModel::excluded_ai_mask_notice -> AdjustmentTransferDialog.qml label
+  -> adjustments.copy "skipped_ai_masks"
+```
+
+```text
+Open refused (another AI edit, a lease, no history, unsettled input, missing Grade or Mask,
+  non-AI Mask, unreadable asset) -> completion {Rejected or Failed, reason}; no lease.
+Commit refused (no edit, other Grade or Mask, a write lease, invalid source, asset/source
+  mismatch, no asset port) -> Rejected; no port call; lease stays.
+Asset put fails -> Failed with the store message; document, history, and lease stay.
+History publish fails after the put -> PublishAddMask / PublishReplaceSource RestoreLive and
+  PublishAppliedTypedBatch rollback -> Failed with the publish message; document, history, and
+  lease stay; the stored row is unreferenced until the M11 cleanup at clean close.
+Queued slider input, boundary, and Mask commands (except Cancel) during the edit -> Rejected at
+  admission.
+ImportPackage of a package with an AI Mask -> ValidateDocumentTransfer throws "transfer Color
+  Grade contains the AI Mask '<id>'; AI Masks are not transferable".
+```
+
+#### 13.3.2 Evidence
+
+Commands (PowerShell, repository root):
+
+```powershell
+cmd /c scripts\msvc_env.cmd --preset win_debug -DCMAKE_PREFIX_PATH="D:/Qt/6.9.3/msvc2022_64/lib/cmake"   # exit 0
+cmd /c scripts\msvc_env.cmd --build --preset win_debug --parallel 4 --target EditorSessionActionPolicyCq3Test EditorComparisonServiceTest AdjustmentTransferServiceTest AdjustmentTransferDialogModelTest AnalyticMaskCreationTest DocumentTransferTest AdjustmentTransferServiceMiniGitTest AutomationAdjustmentCommandsTest AlbumBackendLib alcedo_main   # exit 0 (after formatting)
+$env:PATH = "D:\Projects\pu-erh_lab\build\debug\vcpkg_installed\x64-windows\debug\bin;$env:PATH"
+ctest --test-dir build/debug -j 1 --output-on-failure -R "^(EditorSessionActionPolicyCq3Test|EditorComparisonServiceTest|AdjustmentTransferServiceTest|AdjustmentTransferDialogModelTest|AnalyticMaskCreationTest|DocumentTransferTest|AdjustmentTransferServiceMiniGitTest|AutomationAdjustmentCommandsTest)\."   # exit 8, 130/131 passed (the failure is #484, see below)
+```
+
+| Test (section 8.3) | Target | Result |
+| --- | --- | --- |
+| `AiMaskEditLeaseBlocksDocumentWritesAndHistory` | `EditorSessionActionPolicyCq3Test` | PASS |
+| `CommitNewAiMaskStoresAssetThenPublishesAddMask` | `EditorComparisonServiceTest` | PASS |
+| `CommitOpenedAiMaskPublishesReplaceMaskSource` | `EditorComparisonServiceTest` | PASS |
+| `MainUndoRestoresThePreviousAiSource` | `EditorComparisonServiceTest` | PASS |
+| `AssetPutFailureKeepsDocumentAndLease` | `EditorComparisonServiceTest` | PASS |
+| `PublishFailureAfterPutKeepsDocument` | `EditorComparisonServiceTest` | PASS |
+| `CancelPublishesNothing` | `EditorComparisonServiceTest` | PASS |
+| `OpenRejectsMissingOrNonAiMask` | `EditorComparisonServiceTest` | PASS |
+| `OpenAiMaskEditRefusesQueuedEditsAndImageChangeEndsIt` (added) | `EditorComparisonServiceTest` | PASS |
+| `PasteBuildSkipsAiMasks` | `AdjustmentTransferServiceTest` | PASS |
+| `ImportPackageRejectsAiMaskKind` | `AdjustmentTransferServiceTest` | PASS |
+| `TransferDialogShowsSkippedAiMasks` | `AdjustmentTransferDialogModelTest` | PASS |
+
+Suite totals: `EditorSessionActionPolicyCq3Test` 15/15, `EditorComparisonServiceTest` 22/22,
+`AdjustmentTransferServiceTest` 8/8, `AdjustmentTransferDialogModelTest` 16/16,
+`AnalyticMaskCreationTest` 23/23 (the target of the changed Mask creation controller),
+`DocumentTransferTest` 33/34, `AdjustmentTransferServiceMiniGitTest` 9/9,
+`AutomationAdjustmentCommandsTest` 4/4. The one failure is
+`DocumentTransferTest.TransferPackageCarriesOnlyOwnedDevelopKeysAndNoCaches`: the package has the
+Color Wheel parameter key `version`. Clean `96ff8cd5` (changes stashed, only that target rebuilt)
+fails the same way; issue #484. `AlbumBackendLib` and `alcedo_main` build. The full suite was not
+run (only the user starts it).
+
+#### 13.3.3 Measurements (section 9)
+
+Not taken: the asset row size and the put and read times for the Subject coverage of three
+quality photos (deferred from 13.2.3). They need the sidecar models on the quality photos and a
+producer of the commit payload; SM5 has no producer (SM9 is the first). The store path itself is
+covered by the SM5.1 tests (a 1024 x 768 two-region asset stores less than 1/20 of its pixel
+bytes).
+
+#### 13.3.4 Implementation decisions
+
+- `OpenAiMaskEdit` gives its result through a completion (`EditorAiMaskEditOpenCompletion`),
+  as `RenderAiMaskAnalysisImage` does: a command that the tool worker thread submits gets only a
+  queue acknowledgement, and SM9 needs the fingerprint and the stored source. The result has the
+  plan fields and also `stored_asset`: the reopen constructor of `AiMaskEditSession` needs the
+  verified asset, so `IEditorMaskAssetPort` also has `ReadMaskAsset`. A missing or corrupt asset
+  is an Open error (no fallback).
+- The three command kinds have no policy action. The owner evaluates CommitAdjustment admission
+  itself: Open with every lease (a second session, the comparison, a save, a Paste, and image
+  load all refuse it, and a refused Open still reaches its completion); Commit without the
+  AiMaskEdit lease, so a save checkpoint that started during the session still refuses the
+  write.
+- Open settles pending input (slider and Mask) and closes the analytic Mask tool
+  (`AbortMaskCreation`), so the session starts from a committed document. Queued slider input,
+  input boundaries, and Mask commands other than Cancel are refused at admission while the edit
+  is open, as for the comparison (`ai_mask_edit_active_`).
+- Commit checks the source (`ValidateAiSegmentationMaskSource`) and that the asset key and
+  descriptor equal the source key and descriptor before the put; the store recomputes the key
+  from the pixels.
+- Commit success uses `PublishTypedNodeHistorySuccess`: the render follows the render reason that
+  the history published. Until SM6 that render reports the M21 error of the compiler.
+- A new AI Mask gets the first free id `mask.ai.N` and the name "AI Mask N" with the same N.
+  `CommitAiMaskSource` leaves the Mask creation controller Inactive on every return.
+- M17: `ValidateDocumentTransfer` (run by Build and by ImportPackage) rejects an AI Mask, instead of
+  `MaskModelFromJson`, which also reads documents. A Grade whose selected Masks are all AI Masks
+  keeps its entry without a Mask set; destination Masks then do not change.
+- The session tests live in `tests/app/editor_ai_mask_edit_service_test.cpp`, compiled into the
+  `EditorComparisonServiceTest` binary (the comparison test file is 814 lines). The publish
+  failure is made by a read-only journal file (all write bits removed; Windows sets the read-only
+  attribute only then).
+- The zh_CN translation of the notice is added to `alcedo_main_zh_CN.ts` by hand (no `lupdate`).
+- LOC note: `editor_session_service.cpp` is 3,319 lines (3,085 before) and its header 1,201; both
+  were above 1,000 lines before SM5.3. The AI Mask edit adds one target struct and two members;
+  its asset I/O is in the port and its document change in the Mask creation controller.
+- Diff size: production C++ about 640 lines, tests about 670, QML 17, build files 4,
+  translation 4.

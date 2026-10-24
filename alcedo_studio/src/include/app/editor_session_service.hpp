@@ -32,6 +32,10 @@
 #include "app/editor_session_render_controller.hpp"
 #include "app/editor_session_request_ids.hpp"
 #include "app/editor_session_types.hpp"
+#include "edit/graph/graph_ids.hpp"
+#include "edit/mask/mask_asset.hpp"
+#include "edit/mask/mask_id.hpp"
+#include "edit/mask/mask_model.hpp"
 #include "sidecar_client/dto/segmentation.hpp"
 
 namespace alcedo {
@@ -125,6 +129,36 @@ struct EditorAiMaskAnalysisResult {
 /// Receives the outcome of RenderAiMaskAnalysisImage, once, on the session owner or the render
 /// worker.
 using EditorAiMaskAnalysisCompletion = std::function<void(EditorAiMaskAnalysisResult result)>;
+
+/**
+ * @brief Outcome of one OpenAiMaskEdit request (SM5 section 7.3).
+ *
+ * @p result is Accepted when the session is open and holds the AiMaskEdit lease; Rejected or
+ * Failed with the reason otherwise. The other fields are set only when Accepted.
+ */
+struct EditorAiMaskEditOpenResult {
+  EditorSessionResult                     result;
+  /// MakeAiMaskGeometryFingerprint of the Develop of the working document.
+  std::string                             geometry_fingerprint;
+  /// Copy of the stored source; set when a Mask id was given. Section 5.5: the session edits its
+  /// own recipe while the lease keeps the live document unchanged; Commit writes through
+  /// ReplaceMaskSource.
+  std::optional<AiSegmentationMaskSource> stored_source;
+  /// Verified R8 asset of @ref stored_source; set together with it.
+  std::optional<MaskAsset>                stored_asset;
+};
+
+/// Receives the outcome of OpenAiMaskEdit, once, on the session owner thread.
+using EditorAiMaskEditOpenCompletion = std::function<void(EditorAiMaskEditOpenResult result)>;
+
+/// Output of AiMaskEditSession::PrepareCommit for the open AI Mask edit.
+struct EditorAiMaskCommit {
+  NodeId                   grade_id;
+  /// Empty for a new Mask; the opened Mask otherwise.
+  std::optional<MaskId>    mask_id;
+  MaskAsset                asset;
+  AiSegmentationMaskSource source;
+};
 
 /// Narrow backend surface for EditorSessionController tests. Production uses
 /// EditorSessionService; tests may inject a recording fake.
@@ -592,6 +626,42 @@ class IEditorSessionBackend {
     result.message = "The AI Mask analysis image is not supported by this backend";
     return result;
   }
+  /**
+   * @brief Open an AI Mask edit session on Color Grade @p grade_id.
+   *
+   * Without @p mask_id the session makes a new AI Mask; with it, the Mask must be an AI Mask of
+   * the Grade. Requires CommitAdjustment admission (an interactive image and no other lease that
+   * blocks writes) and no open AI Mask edit. Settles pending input, then acquires the AiMaskEdit
+   * lease: document writes, history movement, Version writes, Paste, and the comparison stay
+   * blocked until Commit, Cancel, or an image change. Writes nothing.
+   * @return Rejected only when the command queue refuses the command. Every other outcome reaches
+   *         @p on_complete exactly once.
+   */
+  virtual auto OpenAiMaskEdit(const NodeId& /*grade_id*/, std::optional<MaskId> /*mask_id*/,
+                              EditorAiMaskEditOpenCompletion on_complete) -> EditorSessionResult {
+    EditorAiMaskEditOpenResult refused;
+    refused.result = RejectComparison("AI Mask edit is not supported by this backend");
+    if (on_complete) {
+      on_complete(refused);
+    }
+    return refused.result;
+  }
+  /**
+   * @brief Store the asset of the open AI Mask edit, then publish one history operation.
+   *
+   * The asset put commits its own database transaction before the publish (M12): AddMask for a
+   * new Mask, ReplaceMaskSource for an opened Mask (nothing for an equal source). Releases the
+   * lease on success. A failed put or publish keeps the document, the history, and the lease.
+   */
+  virtual auto CommitAiMaskEdit(EditorAiMaskCommit /*commit*/) -> EditorSessionResult {
+    return RejectComparison("AI Mask edit is not supported by this backend");
+  }
+  /// End the open AI Mask edit and release its lease. Publishes and stores nothing.
+  virtual auto CancelAiMaskEdit() -> EditorSessionResult {
+    return RejectComparison("AI Mask edit is not supported by this backend");
+  }
+  /// True from AI Mask edit Open to Commit, Cancel, or image change. Any thread.
+  [[nodiscard]] virtual auto ai_mask_edit_open() const -> bool { return false; }
   /// Published state of the open comparison; Inactive when none is open. Any thread.
   [[nodiscard]] virtual auto comparison_state() const -> EditorComparisonState { return {}; }
   /// Move the Ready pair @p pair_id (A, B) out of the backend; empty when it is not Ready.
@@ -690,6 +760,8 @@ class EditorSessionService final : public IEditorSessionBackend {
     /// One-shot host images of the held image (editor comparison). Null disables comparison
     /// rendering; an opened comparison then reports that reason.
     std::shared_ptr<IEditorImageRenderPort>          images;
+    /// AI Mask R8 asset store. Null rejects AI Mask Commit and the Open of a stored AI Mask.
+    std::shared_ptr<IEditorMaskAssetPort>            mask_assets;
   };
 
   explicit EditorSessionService(Dependencies dependencies);
@@ -866,6 +938,13 @@ class EditorSessionService final : public IEditorSessionBackend {
   auto RenderAiMaskAnalysisImage(EditorAiMaskAnalysisContent    content,
                                  EditorAiMaskAnalysisCompletion on_complete)
       -> EditorSessionResult override;
+  auto               OpenAiMaskEdit(const NodeId& grade_id, std::optional<MaskId> mask_id,
+                                    EditorAiMaskEditOpenCompletion on_complete) -> EditorSessionResult override;
+  auto               CommitAiMaskEdit(EditorAiMaskCommit commit) -> EditorSessionResult override;
+  auto               CancelAiMaskEdit() -> EditorSessionResult override;
+  [[nodiscard]] auto ai_mask_edit_open() const -> bool override {
+    return ai_mask_edit_active_.load(std::memory_order_acquire);
+  }
   [[nodiscard]] auto comparison_state() const -> EditorComparisonState override {
     return comparison_.state();
   }
@@ -917,6 +996,17 @@ class EditorSessionService final : public IEditorSessionBackend {
    */
   auto CloseComparisonOnOwner(bool refresh_current_view, std::optional<ViewportRenderRegion> region)
       -> bool;
+  /// End the open AI Mask edit on the owner thread and release its lease. Image selection, editor
+  /// close, and shutdown call this before they release the image. Returns true when one was open.
+  auto               EndAiMaskEditOnOwner() -> bool;
+  /**
+   * @brief CommitAdjustment admission on the owner thread.
+   *
+   * With @p ignore_ai_mask_edit_lease, the AiMaskEdit lease does not count, so its own Commit is
+   * admitted while every other lease that blocks writes still refuses it.
+   */
+  [[nodiscard]] auto EvaluateDocumentWriteAdmission(bool ignore_ai_mask_edit_lease)
+      -> EditorActionDecision;
   void HandleRenderEvent(const EditorRenderEvent& event);
   void HandleNavigationCompletion(const NavigationCompletion& completion);
   void HandleImageAcquiredCompletion(const EditorSessionCompletion& completion);
@@ -1065,6 +1155,15 @@ class EditorSessionService final : public IEditorSessionBackend {
   EditorComparisonService                        comparison_;
   /// True from comparison entry to close. Read by input admission off the owner thread.
   std::atomic<bool>                              comparison_active_{false};
+  /// Grade and Mask of the open AI Mask edit; owner thread only. Its action restriction is the
+  /// AiMaskEdit operation lease.
+  struct AiMaskEditTarget {
+    NodeId                grade_id;
+    std::optional<MaskId> mask_id;
+  };
+  std::optional<AiMaskEditTarget>                ai_mask_edit_;
+  /// True from AI Mask edit Open to its end. Read by input admission off the owner thread.
+  std::atomic<bool>                              ai_mask_edit_active_{false};
   std::vector<EditorMaskCreationCommand>         pending_mask_commands_;
   mutable std::mutex                             mask_command_mutex_;
   bool                                           reducing_command_     = false;
